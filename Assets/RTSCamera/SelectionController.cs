@@ -1,16 +1,23 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI; // For GUI text styling
+using UnityEngine.UI;
+using UnityEngine.InputSystem;
 
 public class SelectionBoxController : MonoBehaviour
 {
+    #region Properties
     [Header("References")]
     public List<Transform> terrains = new List<Transform>();
     public LayerMask terrainLayerMask = -1;
     public RTSCameraController cameraController;
 
+    [Header("Input Settings")]
+    public InputActionAsset inputActions;
+
     [Header("Selection Settings")]
+    
+    [Tooltip("Line segment quality for 3d selection box")]
     public float pointSpacing = 1f;
     public float clickThreshold = 5f;
     public LayerMask selectableLayer;
@@ -25,13 +32,12 @@ public class SelectionBoxController : MonoBehaviour
     private List<GameObject> lastSelectedObjects = new List<GameObject>();
 
     [Header("2D Selection Box Settings")]
-    public Color selectionBoxFillColor = new Color(1, 0, 0, 0.3f);    // Red with 30% opacity
+    public Color selectionBoxFillColor = new Color(1, 0, 0, 0.3f);
     public Color selectionBoxOutlineColor = Color.red;
 
     [Header("Object Tracking")]
-    public bool autoTrackSingleSelection = false;
+    public bool autoTrackSingleSelection = true;
     public bool focusOnSelection = true;
-
     public Color outlineColor = Color.white;
 
     // --- 3D selection (normal) variables ---
@@ -46,6 +52,14 @@ public class SelectionBoxController : MonoBehaviour
     bool is2DSelecting = false;
     Vector2 startScreenPoint2D;
     Vector2 currentScreenPoint2D;
+
+    // Input Actions
+    private InputAction selectAction;           // Right-click for selection
+    private InputAction focusSelectionAction;   // F key to focus
+    private InputAction mousePositionAction;    // Mouse position tracking
+    private InputAction modifierAltAction;      // Alt key for 2D selection
+    private InputAction modifierCtrlAction;     // Ctrl key for multi-select
+    #endregion 
 
     void Awake()
     {
@@ -72,32 +86,77 @@ public class SelectionBoxController : MonoBehaviour
         lineRenderer.endColor = Color.white;
     }
 
+    void OnEnable()
+    {
+        if (inputActions != null)
+        {
+            // Get the Camera action map
+            var actionMap = inputActions.FindActionMap("Camera");
+
+            if (actionMap != null)
+            {
+                // Find actions
+                selectAction = actionMap.FindAction("Select");
+                focusSelectionAction = actionMap.FindAction("FocusSelection");
+                mousePositionAction = actionMap.FindAction("MousePosition");
+                modifierAltAction = actionMap.FindAction("ModifierAlt");
+                modifierCtrlAction = actionMap.FindAction("ModifierCtrl");
+
+                // Subscribe to callbacks for button press/release events
+                if (focusSelectionAction != null)
+                {
+                    focusSelectionAction.performed += OnFocusSelection;
+                }
+
+                // Enable the action map
+                actionMap.Enable();
+            }
+        }
+    }
+
+    void OnDisable()
+    {
+        if (inputActions != null)
+        {
+            // Unsubscribe from callbacks
+            if (focusSelectionAction != null)
+            {
+                focusSelectionAction.performed -= OnFocusSelection;
+            }
+
+            // Disable the action map
+            var actionMap = inputActions.FindActionMap("Camera");
+            if (actionMap != null)
+            {
+                actionMap.Disable();
+            }
+        }
+    }
+
+    private void OnFocusSelection(InputAction.CallbackContext context)
+    {
+        if (selectedObjects.Count == 0) return;
+
+        Debug.Log("pressed F key");
+        if (selectedObjects.Count == 1)
+        {
+            if (autoTrackSingleSelection)
+                cameraController.StartTrackingObject(selectedObjects[0].transform);
+            else
+                cameraController.FocusOnObject(selectedObjects[0].transform);
+        }
+        else
+        {
+            FocusOnSelectedObjects();
+        }
+    }
+
     void Update()
     {
-        if(Input.GetKeyDown(KeyCode.F)){
-            Debug.Log("Pressed F key");
-        }
         if (Camera.main == null)
             return;
 
-        // Handle F key for focus/track selected objects
-        if (Input.GetKeyDown(KeyCode.F) && selectedObjects.Count > 0)
-        {
-            Debug.Log("pressed F key");
-            if (selectedObjects.Count == 1)
-            {
-                if (autoTrackSingleSelection)
-                    cameraController.StartTrackingObject(selectedObjects[0].transform);
-                else
-                    cameraController.FocusOnObject(selectedObjects[0].transform);
-            }
-            else
-            {
-                // Focus on center of multiple selected objects
-                FocusOnSelectedObjects();
-            }
-        }
-
+        // F key handling is now in OnFocusSelection callback
         HandleNormalSelection();
     }
 
@@ -106,12 +165,12 @@ public class SelectionBoxController : MonoBehaviour
     void HandleNormalSelection()
     {
         // Start selection
-        if (Input.GetMouseButtonDown(1))
+        if (selectAction != null && selectAction.WasPressedThisFrame())
         {
-            if (Input.GetKey(KeyCode.LeftAlt))
+            if (modifierAltAction != null && modifierAltAction.IsPressed())
             {
                 is2DSelecting = true;
-                startScreenPoint2D = Input.mousePosition;
+                startScreenPoint2D = mousePositionAction.ReadValue<Vector2>();
                 isSelecting = false;
                 ClearLine();
             }
@@ -119,9 +178,9 @@ public class SelectionBoxController : MonoBehaviour
             {
                 isSelecting = true;
                 isDragging = false;
-                startScreenPoint = Input.mousePosition;
+                startScreenPoint = mousePositionAction.ReadValue<Vector2>();
 
-                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                Ray ray = Camera.main.ScreenPointToRay(mousePositionAction.ReadValue<Vector2>());
                 RaycastHit hit;
                 
                 // Use terrainLayerMask for raycast to find start point
@@ -142,15 +201,15 @@ public class SelectionBoxController : MonoBehaviour
         }
 
         // Update selection box while dragging
-        if (Input.GetMouseButton(1))
+        if (selectAction != null && selectAction.IsPressed())
         {
             if (is2DSelecting)
-                currentScreenPoint2D = Input.mousePosition;
+                currentScreenPoint2D = mousePositionAction.ReadValue<Vector2>();
             else if (isSelecting)
             {
-                if (Vector3.Distance(Input.mousePosition, startScreenPoint) > clickThreshold)
+                if (Vector3.Distance(mousePositionAction.ReadValue<Vector2>(), startScreenPoint) > clickThreshold)
                 {
-                    Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                    Ray ray = Camera.main.ScreenPointToRay(mousePositionAction.ReadValue<Vector2>());
                     RaycastHit hit;
                     
                     // Use terrainLayerMask for raycast during dragging
@@ -171,7 +230,7 @@ public class SelectionBoxController : MonoBehaviour
         }
 
         // End selection
-        if (Input.GetMouseButtonUp(1))
+        if (selectAction != null && selectAction.WasReleasedThisFrame())
         {
             if (is2DSelecting)
             {
@@ -290,6 +349,10 @@ public class SelectionBoxController : MonoBehaviour
         return smoothed;
     }
 
+
+    /// <summary>
+    /// Returns a vector to the point between p1-p2 catmull rom curve, determined by t (0-1) and control points (p0,p3)
+    /// </summary>
     Vector3 CatmullRom(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3, float t)
     {
         float t2 = t * t;
@@ -384,7 +447,7 @@ public class SelectionBoxController : MonoBehaviour
 
     void SelectObjectsInRectangle()
     {
-        bool ctrlDown = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        bool ctrlDown = modifierCtrlAction != null && modifierCtrlAction.IsPressed();
         float minX = Mathf.Min(startWorldPoint.x, currentWorldPoint.x);
         float maxX = Mathf.Max(startWorldPoint.x, currentWorldPoint.x);
         float minZ = Mathf.Min(startWorldPoint.z, currentWorldPoint.z);
@@ -424,8 +487,8 @@ public class SelectionBoxController : MonoBehaviour
 
     void SingleSelect()
     {
-        bool ctrlDown = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        bool ctrlDown = modifierCtrlAction != null && modifierCtrlAction.IsPressed();
+        Ray ray = Camera.main.ScreenPointToRay(mousePositionAction.ReadValue<Vector2>());
         RaycastHit hit;
         if (Physics.Raycast(ray, out hit, 1000f, selectableLayer))
         {
@@ -470,9 +533,8 @@ public class SelectionBoxController : MonoBehaviour
         if (!ctrlDown)
         {
             selectedObjects.Clear();
-            Ray terrainRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+            Ray terrainRay = Camera.main.ScreenPointToRay(mousePositionAction.ReadValue<Vector2>());
             RaycastHit terrainHit;
-            bool hitTerrain = false;
             foreach (Transform terrainTransform in terrains)
             {
                 if (terrainTransform != null)
@@ -484,7 +546,6 @@ public class SelectionBoxController : MonoBehaviour
                         focusPos.y = GetTerrainHeight(new Vector3(focusPos.x, 0, focusPos.z));
                         if (cameraController != null)
                             cameraController.SetTargetFocusPoint(focusPos);
-                        hitTerrain = true;
                         break;
                     }
                     else
@@ -496,7 +557,6 @@ public class SelectionBoxController : MonoBehaviour
                             focusPos.y = GetTerrainHeight(new Vector3(focusPos.x, 0, focusPos.z));
                             if (cameraController != null)
                                 cameraController.SetTargetFocusPoint(focusPos);
-                            hitTerrain = true;
                             break;
                         }
                     }
@@ -507,7 +567,7 @@ public class SelectionBoxController : MonoBehaviour
 
     void SelectObjectsInScreenRect()
     {
-        bool ctrlDown = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        bool ctrlDown = modifierCtrlAction != null && modifierCtrlAction.IsPressed();
         if (!ctrlDown)
             selectedObjects.Clear();
 
@@ -577,7 +637,7 @@ public class SelectionBoxController : MonoBehaviour
         // Draw 2D selection box if active.
         if (is2DSelecting)
         {
-            Rect rect = GetScreenRect(startScreenPoint2D, Input.mousePosition);
+            Rect rect = GetScreenRect(startScreenPoint2D, mousePositionAction.ReadValue<Vector2>());
             Color prevColor = GUI.color;
             GUI.color = selectionBoxFillColor;
             GUI.DrawTexture(rect, Texture2D.whiteTexture);
