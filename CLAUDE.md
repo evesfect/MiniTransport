@@ -8,7 +8,7 @@ MiniTransport is a Unity 2023+ project for managing a public transportation comp
 
 ## Unity Project Configuration
 
-- **Unity Version**: 2023+ (created with URP Blank template 17.0.14)
+- **Unity Version**: 6.2
 - **Render Pipeline**: Universal Render Pipeline (URP) 17.2.0
 - **Scripting Backend**: IL2CPP for Android, Mono for other platforms
 - **Input System**: New Input System (com.unity.inputsystem 1.14.2)
@@ -41,7 +41,7 @@ The camera system provides RTS-style controls with terrain-aware positioning:
   - `enableTrackingBreakOnPan`: Automatically stop tracking when user pans manually
   - `trackingSmoothing`: Configurable smoothing for tracked object movement
 
-**SelectionBoxController.cs** (`Assets/RTSCamera/Selection/SelectionController.cs`)
+**SelectionBoxController.cs** (`Assets/RTSCamera/SelectionController.cs`)
 - Two selection modes:
   1. **Normal 3D Selection** (Right-click drag): Draws terrain-following selection box
   2. **2D Screen Selection** (Alt+Right-click drag): Screen-space rectangular selection
@@ -107,7 +107,7 @@ The project uses Unity's new Input System with action maps defined in `Assets/In
 
 - **Player Action Map**: Move, Look, Attack, Interact, Jump, Crouch, Sprint, Previous/Next
 - **UI Action Map**: Navigate, Submit, Cancel, Point, Click, RightClick, MiddleClick, ScrollWheel
-- **RTS Camera Action Map**: CameraRotate, CameraPan, CameraZoom, MouseDelta, MousePosition, ResetFocus, Select, FocusSelection, ModifierAlt, ModifierCtrl
+- **Camera Action Map**: CameraRotate, CameraPan, CameraZoom, MouseDelta, MousePosition, ResetFocus, Select, FocusSelection, ModifierAlt, ModifierCtrl
 - Control schemes: Keyboard&Mouse, Gamepad, Touch, Joystick, XR
 
 The RTS camera and selection systems use event-driven input callbacks for better performance:
@@ -138,7 +138,7 @@ When setting up RTS camera in a new scene:
 
 3. **Input Actions Asset**:
    - The `InputSystem_Actions.inputactions` asset must be in the project
-   - It contains the "RTS Camera" action map with all required bindings
+   - It contains the "Camera" action map with all required bindings for both camera control and selection
    - No need to enable both input systems - new Input System only is sufficient
 
 ## Important Packages
@@ -230,11 +230,11 @@ public class MyRTSFeature : MonoBehaviour
 
     void Awake()
     {
-        // Initialize actions from RTS Camera action map
+        // Initialize actions from Camera action map
         if (inputActions != null)
         {
-            var rtsCameraMap = inputActions.FindActionMap("RTSCamera");
-            myAction = rtsCameraMap.FindAction("MyAction");
+            var cameraMap = inputActions.FindActionMap("Camera");
+            myAction = cameraMap.FindAction("MyAction");
         }
     }
 
@@ -296,7 +296,7 @@ public class MyRTSFeature : MonoBehaviour
 Assets/
 ├── RTSCamera/              # RTS camera and selection system
 │   ├── CamUtility/         # RTSCameraController
-│   ├── Selection/          # SelectionBoxController
+│   ├── SelectionController.cs  # SelectionBoxController
 │   └── QuickOutline/       # Outline effect for selections
 ├── Scenes/                 # Unity scenes
 ├── Scripts/                # Custom game scripts (currently empty)
