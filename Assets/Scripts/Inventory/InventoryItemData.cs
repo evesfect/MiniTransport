@@ -17,7 +17,8 @@ public class InventoryItemData : ScriptableObject
     //Enum to categorize items when needed
     public ItemCategory Category;
 
-    public float Value;
+    public float Quantity;
+    public float Cost;
     
 }
 
@@ -25,6 +26,5 @@ public enum ItemCategory
 {
     //Update as needed
     Part,
-    Tool,
     Other
 }
