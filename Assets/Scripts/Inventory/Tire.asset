@@ -16,4 +16,5 @@ MonoBehaviour:
   DisplayName: Tire
   Description: A bus Tire
   Category: 0
-  Value: 5
+  Quantity: 50
+  Cost: 12.99
