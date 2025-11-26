@@ -1,0 +1,22 @@
+RTSCamera&SelectionController
+    Setup:
+        Attach both scripts to MainCamera, set terrain references, set terrain layer and selectable layer as masks in both scripts
+    How to Use:
+        (RTSCamera):
+            Input actions are defined in Assets/InputActions/RTSInput_Actions
+            Speed of the controls below can be adjusted in script
+            Rotate:LMouse, Pan:MMouse, Zoom:Scroll, ResetOrigin:Spacebar
+        (SelectionController):
+            Specific selection tunings are in the script for below:
+            Right click (tap) to a location to move the camera to there (uses raycast to terrain)
+            If a gameobject is in "Selectable" layer, you can right click on it to select it.
+            When selected, camera focuses on the object (can be turned on/off, default:on):
+                Camera Tracks the object (can be turned on/off, default:on)
+                Object is highlighted
+                Right clicking somewhere else or selecting another object loses the focus
+                Panning loses tracking
+            You can HOLD right click to select with 3d selection box. The box takes the shape of the terrain.
+            You can hold right click + LeftALT to select with 2d selection box.
+            Holding LeftCTRL while selecting another object(s) (via direct RClick or 2d/3d selection box) will add to the selected object list.
+            If multiple objects selected, focus is the middle point of all.
+
