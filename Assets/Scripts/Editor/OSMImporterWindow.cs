@@ -137,13 +137,33 @@ public class OSMImporterWindow : EditorWindow
             }
         }
 
-        // Determine Intersections
-        // A node is an intersection if it is used more than once OR if it is the end of a way (dead end / connector)
-        // Note: For graph splitting, strictly >1 usage is the intersection. 
-        // Ends of ways are naturally handled by the loop logic later.
+        // Determine Intersections & Terminals
         foreach (var kvp in nodeUsageCount)
         {
-            if (kvp.Value > 1)
+            // Condition 1: It is a junction (used by 2+ ways or shared by segments)
+            bool isJunction = kvp.Value > 1;
+
+            // Condition 2: It is a Layout Terminal (Start or End of a Way)
+            // We need to check if this NodeID appears at the start/end of ANY highway way
+            bool isTerminal = false;
+            
+            // Optimization: We can check this during the loop above, 
+            // but for clarity, we check if this ID is a start/end of our cached ways.
+            // (Since this is Editor code, a little O(N) is fine for safety)
+            if (!isJunction) // Only check if not already a junction
+            {
+                foreach(var way in highwayWays)
+                {
+                    if (way.Nodes[0] == kvp.Key || way.Nodes[way.Nodes.Length-1] == kvp.Key)
+                    {
+                        isTerminal = true;
+                        break;
+                    }
+                }
+            }
+
+            // RESULT: We treat it as a Node if it's a Junction OR a Terminal
+            if (isJunction || isTerminal)
             {
                 intersectionIDs.Add(kvp.Key);
             }
@@ -212,6 +232,7 @@ public class OSMImporterWindow : EditorWindow
     void SpawnNetwork()
     {
         GameObject root = new GameObject("OSM_Generated_Map");
+        root.AddComponent<RoadNetwork>();
         GameObject intersectionsGroup = new GameObject("Nodes");
         GameObject segmentsGroup = new GameObject("Roads");
         intersectionsGroup.transform.parent = root.transform;
