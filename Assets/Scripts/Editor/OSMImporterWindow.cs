@@ -12,8 +12,6 @@ public class OSMImporterWindow : EditorWindow
     // --- SETTINGS ---
     string osmFilePath = "";
     float mapScale = 1.0f;
-    bool snapToTerrain = false;
-    LayerMask terrainLayer = ~0; 
     
     // --- REFERENCES ---
     GameObject nodePrefab;     
@@ -31,8 +29,6 @@ public class OSMImporterWindow : EditorWindow
     // --- PREFS KEYS ---
     private const string PREF_PATH = "OSM_FilePath";
     private const string PREF_SCALE = "OSM_Scale";
-    private const string PREF_SNAP = "OSM_Snap";
-    private const string PREF_LAYER = "OSM_Layer";
 
     [MenuItem("Tools/OSM Road Importer")]
     public static void ShowWindow()
@@ -45,8 +41,6 @@ public class OSMImporterWindow : EditorWindow
     {
         osmFilePath = EditorPrefs.GetString(PREF_PATH, "Assets/map.osm");
         mapScale = EditorPrefs.GetFloat(PREF_SCALE, 1.0f);
-        snapToTerrain = EditorPrefs.GetBool(PREF_SNAP, false);
-        terrainLayer = EditorPrefs.GetInt(PREF_LAYER, ~0);
     }
 
     // 2. SAVE SETTINGS ON CLOSE/CHANGE
@@ -59,8 +53,6 @@ public class OSMImporterWindow : EditorWindow
     {
         EditorPrefs.SetString(PREF_PATH, osmFilePath);
         EditorPrefs.SetFloat(PREF_SCALE, mapScale);
-        EditorPrefs.SetBool(PREF_SNAP, snapToTerrain);
-        EditorPrefs.SetInt(PREF_LAYER, terrainLayer);
     }
 
     void OnGUI()
@@ -88,9 +80,9 @@ public class OSMImporterWindow : EditorWindow
         }
         GUILayout.EndHorizontal();
 
-        // Prefabs (EditorPrefs doesn't handle Object references well, usually best to just drag them or find by name)
-        // Optimization: Try to auto-load if null
-        if (nodePrefab == null) nodePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/RoadNode.prefab"); // Change path to match yours
+        // Prefabs
+        // Optimization: Try to auto-load if null. Change path if your prefab is elsewhere.
+        if (nodePrefab == null) nodePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/RoadNode.prefab"); 
         
         nodePrefab = (GameObject)EditorGUILayout.ObjectField("Intersection Prefab", nodePrefab, typeof(GameObject), false);
         segmentPrefab = (GameObject)EditorGUILayout.ObjectField("Road Segment Prefab", segmentPrefab, typeof(GameObject), false);
@@ -98,15 +90,6 @@ public class OSMImporterWindow : EditorWindow
         // Parameters
         float newScale = EditorGUILayout.FloatField("Scale Factor", mapScale);
         if (newScale != mapScale) { mapScale = newScale; SaveSettings(); }
-
-        bool newSnap = EditorGUILayout.Toggle("Snap to Terrain", snapToTerrain);
-        if (newSnap != snapToTerrain) { snapToTerrain = newSnap; SaveSettings(); }
-
-        if(snapToTerrain)
-        {
-            int newLayer = EditorGUILayout.LayerField("Terrain Layer", terrainLayer);
-            if (newLayer != terrainLayer) { terrainLayer = newLayer; SaveSettings(); }
-        }
 
         GUILayout.Space(10);
 
@@ -144,12 +127,12 @@ public class OSMImporterWindow : EditorWindow
         {
             var source = GetStreamSource(fileStream);
             
-            // Filter: Must be Way, Must have 'highway', Must NOT be 'footway' or 'pedestrian' if you strictly want buses
+            // Filter: Must be Way, Must have 'highway'
             var highways = source.Where(x => 
                 x.Type == OsmGeoType.Way && 
                 x.Tags != null && 
                 x.Tags.ContainsKey("highway") &&
-                !x.Tags.GetValue("highway").Contains("footway") // Optional filter
+                !x.Tags.GetValue("highway").Contains("footway") 
             );
 
             foreach (var element in highways)
@@ -171,17 +154,10 @@ public class OSMImporterWindow : EditorWindow
         // Determine Intersections & Terminals
         foreach (var kvp in nodeUsageCount)
         {
-            // Condition 1: It is a junction (used by 2+ ways or shared by segments)
             bool isJunction = kvp.Value > 1;
-
-            // Condition 2: It is a Layout Terminal (Start or End of a Way)
-            // We need to check if this NodeID appears at the start/end of ANY highway way
             bool isTerminal = false;
             
-            // Optimization: We can check this during the loop above, 
-            // but for clarity, we check if this ID is a start/end of our cached ways.
-            // (Since this is Editor code, a little O(N) is fine for safety)
-            if (!isJunction) // Only check if not already a junction
+            if (!isJunction) 
             {
                 foreach(var way in highwayWays)
                 {
@@ -193,19 +169,15 @@ public class OSMImporterWindow : EditorWindow
                 }
             }
 
-            // RESULT: We treat it as a Node if it's a Junction OR a Terminal
             if (isJunction || isTerminal)
             {
                 intersectionIDs.Add(kvp.Key);
             }
         }
-        
-        Debug.Log($"Pass 1: Found {highwayWays.Count} roads and {intersectionIDs.Count} intersections.");
     }
 
     void ReadNodesPass()
     {
-        // We need to know WHICH nodes to keep so we don't store 100k building nodes
         HashSet<long> neededNodes = new HashSet<long>();
         foreach(var way in highwayWays)
         {
@@ -216,7 +188,6 @@ public class OSMImporterWindow : EditorWindow
         {
             var source = GetStreamSource(fileStream);
             
-            // Iterate ALL objects, pick out the Nodes
             foreach (var element in source)
             {
                 if (element.Type == OsmGeoType.Node)
@@ -226,7 +197,6 @@ public class OSMImporterWindow : EditorWindow
                         OsmSharp.Node n = (OsmSharp.Node)element;
                         if (!n.Latitude.HasValue || !n.Longitude.HasValue) continue;
 
-                        // Set Origin if first node
                         if (!hasOrigin)
                         {
                             originLat = n.Latitude.Value;
@@ -240,20 +210,12 @@ public class OSMImporterWindow : EditorWindow
                 }
             }
         }
-        Debug.Log($"Pass 2: Cached {relevantNodePositions.Count} node positions.");
     }
 
-    // Helper to switch between XML and PBF based on extension
     OsmStreamSource GetStreamSource(FileStream stream)
     {
-        if (osmFilePath.EndsWith(".pbf"))
-        {
-            return new PBFOsmStreamSource(stream);
-        }
-        else
-        {
-            return new XmlOsmStreamSource(stream);
-        }
+        if (osmFilePath.EndsWith(".pbf")) return new PBFOsmStreamSource(stream);
+        else return new XmlOsmStreamSource(stream);
     }
 
     // ---------------------------------------------------------
@@ -264,18 +226,17 @@ public class OSMImporterWindow : EditorWindow
     {
         GameObject root = new GameObject("OSM_Generated_Map");
         
-        // --- FEATURE 1: AUTO-ASSIGN PREFAB ---
+        // Auto-assign Prefab to the new RoadNetwork component
         RoadNetwork networkScript = root.AddComponent<RoadNetwork>();
-        networkScript.nodePrefab = this.nodePrefab; // Pass the reference!
-        networkScript.showDebugGizmos = false; // Start clean
-        // -------------------------------------
+        networkScript.nodePrefab = this.nodePrefab; 
+        networkScript.showDebugGizmos = false;
 
         GameObject intersectionsGroup = new GameObject("Nodes");
         GameObject segmentsGroup = new GameObject("Roads");
         intersectionsGroup.transform.parent = root.transform;
         segmentsGroup.transform.parent = root.transform;
 
-        // 1. SPAWN INTERSECTION OBJECTS
+        // 1. SPAWN INTERSECTIONS
         foreach (long id in intersectionIDs)
         {
             if (!relevantNodePositions.ContainsKey(id)) continue;
@@ -293,7 +254,6 @@ public class OSMImporterWindow : EditorWindow
         }
 
         // 2. SPAWN SEGMENTS
-        int segmentCount = 0;
         foreach (Way way in highwayWays)
         {
             List<long> segmentNodeIDs = new List<long>();
@@ -309,7 +269,6 @@ public class OSMImporterWindow : EditorWindow
                 if (hasGeometry && (isIntersection || isLastInWay))
                 {
                     CreateSegmentObject(segmentNodeIDs, segmentsGroup.transform, way);
-                    segmentCount++;
                     
                     long overlapNodeID = segmentNodeIDs[segmentNodeIDs.Count - 1];
                     segmentNodeIDs.Clear();
@@ -324,7 +283,7 @@ public class OSMImporterWindow : EditorWindow
         GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(segmentPrefab, parent);
         obj.name = $"Segment_{ids[0]}_{ids[ids.Count-1]}";
 
-        // FIX: Force Origin for World-Space Knots
+        // FIX: Force Origin so local knots align with world nodes
         obj.transform.position = Vector3.zero;
         obj.transform.rotation = Quaternion.identity;
 
@@ -358,7 +317,7 @@ public class OSMImporterWindow : EditorWindow
     }
 
     // ---------------------------------------------------------
-    // LOGIC: MATH & UTILS
+    // LOGIC: MATH
     // ---------------------------------------------------------
 
     Vector3 GeoToWorld(double lat, double lon)
@@ -367,23 +326,11 @@ public class OSMImporterWindow : EditorWindow
         double dLat = (lat - originLat) * Mathf.Deg2Rad;
         double dLon = (lon - originLon) * Mathf.Deg2Rad;
         
-        // Simple projection
         float x = (float)(dLon * System.Math.Cos(originLat * Mathf.Deg2Rad) * R);
         float z = (float)(dLat * R);
 
-        Vector3 pos = new Vector3(x * mapScale, 0, z * mapScale);
-
-        if (snapToTerrain)
-        {
-            RaycastHit hit;
-            // Raycast from high up
-            if (Physics.Raycast(pos + Vector3.up * 2000f, Vector3.down, out hit, 4000f, terrainLayer))
-            {
-                pos.y = hit.point.y;
-            }
-        }
-
-        return pos;
+        // Always spawn flat. Use RoadNetwork.SnapToTerrain later.
+        return new Vector3(x * mapScale, 0, z * mapScale);
     }
 
     void ClearInternalData()

@@ -18,6 +18,9 @@ public class RoadNetwork : MonoBehaviour
     [Tooltip("Assign your Node prefab here to allow Auto-Fixing of dead ends.")]
     public GameObject nodePrefab; 
 
+    [Header("Terrain Tools")]
+    public LayerMask terrainLayer = ~0; // Default to everything
+
     // --- 1. SCANNING LOGIC ---
 
     [ContextMenu("Scan Network")]
@@ -212,6 +215,94 @@ public class RoadNetwork : MonoBehaviour
             }
         }
     }
+
+    [ContextMenu("Snap All to Terrain")]
+    public void SnapToTerrain()
+    {
+        Undo.RecordObjects(GetComponentsInChildren<Transform>(), "Snap Network to Terrain");
+
+        // 1. SNAP NODES (Intersections)
+        var nodes = GetComponentsInChildren<RoadNode>();
+        foreach (var node in nodes)
+        {
+            SnapObjectToGround(node.transform);
+        }
+
+        // 2. SNAP SPLINES (Road Geometry)
+        var segments = GetComponentsInChildren<RoadSegment>();
+        foreach (var seg in segments)
+        {
+            SnapSplineToGround(seg);
+        }
+
+        Debug.Log($"Snapped {nodes.Length} nodes and {segments.Length} roads to terrain.");
+    }
+
+    private void SnapObjectToGround(Transform t)
+    {
+        // 1. Setup Ray Origin (High up)
+        Vector3 rayOrigin = t.position;
+        rayOrigin.y = 2000f; 
+
+        // 2. Raycast
+        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 4000f, terrainLayer))
+        {
+            // Hit Terrain: Snap to it
+            Vector3 newPos = t.position;
+            newPos.y = hit.point.y + 0.2f;
+            t.position = newPos;
+        }
+        // Else: Do nothing (Keep original height)
+    }
+
+    private void SnapSplineToGround(RoadSegment seg)
+    {
+        if (seg == null) return;
+        
+        var container = seg.GetComponent<UnityEngine.Splines.SplineContainer>();
+        if (container == null) return;
+
+        var spline = container.Spline;
+        
+        for (int i = 0; i < spline.Count; i++)
+        {
+            var knot = spline[i]; 
+            
+            bool isStart = (i == 0);
+            bool isEnd = (i == spline.Count - 1);
+
+            Vector3 worldPos;
+
+            // 1. Connection Points (Snap to Node)
+            if (isStart && seg.StartNode != null)
+            {
+                worldPos = seg.StartNode.transform.position;
+            }
+            else if (isEnd && seg.EndNode != null)
+            {
+                worldPos = seg.EndNode.transform.position;
+            }
+            else
+            {
+                // 2. Middle Points (Snap to Terrain)
+                worldPos = container.transform.TransformPoint(knot.Position);
+                
+                // FIX: Use a separate variable for the raycast origin
+                Vector3 rayOrigin = worldPos;
+                rayOrigin.y = 2000f; 
+
+                if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 4000f, terrainLayer))
+                {
+                    worldPos.y = hit.point.y + 0.2f; 
+                }
+                // Else: worldPos.y remains whatever it was (flat), it won't jump to 2000.
+            }
+
+            // Apply back
+            knot.Position = container.transform.InverseTransformPoint(worldPos);
+            spline[i] = knot; 
+        }
+    }
 }
 
 // --- CUSTOM EDITOR GUI ---
@@ -219,6 +310,7 @@ public class RoadNetwork : MonoBehaviour
 [CustomEditor(typeof(RoadNetwork))]
 public class RoadNetworkEditor : Editor
 {
+    // Inside RoadNetworkEditor : Editor
     public override void OnInspectorGUI()
     {
         DrawDefaultInspector();
@@ -240,13 +332,22 @@ public class RoadNetworkEditor : Editor
             SceneView.RepaintAll();
         }
         GUILayout.EndHorizontal();
+        
+        // --- NEW BUTTON ---
+        GUILayout.Space(10);
+        GUI.backgroundColor = new Color(0.5f, 0.8f, 1f); // Light Blue
+        if (GUILayout.Button("3. SNAP TO TERRAIN", GUILayout.Height(40)))
+        {
+            script.SnapToTerrain();
+        }
+        GUI.backgroundColor = Color.white;
+        // ------------------
 
         GUILayout.Space(10);
         EditorGUILayout.HelpBox(
-            "Fix Button Logic:\n" +
-            "- Nodes: Removes null/broken links.\n" +
-            "- Segments: Creates new Terminal Nodes at dead ends automatically.", 
+            "Snap Button: Raycasts all Nodes and Spline Knots down to the Terrain Layer defined above.", 
             MessageType.Info);
     }
+
 }
 #endif
