@@ -240,8 +240,12 @@ public class RoadNetwork : MonoBehaviour
         if (seg == null) return;
         var container = seg.GetComponent<UnityEngine.Splines.SplineContainer>();
         if (container == null) return;
-        var spline = container.Spline;
 
+        // 1. Record Undo (Essential for saving!)
+        Undo.RecordObject(container, "Snap Spline Segment");
+
+        var spline = container.Spline;
+        
         for (int i = 0; i < spline.Count; i++)
         {
             var knot = spline[i];
@@ -265,12 +269,18 @@ public class RoadNetwork : MonoBehaviour
 
                 if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 4000f, terrainLayer))
                 {
-                    worldPos.y = hit.point.y + terrainSnapOffset; // Uses configurable offset
+                    worldPos.y = hit.point.y + terrainSnapOffset; 
                 }
             }
 
             knot.Position = container.transform.InverseTransformPoint(worldPos);
-            spline[i] = knot; 
+            spline[i] = knot; // This updates the data in memory
+        }
+        
+        // 2. Force Dirty (Ensures the asterisk * appears and changes are saved to disk)
+        if (!Application.isPlaying)
+        {
+            EditorUtility.SetDirty(container);
         }
     }
 
