@@ -153,7 +153,7 @@ public class RoadNetwork : MonoBehaviour
         Debug.Log($"Snapped {nodes.Length} nodes and {segments.Length} roads to terrain (Offset: {terrainSnapOffset}).");
     }
 
-    // NEW FUNCTION: Culls objects outside terrain
+    // Culls objects outside terrain
     public void CullOutsideTerrain()
     {
         Undo.RegisterCompleteObjectUndo(gameObject, "Cull Off-Map Roads");
@@ -284,6 +284,20 @@ public class RoadNetwork : MonoBehaviour
         }
     }
 
+    [ContextMenu("Generate All Meshes")]
+    public void GenerateAllMeshes()
+    {
+        // Find all SimpleRoadMesh scripts in children
+        var meshGenerators = GetComponentsInChildren<SimpleRoadMesh>();
+        
+        foreach (var gen in meshGenerators)
+        {
+            gen.Generate();
+        }
+        
+        Debug.Log($"Generated meshes for {meshGenerators.Length} road segments.");
+    }
+
     // --- 4. VISUALIZATION ---
 
     private void OnDrawGizmos()
@@ -371,6 +385,14 @@ public class RoadNetworkEditor : Editor
         EditorGUILayout.HelpBox(
             "Cull Button: Deletes any Nodes or Roads that do not Raycast hit the terrain.", 
             MessageType.Warning);
+
+        GUILayout.Space(5);
+        GUI.backgroundColor = new Color(0.8f, 0.8f, 0.8f); 
+        if (GUILayout.Button("5. GENERATE MESHES", GUILayout.Height(30)))
+        {
+            script.GenerateAllMeshes();
+        }
+        GUI.backgroundColor = Color.white;
     }
 }
 #endif
