@@ -14,9 +14,13 @@ public class RoadNetwork : MonoBehaviour
     [SerializeField] private List<RoadNode> faultyNodes = new List<RoadNode>();
     [SerializeField] private List<RoadSegment> faultySegments = new List<RoadSegment>();
     
-    // Reference to the Node Prefab so we can auto-spawn missing terminals
     [Tooltip("Assign your Node prefab here to allow Auto-Fixing of dead ends.")]
     public GameObject nodePrefab; 
+
+    [Header("Terrain Tools")]
+    public LayerMask terrainLayer = ~0; 
+    [Tooltip("Height above terrain to place roads (prevents flickering).")]
+    public float terrainSnapOffset = 0.2f; // NEW: Configurable Offset
 
     // --- 1. SCANNING LOGIC ---
 
@@ -26,18 +30,14 @@ public class RoadNetwork : MonoBehaviour
         faultyNodes.Clear();
         faultySegments.Clear();
 
-        // A. Check Nodes
         var allNodes = GetComponentsInChildren<RoadNode>();
         foreach (var node in allNodes)
         {
-            // Error 1: The list contains 'null' (deleted objects)
             if (node.OutgoingRoads.Contains(null)) 
             {
                 faultyNodes.Add(node);
                 continue;
             }
-
-            // Error 2: Ghost Links (Node says "I go to Road A", but Road A says "I start at Node B")
             foreach(var seg in node.OutgoingRoads)
             {
                 if (seg.StartNode != node && seg.EndNode != node)
@@ -47,27 +47,23 @@ public class RoadNetwork : MonoBehaviour
             }
         }
 
-        // B. Check Segments
         var allSegments = GetComponentsInChildren<RoadSegment>();
         foreach (var seg in allSegments)
         {
-            // Error: Missing an endpoint. 
-            // This is "Faulty" because pathfinding needs a node to stop at.
             if (seg.StartNode == null || seg.EndNode == null)
             {
                 faultySegments.Add(seg);
             }
         }
 
-        // Reporting
         if (faultyNodes.Count > 0 || faultySegments.Count > 0)
         {
             Debug.LogWarning($"Scan Found: {faultyNodes.Count} Nodes with bad links, {faultySegments.Count} Broken Segments.");
-            showDebugGizmos = true; // Auto-turn on gizmos
+            showDebugGizmos = true;
         }
         else
         {
-            Debug.Log("Network is Clean! (No topology errors found)");
+            Debug.Log("Network is Clean!");
         }
     }
 
@@ -76,20 +72,15 @@ public class RoadNetwork : MonoBehaviour
     [ContextMenu("Fix Errors")]
     public void FixErrors()
     {
-        ScanNetwork(); // Always scan first to get fresh lists
+        ScanNetwork();
 
         int nodesFixed = 0;
         int segmentsFixed = 0;
 
-        // A. Fix Nodes (Cleanup)
         foreach (var node in faultyNodes)
         {
             if (node == null) continue;
-            
-            // 1. Remove Nulls
             node.OutgoingRoads.RemoveAll(x => x == null);
-
-            // 2. Remove Ghost Links
             for (int i = node.OutgoingRoads.Count - 1; i >= 0; i--)
             {
                 var seg = node.OutgoingRoads[i];
@@ -101,45 +92,32 @@ public class RoadNetwork : MonoBehaviour
             nodesFixed++;
         }
 
-        // B. Fix Segments (Repair or Create Terminals)
         foreach (var seg in faultySegments)
         {
             if (seg == null) continue;
 
-            // Fix Start
             if (seg.StartNode == null)
             {
-                Vector3 pos = seg.Spline[0].Position; 
-                // Convert local spline point to world
-                Vector3 worldPos = seg.transform.TransformPoint(pos);
-                
+                Vector3 worldPos = seg.transform.TransformPoint(seg.Spline[0].Position);
                 seg.StartNode = GetOrCreateNodeAt(worldPos, "Terminal_Start");
             }
 
-            // Fix End
             if (seg.EndNode == null)
             {
-                // Get last knot
-                Vector3 pos = seg.Spline[seg.Spline.Count - 1].Position;
-                Vector3 worldPos = seg.transform.TransformPoint(pos);
-                
+                Vector3 worldPos = seg.transform.TransformPoint(seg.Spline[seg.Spline.Count - 1].Position);
                 seg.EndNode = GetOrCreateNodeAt(worldPos, "Terminal_End");
             }
-
             segmentsFixed++;
         }
 
-        // Clear errors
         faultyNodes.Clear();
         faultySegments.Clear();
         
-        Debug.Log($"Fix Complete: Cleaned {nodesFixed} nodes, Repaired {segmentsFixed} segments (created missing terminals).");
+        Debug.Log($"Fix Complete: Cleaned {nodesFixed} nodes, Repaired {segmentsFixed} segments.");
     }
 
-    // Helper: Tries to find a node, or spawns one if missing
     private RoadNode GetOrCreateNodeAt(Vector3 worldPos, string suffix)
     {
-        // 1. Try to find existing node (Sphere check)
         Collider[] hits = Physics.OverlapSphere(worldPos, 0.5f);
         foreach(var hit in hits)
         {
@@ -147,52 +125,198 @@ public class RoadNetwork : MonoBehaviour
             if (node != null) return node;
         }
 
-        // 2. Create New (if we have a prefab)
         if (nodePrefab != null)
         {
-            // Find the "Nodes" folder to keep hierarchy clean
             Transform parent = transform.Find("Nodes");
-            if (parent == null) parent = transform; // Fallback to root
+            if (parent == null) parent = transform; 
 
             GameObject newObj = Instantiate(nodePrefab, worldPos, Quaternion.identity, parent);
             newObj.name = $"AutoNode_{suffix}_{Random.Range(1000,9999)}";
             return newObj.GetComponent<RoadNode>();
         }
-        else
+        return null;
+    }
+
+    // --- 3. TERRAIN TOOLS ---
+
+    [ContextMenu("Snap All to Terrain")]
+    public void SnapToTerrain()
+    {
+        Undo.RecordObjects(GetComponentsInChildren<Transform>(), "Snap Network to Terrain");
+
+        var nodes = GetComponentsInChildren<RoadNode>();
+        foreach (var node in nodes) SnapObjectToGround(node.transform);
+
+        var segments = GetComponentsInChildren<RoadSegment>();
+        foreach (var seg in segments) SnapSplineToGround(seg);
+
+        Debug.Log($"Snapped {nodes.Length} nodes and {segments.Length} roads to terrain (Offset: {terrainSnapOffset}).");
+    }
+
+    // Culls objects outside terrain
+    public void CullOutsideTerrain()
+    {
+        Undo.RegisterCompleteObjectUndo(gameObject, "Cull Off-Map Roads");
+
+        int deletedNodes = 0;
+        int deletedSegments = 0;
+
+        // 1. Cull Nodes
+        var nodes = GetComponentsInChildren<RoadNode>();
+        List<RoadNode> nodesToDelete = new List<RoadNode>();
+        
+        foreach (var node in nodes)
         {
-            Debug.LogError("Cannot auto-fix missing node: No Node Prefab assigned in RoadNetwork script!");
-            return null;
+            // Raycast check
+            if (!CheckTerrainHit(node.transform.position))
+            {
+                nodesToDelete.Add(node);
+            }
+        }
+
+        foreach(var node in nodesToDelete)
+        {
+            Undo.DestroyObjectImmediate(node.gameObject);
+            deletedNodes++;
+        }
+
+        // 2. Cull Segments
+        var segments = GetComponentsInChildren<RoadSegment>();
+        List<RoadSegment> segmentsToDelete = new List<RoadSegment>();
+
+        foreach (var seg in segments)
+        {
+            // Check middle of the road
+            // If the road center is in the void, delete it.
+            // (We could check endpoints too, but middle is a safe "average" check)
+            if (seg.Spline.Count > 0)
+            {
+                // Get approx middle knot index
+                int midIndex = seg.Spline.Count / 2;
+                Vector3 worldPos = seg.transform.TransformPoint(seg.Spline[midIndex].Position);
+
+                if (!CheckTerrainHit(worldPos))
+                {
+                    segmentsToDelete.Add(seg);
+                }
+            }
+        }
+
+        foreach (var seg in segmentsToDelete)
+        {
+            Undo.DestroyObjectImmediate(seg.gameObject);
+            deletedSegments++;
+        }
+
+        Debug.Log($"Culled {deletedNodes} Nodes and {deletedSegments} Segments that were outside the terrain.");
+
+        // Auto-Run Clean to remove broken links from surviving nodes
+        FixErrors(); 
+    }
+
+    // Helper for Raycast Logic
+    private bool CheckTerrainHit(Vector3 targetPos)
+    {
+        Vector3 rayOrigin = targetPos;
+        rayOrigin.y = 2000f; // Start high
+        return Physics.Raycast(rayOrigin, Vector3.down, 4000f, terrainLayer);
+    }
+
+    private void SnapObjectToGround(Transform t)
+    {
+        Vector3 rayOrigin = t.position;
+        rayOrigin.y = 2000f; 
+
+        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 4000f, terrainLayer))
+        {
+            Vector3 newPos = t.position;
+            newPos.y = hit.point.y + terrainSnapOffset; // Uses configurable offset
+            t.position = newPos;
         }
     }
 
-    // --- 3. VISUALIZATION ---
+    private void SnapSplineToGround(RoadSegment seg)
+    {
+        if (seg == null) return;
+        var container = seg.GetComponent<UnityEngine.Splines.SplineContainer>();
+        if (container == null) return;
+
+        // 1. Record Undo (Essential for saving!)
+        Undo.RecordObject(container, "Snap Spline Segment");
+
+        var spline = container.Spline;
+        
+        for (int i = 0; i < spline.Count; i++)
+        {
+            var knot = spline[i];
+            bool isStart = (i == 0);
+            bool isEnd = (i == spline.Count - 1);
+            Vector3 worldPos;
+
+            if (isStart && seg.StartNode != null)
+            {
+                worldPos = seg.StartNode.transform.position;
+            }
+            else if (isEnd && seg.EndNode != null)
+            {
+                worldPos = seg.EndNode.transform.position;
+            }
+            else
+            {
+                worldPos = container.transform.TransformPoint(knot.Position);
+                Vector3 rayOrigin = worldPos;
+                rayOrigin.y = 2000f; 
+
+                if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 4000f, terrainLayer))
+                {
+                    worldPos.y = hit.point.y + terrainSnapOffset; 
+                }
+            }
+
+            knot.Position = container.transform.InverseTransformPoint(worldPos);
+            spline[i] = knot; // This updates the data in memory
+        }
+        
+        // 2. Force Dirty (Ensures the asterisk * appears and changes are saved to disk)
+        if (!Application.isPlaying)
+        {
+            EditorUtility.SetDirty(container);
+        }
+    }
+
+    [ContextMenu("Generate All Meshes")]
+    public void GenerateAllMeshes()
+    {
+        // Find all SimpleRoadMesh scripts in children
+        var meshGenerators = GetComponentsInChildren<SimpleRoadMesh>();
+        
+        foreach (var gen in meshGenerators)
+        {
+            gen.Generate();
+        }
+        
+        Debug.Log($"Generated meshes for {meshGenerators.Length} road segments.");
+    }
+
+    // --- 4. VISUALIZATION ---
 
     private void OnDrawGizmos()
     {
         if (!showDebugGizmos) return;
 
-        // Draw Faulty Nodes (Red Spheres)
         Gizmos.color = new Color(1, 0, 0, 0.5f);
         foreach (var node in faultyNodes)
         {
-            if (node != null)
-            {
-                Gizmos.DrawSphere(node.transform.position, 2f);
-                // Draw line to the bad segment reference? 
-                // Hard to visualize null, but we mark the node itself.
-            }
+            if (node != null) Gizmos.DrawSphere(node.transform.position, 2f);
         }
 
-        // Draw Faulty Segments (Yellow Dashed Lines)
         Gizmos.color = Color.yellow;
         foreach (var seg in faultySegments)
         {
             if (seg != null)
             {
-                // Highlight the road center
                 Gizmos.DrawWireCube(seg.transform.position, Vector3.one * 5f);
                 
-                // Draw specific markers for missing ends
                 Vector3 startPos = seg.transform.TransformPoint(seg.Spline[0].Position);
                 Vector3 endPos = seg.transform.TransformPoint(seg.Spline[seg.Spline.Count-1].Position);
 
@@ -200,14 +324,11 @@ public class RoadNetwork : MonoBehaviour
                 {
                     Gizmos.color = Color.red;
                     Gizmos.DrawSphere(startPos, 1.5f);
-                    Gizmos.DrawIcon(startPos, "console.erroricon.sml", true);
                 }
-                
                 if (seg.EndNode == null)
                 {
                     Gizmos.color = Color.red;
                     Gizmos.DrawSphere(endPos, 1.5f);
-                    Gizmos.DrawIcon(endPos, "console.erroricon.sml", true);
                 }
             }
         }
@@ -240,13 +361,38 @@ public class RoadNetworkEditor : Editor
             SceneView.RepaintAll();
         }
         GUILayout.EndHorizontal();
+        
+        GUILayout.Space(10);
+        GUI.backgroundColor = new Color(0.5f, 0.8f, 1f); 
+        if (GUILayout.Button("3. SNAP TO TERRAIN", GUILayout.Height(40)))
+        {
+            script.SnapToTerrain();
+        }
+        GUI.backgroundColor = Color.white;
+
+        // --- NEW BUTTON ---
+        GUILayout.Space(5);
+        GUI.backgroundColor = new Color(1f, 0.4f, 0.4f); // Red
+        if (GUILayout.Button("4. CULL OFF-MAP OBJECTS", GUILayout.Height(30)))
+        {
+            script.CullOutsideTerrain();
+            SceneView.RepaintAll();
+        }
+        GUI.backgroundColor = Color.white;
+        // ------------------
 
         GUILayout.Space(10);
         EditorGUILayout.HelpBox(
-            "Fix Button Logic:\n" +
-            "- Nodes: Removes null/broken links.\n" +
-            "- Segments: Creates new Terminal Nodes at dead ends automatically.", 
-            MessageType.Info);
+            "Cull Button: Deletes any Nodes or Roads that do not Raycast hit the terrain.", 
+            MessageType.Warning);
+
+        GUILayout.Space(5);
+        GUI.backgroundColor = new Color(0.8f, 0.8f, 0.8f); 
+        if (GUILayout.Button("5. GENERATE MESHES", GUILayout.Height(30)))
+        {
+            script.GenerateAllMeshes();
+        }
+        GUI.backgroundColor = Color.white;
     }
 }
 #endif
