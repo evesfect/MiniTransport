@@ -8,9 +8,14 @@ using System.Collections.Generic;
 public class BusStopPlacer
 {
     static bool isPlacingMode = false;
+    static GameObject stopPrefab; // The field for your prefab
+
+    // --- SPATIAL PARTITIONING ---
     const float GRID_SIZE = 50f; 
     static Dictionary<Vector2Int, List<RoadSegment>> spatialGrid = new Dictionary<Vector2Int, List<RoadSegment>>();
     static List<RoadSegment> nearbySegmentsBuffer = new List<RoadSegment>();
+
+    // --- PREVIEW STATE ---
     static RoadSegment bestSegment = null;
     static float bestT = 0f;
     static Vector3 bestPos = Vector3.zero;
@@ -45,18 +50,14 @@ public class BusStopPlacer
             var container = seg.GetComponent<SplineContainer>();
             if (container == null || container.Spline == null) continue;
 
-            // Calculate approximate bounds of the spline in World Space
             Bounds bounds = new Bounds(seg.transform.position, Vector3.zero);
             foreach (var knot in container.Spline.Knots)
             {
-                // Convert local knot to world
                 Vector3 worldKnot = container.transform.TransformPoint(knot.Position);
                 bounds.Encapsulate(worldKnot);
             }
-            // Expand slightly to account for curve/width
             bounds.Expand(10f); 
 
-            // Add to all overlapping grid cells
             int minX = Mathf.FloorToInt(bounds.min.x / GRID_SIZE);
             int maxX = Mathf.FloorToInt(bounds.max.x / GRID_SIZE);
             int minZ = Mathf.FloorToInt(bounds.min.z / GRID_SIZE);
@@ -85,7 +86,6 @@ public class BusStopPlacer
         int controlID = GUIUtility.GetControlID(FocusType.Passive);
         HandleUtility.AddDefaultControl(controlID);
 
-        // Raycast to Ground Plane
         Ray ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
         Vector3 mouseWorldPos = Vector3.zero;
         bool hitGround = false;
@@ -105,7 +105,6 @@ public class BusStopPlacer
             }
         }
 
-        // Calculate on MouseMove or Drag
         if (hitGround && (e.type == EventType.MouseMove || e.type == EventType.MouseDrag))
         {
             CalculatePreviewFast(mouseWorldPos);
@@ -121,7 +120,6 @@ public class BusStopPlacer
             e.Use();
         }
 
-        // Force repaint only if mouse is moving
         if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag)
             sceneView.Repaint();
     }
@@ -131,16 +129,14 @@ public class BusStopPlacer
         if (spatialGrid.Count == 0) BuildSpatialGrid();
 
         bestSegment = null;
-        float closestDistSqr = 50f * 50f; // Max snap distance (50m) squared
+        float closestDistSqr = 50f * 50f; 
         hasValidHit = false;
 
-        // Get Grid Cell of Mouse
         int cellX = Mathf.FloorToInt(searchPoint.x / GRID_SIZE);
         int cellZ = Mathf.FloorToInt(searchPoint.z / GRID_SIZE);
 
         nearbySegmentsBuffer.Clear();
 
-        // Check Mouse Cell + Neighbors (3x3 area)
         for (int x = -1; x <= 1; x++)
         {
             for (int z = -1; z <= 1; z++)
@@ -153,7 +149,6 @@ public class BusStopPlacer
             }
         }
 
-        // Find Closest in reduced set
         foreach (var seg in nearbySegmentsBuffer)
         {
             if (seg == null) continue;
@@ -204,26 +199,67 @@ public class BusStopPlacer
     static void DrawGUI()
     {
         Handles.BeginGUI();
-        GUILayout.BeginArea(new Rect(10, 10, 220, 90), EditorStyles.helpBox);
-        GUILayout.Label("BUS STOP PLACER (Fast)", EditorStyles.boldLabel);
+        // Increased height to accommodate the Object Field
+        GUILayout.BeginArea(new Rect(10, 10, 250, 130), EditorStyles.helpBox);
+        
+        GUILayout.Label("BUS STOP PLACER", EditorStyles.boldLabel);
+        
+        GUILayout.Space(5);
+        GUILayout.Label("Settings:", EditorStyles.miniBoldLabel);
+        
+        // --- PREFAB SELECTION ---
+        EditorGUI.BeginChangeCheck();
+        stopPrefab = (GameObject)EditorGUILayout.ObjectField("Prefab", stopPrefab, typeof(GameObject), false);
+        if (EditorGUI.EndChangeCheck())
+        {
+            // Focus control back to scene view if they click the object picker
+            SceneView.lastActiveSceneView.Focus(); 
+        }
+
+        GUILayout.Space(5);
         GUILayout.Label($"Indexed Cells: {spatialGrid.Count}");
+        
         if (GUILayout.Button("Rebuild Index")) BuildSpatialGrid();
-        GUILayout.Label("Left Click to Place");
+        
+        GUILayout.Space(5);
+        GUILayout.Label("Left Click to Place", EditorStyles.miniLabel);
+        
         GUILayout.EndArea();
         Handles.EndGUI();
     }
 
     static void SpawnStop(RoadSegment segment, float t)
     {
-        GameObject stopObj = new GameObject($"BusStop_{segment.name}");
+        GameObject stopObj;
+
+        // Use Prefab if assigned
+        if (stopPrefab != null)
+        {
+            stopObj = (GameObject)PrefabUtility.InstantiatePrefab(stopPrefab);
+            stopObj.name = $"BusStop_{segment.name}";
+        }
+        else
+        {
+            // Fallback to empty object
+            stopObj = new GameObject($"BusStop_{segment.name}");
+        }
+
         Undo.RegisterCreatedObjectUndo(stopObj, "Place Bus Stop");
 
         stopObj.transform.parent = segment.transform;
 
-        BusStop stop = stopObj.AddComponent<BusStop>();
+        // Ensure it has the script
+        BusStop stop = stopObj.GetComponent<BusStop>();
+        if (stop == null) stop = stopObj.AddComponent<BusStop>();
+
         stop.parentSegment = segment;
         stop.splineT = t;
-        stop.stopID = System.Guid.NewGuid().ToString().Substring(0, 8);
+        
+        // Preserve ID if prefab already had one, otherwise generate new
+        if (string.IsNullOrEmpty(stop.stopID))
+        {
+            stop.stopID = System.Guid.NewGuid().ToString().Substring(0, 8);
+        }
 
         stop.SnapToSegment();
         Debug.Log($"Placed Stop on {segment.name} at T: {t:F3}");
