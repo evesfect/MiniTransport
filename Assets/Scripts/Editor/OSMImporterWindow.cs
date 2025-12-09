@@ -9,24 +9,17 @@ using System.Linq;
 
 public class OSMImporterWindow : EditorWindow
 {
-    // --- SETTINGS ---
-    string osmFilePath = "";
-    float mapScale = 1.0f;
-    
-    // --- REFERENCES ---
-    GameObject nodePrefab;     
-    GameObject segmentPrefab;  
-
-    // --- INTERNAL DATA ---
-    Dictionary<long, Vector3> relevantNodePositions = new Dictionary<long, Vector3>();
-    List<Way> highwayWays = new List<Way>();
-    HashSet<long> intersectionIDs = new HashSet<long>();
-    double originLat = 0;
-    double originLon = 0;
-    bool hasOrigin = false;
-    Dictionary<long, RoadNode> spawnedNodeMap = new Dictionary<long, RoadNode>();
-
-    // --- PREFS KEYS ---
+    private string _osmFilePath = "";
+    private float _mapScale = 1.0f;
+    private GameObject _nodePrefab;     
+    private GameObject _segmentPrefab;  
+    private Dictionary<long, Vector3> _relevantNodePositions = new Dictionary<long, Vector3>();
+    private List<Way> _highwayWays = new List<Way>();
+    private HashSet<long> _intersectionIDs = new HashSet<long>();
+    private double _originLat = 0;
+    private double _originLon = 0;
+    private bool _hasOrigin = false;
+    private Dictionary<long, RoadNode> _spawnedNodeMap = new Dictionary<long, RoadNode>();
     private const string PREF_PATH = "OSM_FilePath";
     private const string PREF_SCALE = "OSM_Scale";
 
@@ -36,33 +29,31 @@ public class OSMImporterWindow : EditorWindow
         GetWindow<OSMImporterWindow>("OSM Importer");
     }
 
-    // 1. LOAD SETTINGS ON OPEN
     private void OnEnable()
     {
-        osmFilePath = EditorPrefs.GetString(PREF_PATH, "Assets/map.osm");
-        mapScale = EditorPrefs.GetFloat(PREF_SCALE, 1.0f);
+        _osmFilePath = EditorPrefs.GetString(PREF_PATH, "Assets/map.osm");
+        _mapScale = EditorPrefs.GetFloat(PREF_SCALE, 1.0f);
     }
 
-    // 2. SAVE SETTINGS ON CLOSE/CHANGE
     private void OnDisable()
     {
         SaveSettings();
     }
 
-    void SaveSettings()
+    private void SaveSettings()
     {
-        EditorPrefs.SetString(PREF_PATH, osmFilePath);
-        EditorPrefs.SetFloat(PREF_SCALE, mapScale);
+        EditorPrefs.SetString(PREF_PATH, _osmFilePath);
+        EditorPrefs.SetFloat(PREF_SCALE, _mapScale);
     }
 
-    void OnGUI()
+    private void OnGUI()
     {
         GUILayout.Label("OSM Import Settings", EditorStyles.boldLabel);
 
         // File Selection
         GUILayout.BeginHorizontal();
-        string newPath = EditorGUILayout.TextField("File Path", osmFilePath);
-        if (newPath != osmFilePath) { osmFilePath = newPath; SaveSettings(); }
+        string newPath = EditorGUILayout.TextField("File Path", _osmFilePath);
+        if (newPath != _osmFilePath) { _osmFilePath = newPath; SaveSettings(); }
         
         if (GUILayout.Button("Browse", GUILayout.Width(75)))
         {
@@ -71,25 +62,22 @@ public class OSMImporterWindow : EditorWindow
             {
                 // Make relative to project if possible
                 if (selected.StartsWith(Application.dataPath)) 
-                    osmFilePath = "Assets" + selected.Substring(Application.dataPath.Length);
+                    _osmFilePath = "Assets" + selected.Substring(Application.dataPath.Length);
                 else 
-                    osmFilePath = selected;
+                    _osmFilePath = selected;
                     
                 SaveSettings();
             }
         }
         GUILayout.EndHorizontal();
 
-        // Prefabs
-        // Optimization: Try to auto-load if null. Change path if your prefab is elsewhere.
-        if (nodePrefab == null) nodePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/RoadNode.prefab"); 
+        if (_nodePrefab == null) _nodePrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/RoadNode.prefab"); 
         
-        nodePrefab = (GameObject)EditorGUILayout.ObjectField("Intersection Prefab", nodePrefab, typeof(GameObject), false);
-        segmentPrefab = (GameObject)EditorGUILayout.ObjectField("Road Segment Prefab", segmentPrefab, typeof(GameObject), false);
+        _nodePrefab = (GameObject)EditorGUILayout.ObjectField("Intersection Prefab", _nodePrefab, typeof(GameObject), false);
+        _segmentPrefab = (GameObject)EditorGUILayout.ObjectField("Road Segment Prefab", _segmentPrefab, typeof(GameObject), false);
 
-        // Parameters
-        float newScale = EditorGUILayout.FloatField("Scale Factor", mapScale);
-        if (newScale != mapScale) { mapScale = newScale; SaveSettings(); }
+        float newScale = EditorGUILayout.FloatField("Scale Factor", _mapScale);
+        if (newScale != _mapScale) { _mapScale = newScale; SaveSettings(); }
 
         GUILayout.Space(10);
 
@@ -99,14 +87,14 @@ public class OSMImporterWindow : EditorWindow
         }
     }
 
-    bool CheckReferences()
+    private bool CheckReferences()
     {
-        if (!File.Exists(osmFilePath)) { EditorUtility.DisplayDialog("Error", "File not found!", "OK"); return false; }
-        if (nodePrefab == null || segmentPrefab == null) { EditorUtility.DisplayDialog("Error", "Assign Prefabs first!", "OK"); return false; }
+        if (!File.Exists(_osmFilePath)) { EditorUtility.DisplayDialog("Error", "File not found!", "OK"); return false; }
+        if (_nodePrefab == null || _segmentPrefab == null) { EditorUtility.DisplayDialog("Error", "Assign Prefabs first!", "OK"); return false; }
         return true;
     }
 
-    void RunImportProcess()
+    private void RunImportProcess()
     {
         ClearInternalData();
         ReadWaysPass();
@@ -115,24 +103,24 @@ public class OSMImporterWindow : EditorWindow
         Debug.Log("OSM Import Complete.");
     }
 
-    // ---------------------------------------------------------
-    // LOGIC: READING DATA
-    // ---------------------------------------------------------
-
-    void ReadWaysPass()
+    private void ReadWaysPass()
     {
         Dictionary<long, int> nodeUsageCount = new Dictionary<long, int>();
 
-        using (var fileStream = File.OpenRead(osmFilePath))
+        using (var fileStream = File.OpenRead(_osmFilePath))
         {
             var source = GetStreamSource(fileStream);
             
-            // Filter: Must be Way, Must have 'highway'
+            HashSet<string> allowedTypes = new HashSet<string> 
+            { 
+                "motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential"
+            };
+
             var highways = source.Where(x => 
                 x.Type == OsmGeoType.Way && 
                 x.Tags != null && 
                 x.Tags.ContainsKey("highway") &&
-                !x.Tags.GetValue("highway").Contains("footway") 
+                allowedTypes.Contains(x.Tags.GetValue("highway"))
             );
 
             foreach (var element in highways)
@@ -140,9 +128,8 @@ public class OSMImporterWindow : EditorWindow
                 Way w = (Way)element;
                 if (w.Nodes == null || w.Nodes.Length < 2) continue;
 
-                highwayWays.Add(w);
+                _highwayWays.Add(w);
 
-                // Count node usage
                 foreach (long nodeId in w.Nodes)
                 {
                     if (!nodeUsageCount.ContainsKey(nodeId)) nodeUsageCount[nodeId] = 0;
@@ -159,7 +146,7 @@ public class OSMImporterWindow : EditorWindow
             
             if (!isJunction) 
             {
-                foreach(var way in highwayWays)
+                foreach(var way in _highwayWays)
                 {
                     if (way.Nodes[0] == kvp.Key || way.Nodes[way.Nodes.Length-1] == kvp.Key)
                     {
@@ -171,20 +158,20 @@ public class OSMImporterWindow : EditorWindow
 
             if (isJunction || isTerminal)
             {
-                intersectionIDs.Add(kvp.Key);
+                _intersectionIDs.Add(kvp.Key);
             }
         }
     }
 
-    void ReadNodesPass()
+    private void ReadNodesPass()
     {
         HashSet<long> neededNodes = new HashSet<long>();
-        foreach(var way in highwayWays)
+        foreach(var way in _highwayWays)
         {
             foreach(var id in way.Nodes) neededNodes.Add(id);
         }
 
-        using (var fileStream = File.OpenRead(osmFilePath))
+        using (var fileStream = File.OpenRead(_osmFilePath))
         {
             var source = GetStreamSource(fileStream);
             
@@ -197,38 +184,33 @@ public class OSMImporterWindow : EditorWindow
                         OsmSharp.Node n = (OsmSharp.Node)element;
                         if (!n.Latitude.HasValue || !n.Longitude.HasValue) continue;
 
-                        if (!hasOrigin)
+                        if (!_hasOrigin)
                         {
-                            originLat = n.Latitude.Value;
-                            originLon = n.Longitude.Value;
-                            hasOrigin = true;
+                            _originLat = n.Latitude.Value;
+                            _originLon = n.Longitude.Value;
+                            _hasOrigin = true;
                         }
 
                         Vector3 worldPos = GeoToWorld(n.Latitude.Value, n.Longitude.Value);
-                        relevantNodePositions.Add(element.Id.Value, worldPos);
+                        _relevantNodePositions.Add(element.Id.Value, worldPos);
                     }
                 }
             }
         }
     }
 
-    OsmStreamSource GetStreamSource(FileStream stream)
+    private OsmStreamSource GetStreamSource(FileStream stream)
     {
-        if (osmFilePath.EndsWith(".pbf")) return new PBFOsmStreamSource(stream);
+        if (_osmFilePath.EndsWith(".pbf")) return new PBFOsmStreamSource(stream);
         else return new XmlOsmStreamSource(stream);
     }
 
-    // ---------------------------------------------------------
-    // LOGIC: GENERATION
-    // ---------------------------------------------------------
-
-    void SpawnNetwork()
+    private void SpawnNetwork()
     {
         GameObject root = new GameObject("OSM_Generated_Map");
         
-        // Auto-assign Prefab to the new RoadNetwork component
         RoadNetwork networkScript = root.AddComponent<RoadNetwork>();
-        networkScript.nodePrefab = this.nodePrefab; 
+        networkScript.nodePrefab = this._nodePrefab; 
         networkScript.showDebugGizmos = false;
 
         GameObject intersectionsGroup = new GameObject("Nodes");
@@ -236,25 +218,23 @@ public class OSMImporterWindow : EditorWindow
         intersectionsGroup.transform.parent = root.transform;
         segmentsGroup.transform.parent = root.transform;
 
-        // 1. SPAWN INTERSECTIONS
-        foreach (long id in intersectionIDs)
+        foreach (long id in _intersectionIDs)
         {
-            if (!relevantNodePositions.ContainsKey(id)) continue;
+            if (!_relevantNodePositions.ContainsKey(id)) continue;
 
-            Vector3 pos = relevantNodePositions[id];
+            Vector3 pos = _relevantNodePositions[id];
             
-            GameObject nodeObj = (GameObject)PrefabUtility.InstantiatePrefab(nodePrefab, intersectionsGroup.transform);
+            GameObject nodeObj = (GameObject)PrefabUtility.InstantiatePrefab(_nodePrefab, intersectionsGroup.transform);
             nodeObj.transform.position = pos;
             nodeObj.name = $"Node_{id}";
 
             RoadNode nodeScript = nodeObj.GetComponent<RoadNode>();
             nodeScript.OSM_NodeID = id;
             
-            spawnedNodeMap.Add(id, nodeScript);
+            _spawnedNodeMap.Add(id, nodeScript);
         }
 
-        // 2. SPAWN SEGMENTS
-        foreach (Way way in highwayWays)
+        foreach (Way way in _highwayWays)
         {
             List<long> segmentNodeIDs = new List<long>();
             for (int i = 0; i < way.Nodes.Length; i++)
@@ -262,7 +242,7 @@ public class OSMImporterWindow : EditorWindow
                 long currentNodeID = way.Nodes[i];
                 segmentNodeIDs.Add(currentNodeID);
 
-                bool isIntersection = intersectionIDs.Contains(currentNodeID);
+                bool isIntersection = _intersectionIDs.Contains(currentNodeID);
                 bool isLastInWay = (i == way.Nodes.Length - 1);
                 bool hasGeometry = segmentNodeIDs.Count > 1;
 
@@ -278,12 +258,11 @@ public class OSMImporterWindow : EditorWindow
         }
     }
 
-    void CreateSegmentObject(List<long> ids, Transform parent, Way originalWay)
+    private void CreateSegmentObject(List<long> ids, Transform parent, Way originalWay)
     {
-        GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(segmentPrefab, parent);
+        GameObject obj = (GameObject)PrefabUtility.InstantiatePrefab(_segmentPrefab, parent);
         obj.name = $"Segment_{ids[0]}_{ids[ids.Count-1]}";
 
-        // FIX: Force Origin so local knots align with world nodes
         obj.transform.position = Vector3.zero;
         obj.transform.rotation = Quaternion.identity;
 
@@ -293,7 +272,7 @@ public class OSMImporterWindow : EditorWindow
 
         foreach (long id in ids)
         {
-            if (relevantNodePositions.TryGetValue(id, out Vector3 pos))
+            if (_relevantNodePositions.TryGetValue(id, out Vector3 pos))
             {
                 spline.Add(new BezierKnot(pos));
             }
@@ -302,43 +281,42 @@ public class OSMImporterWindow : EditorWindow
 
         RoadSegment segmentScript = obj.GetComponent<RoadSegment>();
         
-        if (spawnedNodeMap.TryGetValue(ids[0], out RoadNode startNode))
+        if (_spawnedNodeMap.TryGetValue(ids[0], out RoadNode nodeA))
         {
-            segmentScript.StartNode = startNode;
-            startNode.OutgoingRoads.Add(segmentScript);
+            segmentScript.NodeA = nodeA;
+            nodeA.ConnectedRoads.Add(segmentScript);
         }
 
-        if (spawnedNodeMap.TryGetValue(ids[ids.Count - 1], out RoadNode endNode))
+        if (_spawnedNodeMap.TryGetValue(ids[ids.Count - 1], out RoadNode nodeB))
         {
-            segmentScript.EndNode = endNode;
+            segmentScript.NodeB = nodeB;
+            nodeB.ConnectedRoads.Add(segmentScript);
         }
 
         segmentScript.CalculateLength();
     }
 
-    // ---------------------------------------------------------
-    // LOGIC: MATH
-    // ---------------------------------------------------------
+    #region helpers
 
-    Vector3 GeoToWorld(double lat, double lon)
+    private Vector3 GeoToWorld(double lat, double lon)
     {
         double R = 6378137; // Earth Radius meters
-        double dLat = (lat - originLat) * Mathf.Deg2Rad;
-        double dLon = (lon - originLon) * Mathf.Deg2Rad;
+        double dLat = (lat - _originLat) * Mathf.Deg2Rad;
+        double dLon = (lon - _originLon) * Mathf.Deg2Rad;
         
-        float x = (float)(dLon * System.Math.Cos(originLat * Mathf.Deg2Rad) * R);
+        float x = (float)(dLon * System.Math.Cos(_originLat * Mathf.Deg2Rad) * R);
         float z = (float)(dLat * R);
 
-        // Always spawn flat. Use RoadNetwork.SnapToTerrain later.
-        return new Vector3(x * mapScale, 0, z * mapScale);
+        return new Vector3(x * _mapScale, 0, z * _mapScale);
     }
 
-    void ClearInternalData()
+    private void ClearInternalData()
     {
-        relevantNodePositions.Clear();
-        highwayWays.Clear();
-        intersectionIDs.Clear();
-        spawnedNodeMap.Clear();
-        hasOrigin = false;
+        _relevantNodePositions.Clear();
+        _highwayWays.Clear();
+        _intersectionIDs.Clear();
+        _spawnedNodeMap.Clear();
+        _hasOrigin = false;
     }
+    #endregion
 }

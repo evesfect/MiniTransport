@@ -11,8 +11,8 @@ public class RoadNetwork : MonoBehaviour
     public bool showDebugGizmos = true;
     
     [Header("Network State")]
-    [SerializeField] private List<RoadNode> faultyNodes = new List<RoadNode>();
-    [SerializeField] private List<RoadSegment> faultySegments = new List<RoadSegment>();
+    [SerializeField] private List<RoadNode> _faultyNodes = new List<RoadNode>();
+    [SerializeField] private List<RoadSegment> _faultySegments = new List<RoadSegment>();
     
     [Tooltip("Assign your Node prefab here to allow Auto-Fixing of dead ends.")]
     public GameObject nodePrefab; 
@@ -20,29 +20,31 @@ public class RoadNetwork : MonoBehaviour
     [Header("Terrain Tools")]
     public LayerMask terrainLayer = ~0; 
     [Tooltip("Height above terrain to place roads (prevents flickering).")]
-    public float terrainSnapOffset = 0.2f; // NEW: Configurable Offset
-
-    // --- 1. SCANNING LOGIC ---
+    public float terrainSnapOffset = 0.2f; 
 
     [ContextMenu("Scan Network")]
     public void ScanNetwork()
     {
-        faultyNodes.Clear();
-        faultySegments.Clear();
+        _faultyNodes.Clear();
+        _faultySegments.Clear();
 
         var allNodes = GetComponentsInChildren<RoadNode>();
         foreach (var node in allNodes)
         {
-            if (node.OutgoingRoads.Contains(null)) 
+            // Null links in the list
+            if (node.ConnectedRoads.Contains(null)) 
             {
-                faultyNodes.Add(node);
+                _faultyNodes.Add(node);
                 continue;
             }
-            foreach(var seg in node.OutgoingRoads)
+
+            // Validity of connections
+            // Every road connected to this node MUST reference this node as either NodeA or NodeB
+            foreach(var seg in node.ConnectedRoads)
             {
-                if (seg.StartNode != node && seg.EndNode != node)
+                if (seg.NodeA != node && seg.NodeB != node)
                 {
-                    if(!faultyNodes.Contains(node)) faultyNodes.Add(node);
+                    if(!_faultyNodes.Contains(node)) _faultyNodes.Add(node);
                 }
             }
         }
@@ -50,15 +52,16 @@ public class RoadNetwork : MonoBehaviour
         var allSegments = GetComponentsInChildren<RoadSegment>();
         foreach (var seg in allSegments)
         {
-            if (seg.StartNode == null || seg.EndNode == null)
+            // Missing endpoints
+            if (seg.NodeA == null || seg.NodeB == null)
             {
-                faultySegments.Add(seg);
+                _faultySegments.Add(seg);
             }
         }
 
-        if (faultyNodes.Count > 0 || faultySegments.Count > 0)
+        if (_faultyNodes.Count > 0 || _faultySegments.Count > 0)
         {
-            Debug.LogWarning($"Scan Found: {faultyNodes.Count} Nodes with bad links, {faultySegments.Count} Broken Segments.");
+            Debug.LogWarning($"Scan Found: {_faultyNodes.Count} Nodes with bad links, {_faultySegments.Count} Broken Segments.");
             showDebugGizmos = true;
         }
         else
@@ -66,8 +69,6 @@ public class RoadNetwork : MonoBehaviour
             Debug.Log("Network is Clean!");
         }
     }
-
-    // --- 2. FIXING LOGIC ---
 
     [ContextMenu("Fix Errors")]
     public void FixErrors()
@@ -77,41 +78,53 @@ public class RoadNetwork : MonoBehaviour
         int nodesFixed = 0;
         int segmentsFixed = 0;
 
-        foreach (var node in faultyNodes)
+        // Node fix: remove nulls and segments that don't belong
+        foreach (var node in _faultyNodes)
         {
             if (node == null) continue;
-            node.OutgoingRoads.RemoveAll(x => x == null);
-            for (int i = node.OutgoingRoads.Count - 1; i >= 0; i--)
+            
+            // Remove nulls
+            node.ConnectedRoads.RemoveAll(x => x == null);
+            
+            // Remove roads that don't point back to this node
+            for (int i = node.ConnectedRoads.Count - 1; i >= 0; i--)
             {
-                var seg = node.OutgoingRoads[i];
-                if (seg != null && seg.StartNode != node && seg.EndNode != node)
+                var seg = node.ConnectedRoads[i];
+                if (seg != null && seg.NodeA != node && seg.NodeB != node)
                 {
-                    node.OutgoingRoads.RemoveAt(i);
+                    node.ConnectedRoads.RemoveAt(i);
                 }
             }
             nodesFixed++;
         }
 
-        foreach (var seg in faultySegments)
+        // Segment fix: create missing nodes at endpoints
+        foreach (var seg in _faultySegments)
         {
             if (seg == null) continue;
 
-            if (seg.StartNode == null)
+            // If NodeA is missing, check start of spline (index 0)
+            if (seg.NodeA == null && seg.Spline.Count > 0)
             {
                 Vector3 worldPos = seg.transform.TransformPoint(seg.Spline[0].Position);
-                seg.StartNode = GetOrCreateNodeAt(worldPos, "Terminal_Start");
+                seg.NodeA = GetOrCreateNodeAt(worldPos, "Terminal_A");
+                if (seg.NodeA != null && !seg.NodeA.ConnectedRoads.Contains(seg))
+                    seg.NodeA.ConnectedRoads.Add(seg);
             }
 
-            if (seg.EndNode == null)
+            // If NodeB is missing, check end of spline
+            if (seg.NodeB == null && seg.Spline.Count > 0)
             {
                 Vector3 worldPos = seg.transform.TransformPoint(seg.Spline[seg.Spline.Count - 1].Position);
-                seg.EndNode = GetOrCreateNodeAt(worldPos, "Terminal_End");
+                seg.NodeB = GetOrCreateNodeAt(worldPos, "Terminal_B");
+                if (seg.NodeB != null && !seg.NodeB.ConnectedRoads.Contains(seg))
+                    seg.NodeB.ConnectedRoads.Add(seg);
             }
             segmentsFixed++;
         }
 
-        faultyNodes.Clear();
-        faultySegments.Clear();
+        _faultyNodes.Clear();
+        _faultySegments.Clear();
         
         Debug.Log($"Fix Complete: Cleaned {nodesFixed} nodes, Repaired {segmentsFixed} segments.");
     }
@@ -137,8 +150,6 @@ public class RoadNetwork : MonoBehaviour
         return null;
     }
 
-    // --- 3. TERRAIN TOOLS ---
-
     [ContextMenu("Snap All to Terrain")]
     public void SnapToTerrain()
     {
@@ -153,7 +164,6 @@ public class RoadNetwork : MonoBehaviour
         Debug.Log($"Snapped {nodes.Length} nodes and {segments.Length} roads to terrain (Offset: {terrainSnapOffset}).");
     }
 
-    // Culls objects outside terrain
     public void CullOutsideTerrain()
     {
         Undo.RegisterCompleteObjectUndo(gameObject, "Cull Off-Map Roads");
@@ -161,13 +171,12 @@ public class RoadNetwork : MonoBehaviour
         int deletedNodes = 0;
         int deletedSegments = 0;
 
-        // 1. Cull Nodes
+        // Cull Nodes
         var nodes = GetComponentsInChildren<RoadNode>();
         List<RoadNode> nodesToDelete = new List<RoadNode>();
         
         foreach (var node in nodes)
         {
-            // Raycast check
             if (!CheckTerrainHit(node.transform.position))
             {
                 nodesToDelete.Add(node);
@@ -180,18 +189,14 @@ public class RoadNetwork : MonoBehaviour
             deletedNodes++;
         }
 
-        // 2. Cull Segments
+        // Cull Segments
         var segments = GetComponentsInChildren<RoadSegment>();
         List<RoadSegment> segmentsToDelete = new List<RoadSegment>();
 
         foreach (var seg in segments)
         {
-            // Check middle of the road
-            // If the road center is in the void, delete it.
-            // (We could check endpoints too, but middle is a safe "average" check)
             if (seg.Spline.Count > 0)
             {
-                // Get approx middle knot index
                 int midIndex = seg.Spline.Count / 2;
                 Vector3 worldPos = seg.transform.TransformPoint(seg.Spline[midIndex].Position);
 
@@ -210,15 +215,13 @@ public class RoadNetwork : MonoBehaviour
 
         Debug.Log($"Culled {deletedNodes} Nodes and {deletedSegments} Segments that were outside the terrain.");
 
-        // Auto-Run Clean to remove broken links from surviving nodes
         FixErrors(); 
     }
 
-    // Helper for Raycast Logic
     private bool CheckTerrainHit(Vector3 targetPos)
     {
         Vector3 rayOrigin = targetPos;
-        rayOrigin.y = 2000f; // Start high
+        rayOrigin.y = 2000f; 
         return Physics.Raycast(rayOrigin, Vector3.down, 4000f, terrainLayer);
     }
 
@@ -230,7 +233,7 @@ public class RoadNetwork : MonoBehaviour
         if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 4000f, terrainLayer))
         {
             Vector3 newPos = t.position;
-            newPos.y = hit.point.y + terrainSnapOffset; // Uses configurable offset
+            newPos.y = hit.point.y + terrainSnapOffset; 
             t.position = newPos;
         }
     }
@@ -241,7 +244,6 @@ public class RoadNetwork : MonoBehaviour
         var container = seg.GetComponent<UnityEngine.Splines.SplineContainer>();
         if (container == null) return;
 
-        // 1. Record Undo (Essential for saving!)
         Undo.RecordObject(container, "Snap Spline Segment");
 
         var spline = container.Spline;
@@ -249,17 +251,18 @@ public class RoadNetwork : MonoBehaviour
         for (int i = 0; i < spline.Count; i++)
         {
             var knot = spline[i];
-            bool isStart = (i == 0);
-            bool isEnd = (i == spline.Count - 1);
+            bool isNodeA = (i == 0);
+            bool isNodeB = (i == spline.Count - 1);
             Vector3 worldPos;
 
-            if (isStart && seg.StartNode != null)
+            // Use the Nodes to dictate the endpoint height if they exist
+            if (isNodeA && seg.NodeA != null)
             {
-                worldPos = seg.StartNode.transform.position;
+                worldPos = seg.NodeA.transform.position;
             }
-            else if (isEnd && seg.EndNode != null)
+            else if (isNodeB && seg.NodeB != null)
             {
-                worldPos = seg.EndNode.transform.position;
+                worldPos = seg.NodeB.transform.position;
             }
             else
             {
@@ -274,10 +277,9 @@ public class RoadNetwork : MonoBehaviour
             }
 
             knot.Position = container.transform.InverseTransformPoint(worldPos);
-            spline[i] = knot; // This updates the data in memory
+            spline[i] = knot; 
         }
         
-        // 2. Force Dirty (Ensures the asterisk * appears and changes are saved to disk)
         if (!Application.isPlaying)
         {
             EditorUtility.SetDirty(container);
@@ -287,55 +289,52 @@ public class RoadNetwork : MonoBehaviour
     [ContextMenu("Generate All Meshes")]
     public void GenerateAllMeshes()
     {
-        // Find all SimpleRoadMesh scripts in children
         var meshGenerators = GetComponentsInChildren<SimpleRoadMesh>();
-        
         foreach (var gen in meshGenerators)
         {
             gen.Generate();
         }
-        
         Debug.Log($"Generated meshes for {meshGenerators.Length} road segments.");
     }
-
-    // --- 4. VISUALIZATION ---
 
     private void OnDrawGizmos()
     {
         if (!showDebugGizmos) return;
 
         Gizmos.color = new Color(1, 0, 0, 0.5f);
-        foreach (var node in faultyNodes)
+        foreach (var node in _faultyNodes)
         {
             if (node != null) Gizmos.DrawSphere(node.transform.position, 2f);
         }
 
         Gizmos.color = Color.yellow;
-        foreach (var seg in faultySegments)
+        foreach (var seg in _faultySegments)
         {
             if (seg != null)
             {
                 Gizmos.DrawWireCube(seg.transform.position, Vector3.one * 5f);
                 
-                Vector3 startPos = seg.transform.TransformPoint(seg.Spline[0].Position);
-                Vector3 endPos = seg.transform.TransformPoint(seg.Spline[seg.Spline.Count-1].Position);
+                if (seg.Spline.Count > 0)
+                {
+                    Vector3 startPos = seg.transform.TransformPoint(seg.Spline[0].Position);
+                    Vector3 endPos = seg.transform.TransformPoint(seg.Spline[seg.Spline.Count-1].Position);
 
-                if (seg.StartNode == null)
-                {
-                    Gizmos.color = Color.red;
-                    Gizmos.DrawSphere(startPos, 1.5f);
-                }
-                if (seg.EndNode == null)
-                {
-                    Gizmos.color = Color.red;
-                    Gizmos.DrawSphere(endPos, 1.5f);
+                    if (seg.NodeA == null)
+                    {
+                        Gizmos.color = Color.red;
+                        Gizmos.DrawSphere(startPos, 1.5f);
+                    }
+                    if (seg.NodeB == null)
+                    {
+                        Gizmos.color = Color.red;
+                        Gizmos.DrawSphere(endPos, 1.5f);
+                    }
                 }
             }
         }
     }
 }
 
-// --- CUSTOM EDITOR GUI ---
 #if UNITY_EDITOR
 [CustomEditor(typeof(RoadNetwork))]
 public class RoadNetworkEditor : Editor
@@ -370,16 +369,14 @@ public class RoadNetworkEditor : Editor
         }
         GUI.backgroundColor = Color.white;
 
-        // --- NEW BUTTON ---
         GUILayout.Space(5);
-        GUI.backgroundColor = new Color(1f, 0.4f, 0.4f); // Red
+        GUI.backgroundColor = new Color(1f, 0.4f, 0.4f); 
         if (GUILayout.Button("4. CULL OFF-MAP OBJECTS", GUILayout.Height(30)))
         {
             script.CullOutsideTerrain();
             SceneView.RepaintAll();
         }
         GUI.backgroundColor = Color.white;
-        // ------------------
 
         GUILayout.Space(10);
         EditorGUILayout.HelpBox(
