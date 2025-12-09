@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 [DefaultExecutionOrder(-50)] 
 public class TransportManager : MonoBehaviour
 {
@@ -15,7 +19,20 @@ public class TransportManager : MonoBehaviour
     [Header("Routes")]
     public List<Route> ActiveRoutes = new List<Route>();
 
-    private string SavePath => Path.Combine(Application.persistentDataPath, "routes.json");
+    // CHANGED: Save to Assets folder in Editor, Persistent path in Build
+    private string SavePath
+    {
+        get
+        {
+#if UNITY_EDITOR
+            // Saves to Assets/routes.json
+            return Path.Combine(Application.dataPath, "routes.json");
+#else
+            // Saves to user's AppData (standard for builds)
+            return Path.Combine(Application.persistentDataPath, "routes.json");
+#endif
+        }
+    }
 
     private void Awake()
     {
@@ -28,12 +45,12 @@ public class TransportManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
 
         RegisterAllStops();
-        LoadRoutes(); // Load on startup
+        LoadRoutes();
     }
 
     private void OnApplicationQuit()
     {
-        SaveRoutes(); // Auto-save on exit
+        SaveRoutes();
     }
 
     public void RegisterAllStops()
@@ -63,9 +80,18 @@ public class TransportManager : MonoBehaviour
 
     // --- Route Management ---
 
+    // 1. For Game UI (Empty Route)
     public Route CreateRoute(string routeName, Color color)
     {
         Route newRoute = new Route(routeName, new List<string>(), color);
+        ActiveRoutes.Add(newRoute);
+        return newRoute;
+    }
+
+    // 2. For Debugger / Loader (Pre-filled)
+    public Route CreateRoute(string routeName, List<string> stopIDs, Color color)
+    {
+        Route newRoute = new Route(routeName, stopIDs, color);
         ActiveRoutes.Add(newRoute);
         return newRoute;
     }
@@ -88,6 +114,11 @@ public class TransportManager : MonoBehaviour
         string json = JsonUtility.ToJson(container, true);
         File.WriteAllText(SavePath, json);
         Debug.Log($"Routes saved to {SavePath}");
+
+#if UNITY_EDITOR
+        // Refresh the Project window so the file appears instantly
+        AssetDatabase.Refresh();
+#endif
     }
 
     [ContextMenu("Load Routes")]
@@ -100,8 +131,12 @@ public class TransportManager : MonoBehaviour
             if (container != null && container.Routes != null)
             {
                 ActiveRoutes = container.Routes;
-                Debug.Log($"Loaded {ActiveRoutes.Count} routes.");
+                Debug.Log($"Loaded {ActiveRoutes.Count} routes from {SavePath}");
             }
+        }
+        else
+        {
+            Debug.LogWarning("No routes file found at " + SavePath);
         }
     }
 }
