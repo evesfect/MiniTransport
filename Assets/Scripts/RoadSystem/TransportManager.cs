@@ -18,17 +18,17 @@ public class TransportManager : MonoBehaviour
 
     [Header("Routes")]
     public List<Route> ActiveRoutes = new List<Route>();
-
-    // CHANGED: Save to Assets folder in Editor, Persistent path in Build
+    private Dictionary<string, List<RoadNode>> _pathCache = new Dictionary<string, List<RoadNode>>();
+    
     private string SavePath
     {
         get
         {
 #if UNITY_EDITOR
-            // Saves to Assets/routes.json
+            // Save to Assets/routes.json
             return Path.Combine(Application.dataPath, "routes.json");
 #else
-            // Saves to user's AppData (standard for builds)
+            // Save to AppData (standard for builds)
             return Path.Combine(Application.persistentDataPath, "routes.json");
 #endif
         }
@@ -43,9 +43,8 @@ public class TransportManager : MonoBehaviour
         }
         Instance = this;
         DontDestroyOnLoad(gameObject);
-
         RegisterAllStops();
-        LoadRoutes();
+        LoadRoutes(); // triggers path calculation
     }
 
     private void OnApplicationQuit()
@@ -71,6 +70,91 @@ public class TransportManager : MonoBehaviour
         }
         Debug.Log($"TransportManager: Indexed {_stopRegistry.Count} bus stops.");
     }
+
+    public void RecalculateAllPaths()
+    {
+        _pathCache.Clear();
+        int count = 0;
+        foreach (var route in ActiveRoutes) count += CacheRoute(route);
+        Debug.Log($"TransportManager: Cached {count} legs.");
+    }
+
+    public int CacheRoute(Route route)
+    {
+        if (route.StopIDs.Count < 2) return 0;
+        int cachedCount = 0;
+
+        // "Bus has to follow the direction it entered the bus stop"
+        // We track the node we are heading towards as we leave a stop.
+        // For Spawn (First Stop), we default to NodeB (Forward).
+        
+        BusStop firstStop = GetStop(route.StopIDs[0]);
+        if (firstStop == null || firstStop.parentSegment == null) return 0;
+
+        // Default start direction: We leave the first stop via NodeB (Forward)
+        RoadNode searchStartNode = firstStop.parentSegment.NodeB;
+
+        for (int i = 0; i < route.StopIDs.Count - 1; i++)
+        {
+            BusStop start = GetStop(route.StopIDs[i]);
+            BusStop end = GetStop(route.StopIDs[i + 1]);
+
+            if (start != null && end != null)
+            {
+                string key = start.stopID + "_" + end.stopID;
+                
+                // Even if cached, we must update 'searchStartNode' for the next loop logic
+                // But for simplicity in this prompt, we calculate fresh if not found.
+                if (!_pathCache.ContainsKey(key))
+                {
+                    // 1. Run Pathfinder ONCE
+                    List<RoadNode> path = RoadPathfinder.FindPathToSegment(searchStartNode, end.parentSegment);
+                    
+                    if (path != null && path.Count > 0)
+                    {
+                        _pathCache[key] = path;
+                        cachedCount++;
+
+                        // 2. Determine Next Start Node (Continuity)
+                        // The path ends at one of the EndSegment's nodes (A or B).
+                        // That node is where we ENTER the EndSegment.
+                        // We must TRAVERSE the segment to the other node to EXIT it.
+                        RoadNode entryNode = path.Last();
+                        
+                        // If we entered at A, we leave via B. If we entered at B, we leave via A.
+                        searchStartNode = (entryNode == end.parentSegment.NodeA) ? 
+                                           end.parentSegment.NodeB : 
+                                           end.parentSegment.NodeA;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"No path found from {start.name} to {end.name} starting towards {searchStartNode.name}");
+                        // Break continuity if path fails, maybe reset to NodeB?
+                        if(end.parentSegment) searchStartNode = end.parentSegment.NodeB; 
+                    }
+                }
+                else
+                {
+                    // If cached, we still need to update searchStartNode for the next iteration logic
+                    List<RoadNode> existingPath = _pathCache[key];
+                    RoadNode entryNode = existingPath.Last();
+                    searchStartNode = (entryNode == end.parentSegment.NodeA) ? end.parentSegment.NodeB : end.parentSegment.NodeA;
+                }
+            }
+        }
+        return cachedCount;
+    }
+
+    public List<RoadNode> GetCachedPath(BusStop start, BusStop end)
+    {
+        if (start == null || end == null) return null;
+        string key = start.stopID + "_" + end.stopID;
+        return _pathCache.TryGetValue(key, out var p) ? p : null;
+    }
+
+    private string GetCacheKey(BusStop a, BusStop b) => a.stopID + "_" + b.stopID;
+
+
 
     public BusStop GetStop(string stopID)
     {
@@ -133,6 +217,7 @@ public class TransportManager : MonoBehaviour
                 ActiveRoutes = container.Routes;
                 Debug.Log($"Loaded {ActiveRoutes.Count} routes from {SavePath}");
             }
+            RecalculateAllPaths();
         }
         else
         {

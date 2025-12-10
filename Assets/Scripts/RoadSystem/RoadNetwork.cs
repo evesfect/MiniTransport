@@ -22,6 +22,13 @@ public class RoadNetwork : MonoBehaviour
     [Tooltip("Height above terrain to place roads (prevents flickering).")]
     public float terrainSnapOffset = 0.2f; 
 
+    [Header("Mesh Generation")]
+    [Tooltip("Width applied to all roads when clicking Generate.")]
+    public float globalRoadWidth = 8.0f;
+    
+    [Tooltip("Distance from center line for lanes. Applied to all segments via 'Update Lane Offsets'.")]
+    public float globalLaneOffset = 2.0f;
+
     [ContextMenu("Scan Network")]
     public void ScanNetwork()
     {
@@ -292,9 +299,40 @@ public class RoadNetwork : MonoBehaviour
         var meshGenerators = GetComponentsInChildren<SimpleRoadMesh>();
         foreach (var gen in meshGenerators)
         {
+            gen.roadWidth = globalRoadWidth;
             gen.Generate();
         }
         Debug.Log($"Generated meshes for {meshGenerators.Length} road segments.");
+    }
+
+    [ContextMenu("Clear All Meshes")]
+    public void ClearAllMeshes()
+    {
+        var meshGenerators = GetComponentsInChildren<SimpleRoadMesh>();
+        foreach (var gen in meshGenerators)
+        {
+            // Destroy the mesh object to clear memory
+            var filter = gen.GetComponent<MeshFilter>();
+            if (filter != null) filter.sharedMesh = null;
+
+            var col = gen.GetComponent<MeshCollider>();
+            if (col != null) col.sharedMesh = null;
+        }
+        Debug.Log($"Cleared meshes for {meshGenerators.Length} road segments.");
+    }
+
+    [ContextMenu("Update Lane Offsets")]
+    public void UpdateLaneOffsets()
+    {
+        var segments = GetComponentsInChildren<RoadSegment>();
+        foreach (var seg in segments)
+        {
+            seg.laneOffset = globalLaneOffset;
+#if UNITY_EDITOR
+            EditorUtility.SetDirty(seg); // Mark as changed so Unity saves it
+#endif
+        }
+        Debug.Log($"Updated lane offset to {globalLaneOffset} for {segments.Length} road segments.");
     }
 
     private void OnDrawGizmos()
@@ -383,12 +421,31 @@ public class RoadNetworkEditor : Editor
             "Cull Button: Deletes any Nodes or Roads that do not Raycast hit the terrain.", 
             MessageType.Warning);
 
+        GUILayout.Space(10);
+        EditorGUILayout.HelpBox("Mesh Tools: Use 'Global Road Width' above to set width for all roads.", MessageType.Info);
+        
         GUILayout.Space(5);
+        if (GUILayout.Button("UPDATE LANE OFFSETS", GUILayout.Height(30)))
+        {
+            script.UpdateLaneOffsets();
+        }
+
+        GUILayout.Space(5);
+        GUILayout.BeginHorizontal();
+
         GUI.backgroundColor = new Color(0.8f, 0.8f, 0.8f); 
         if (GUILayout.Button("5. GENERATE MESHES", GUILayout.Height(30)))
         {
             script.GenerateAllMeshes();
         }
+        
+        GUI.backgroundColor = new Color(1f, 0.6f, 0.6f); // Red tint for destructive action
+        if (GUILayout.Button("CLEAR MESHES", GUILayout.Height(30)))
+        {
+            script.ClearAllMeshes();
+        }
+        
+        GUILayout.EndHorizontal();
         GUI.backgroundColor = Color.white;
     }
 }

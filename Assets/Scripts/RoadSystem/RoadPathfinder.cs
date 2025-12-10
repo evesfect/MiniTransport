@@ -76,7 +76,73 @@ public static class RoadPathfinder
         return null;
     }
 
+    // <summary>
+    /// Finds a path from a specific starting node to EITHER end of the target segment.
+    /// This is the "Run Once" method you requested.
+    /// </summary>
+    public static List<RoadNode> FindPathToSegment(RoadNode startNode, RoadSegment targetSegment)
+    {
+        if (startNode == null || targetSegment == null) return null;
+
+        // If we are already at one of the target segment's nodes
+        if (startNode == targetSegment.NodeA || startNode == targetSegment.NodeB)
+            return new List<RoadNode> { startNode };
+
+        // Standard A* Setup
+        List<RoadNode> openSet = new List<RoadNode> { startNode };
+        Dictionary<RoadNode, RoadNode> cameFrom = new Dictionary<RoadNode, RoadNode>();
+        Dictionary<RoadNode, float> gScore = new Dictionary<RoadNode, float>();
+        Dictionary<RoadNode, float> fScore = new Dictionary<RoadNode, float>();
+
+        gScore[startNode] = 0;
+        fScore[startNode] = HeuristicToSegment(startNode, targetSegment);
+
+        while (openSet.Count > 0)
+        {
+            // Get node with lowest F Score
+            // (Using simple sort for simplicity, PriorityQueue is better for massive maps)
+            openSet.Sort((a, b) => GetScore(fScore, a).CompareTo(GetScore(fScore, b)));
+            RoadNode current = openSet[0];
+
+            // SUCCESS CHECK: Did we reach either end of the target road?
+            if (current == targetSegment.NodeA || current == targetSegment.NodeB)
+            {
+                return ReconstructPath(cameFrom, current);
+            }
+
+            openSet.RemoveAt(0);
+
+            // Explore Neighbors
+            foreach (RoadSegment road in current.ConnectedRoads)
+            {
+                if (road == null) continue;
+                RoadNode neighbor = road.GetConnectedNode(current);
+                if (neighbor == null) continue;
+
+                float tentativeG = GetScore(gScore, current) + road.GetCost();
+
+                if (tentativeG < GetScore(gScore, neighbor))
+                {
+                    cameFrom[neighbor] = current;
+                    gScore[neighbor] = tentativeG;
+                    fScore[neighbor] = tentativeG + HeuristicToSegment(neighbor, targetSegment);
+
+                    if (!openSet.Contains(neighbor)) openSet.Add(neighbor);
+                }
+            }
+        }
+
+        return null; // No path found
+    }
+
     // helpers
+    private static float HeuristicToSegment(RoadNode n, RoadSegment seg)
+    {
+        // Distance to the closest endpoint of the target segment
+        float distA = Vector3.Distance(n.transform.position, seg.NodeA.transform.position);
+        float distB = Vector3.Distance(n.transform.position, seg.NodeB.transform.position);
+        return Mathf.Min(distA, distB) / 28f; // Divide by approx max speed
+    }
 
     private static List<RoadNode> ReconstructPath(Dictionary<RoadNode, RoadNode> cameFrom, RoadNode current)
     {
