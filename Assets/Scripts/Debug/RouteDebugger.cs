@@ -8,6 +8,9 @@ public class RouteDebugger : MonoBehaviour
     [Header("Route Settings")]
     public string routeName = "Test Route";
     public Color routeColor = Color.cyan;
+
+    public float lineRendererHeight = 5f;
+    public float lineRendererWidth = 1f;
     
     [Header("Editor Data")]
     [Tooltip("Drag stops here to define the route path.")]
@@ -22,7 +25,7 @@ public class RouteDebugger : MonoBehaviour
     {
         lr = GetComponent<LineRenderer>();
         lr.useWorldSpace = true;
-        lr.widthMultiplier = 2f;
+        lr.widthMultiplier = lineRendererWidth;
         lr.material = new Material(Shader.Find("Sprites/Default"));
     }
 
@@ -117,7 +120,7 @@ public class RouteDebugger : MonoBehaviour
 
             if (start == null || end == null) continue;
 
-            pathPoints.Add(start.transform.position + Vector3.up * 2f);
+            pathPoints.Add(start.transform.position + Vector3.up * lineRendererHeight);
 
             // Pathfinding Logic
             if (start.parentSegment != null && end.parentSegment != null)
@@ -131,12 +134,12 @@ public class RouteDebugger : MonoBehaviour
                     if (nodePath != null)
                     {
                         foreach (var node in nodePath)
-                            pathPoints.Add(node.transform.position + Vector3.up * 2f);
+                            pathPoints.Add(node.transform.position + Vector3.up * lineRendererHeight);
                     }
                 }
             }
 
-            pathPoints.Add(end.transform.position + Vector3.up * 2f);
+            pathPoints.Add(end.transform.position + Vector3.up * lineRendererHeight);
         }
 
         lr.positionCount = pathPoints.Count;
