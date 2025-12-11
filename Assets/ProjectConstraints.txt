@@ -1,0 +1,20 @@
+Multiplayer Simulation Game.
+One server (host player) for Simulation.
+Encapsulation and seperation of concerns is critical between modules.
+Design of the data is critical to support efficient multiplayer synchronization.
+
+Road Network is static.
+Bus Stops on the Road Network is static.
+Routes are not static, they can be edited in-game by the player.
+Routes are persistent, the high-level info is stored in a json.
+
+Transport Manager manages the routes.
+Routes are defined by an ordered list of bus stops.
+In order for busses to navigate on routes, bus stop level information is not enough; they need road segment level path information.
+Road segment level path information is also owned by the Transport Manager.
+Transport manager calculates the path information and caches them.
+Bus, etc asks transport manager for exact path information, if not cached Transport manager calculates it and adds it to the cache.
+Transport manager uses RoutePathFinder class to calculate paths.
+
+
+
