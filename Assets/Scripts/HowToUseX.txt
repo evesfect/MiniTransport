@@ -20,3 +20,20 @@ RTSCamera&SelectionController
             Holding LeftCTRL while selecting another object(s) (via direct RClick or 2d/3d selection box) will add to the selected object list.
             If multiple objects selected, focus is the middle point of all.
 
+Map Generation & Road Network
+    Setup:
+        Generate road network with Tools/OSM Road Importer:
+            Should assign "RoadNode" prefab (must have RoadNode.cs).
+            Should assign "RoadSegment" prefab (must have SplineContainer + RoadSegment.cs).
+            Check "Snap to Terrain" and select your Terrain layer (or leave empty).
+    How to Use:
+        (Editing):
+            You can move the root object (OSM_Generated_Map) freely.
+            Delete unwanted roads or nodes directly in the Hierarchy.
+            You can use unity spline tool to edit roads manually.
+        (Validation):
+            Select the "OSM_Generated_Map" root object.
+            In Inspector (RoadNetwork script), click "1. SCAN".
+            Look for Red Spheres (Broken Nodes) or Yellow Boxes (Broken Roads) in Scene View (also enable "show debug gizmos")
+            Click "2. FIX" to auto-repair dead ends and clean null links (it puts terminal nodes to null ends, does not connect segments, but makes them dead ends)
+            ALWAYS run "FIX" before committing a map change, a null link would crash any pathfinding algorithm.

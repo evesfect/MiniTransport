@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>OsmSharp</id>
+    <version>6.2.0</version>
+    <title>OsmSharp</title>
+    <authors>Ben Abelshausen</authors>
+    <owners>Ben Abelshausen</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <licenseUrl>https://raw.githubusercontent.com/OsmSharp/core/develop/LICENSE.md</licenseUrl>
+    <projectUrl>http://www.osmsharp.com/</projectUrl>
+    <iconUrl>http://www.osmsharp.com/logos/osmsharp_logo64.png</iconUrl>
+    <description>An OpenStreetMap (OSM) library for .NET.</description>
+    <summary>An OpenStreetMap (OSM) library for .NET to read/write/process OSM-data.</summary>
+    <copyright>Ben Abelshausen</copyright>
+    <tags>osm, openstreetmap</tags>
+    <dependencies>
+      <group targetFramework=".NETFramework4.5">
+        <dependency id="protobuf-net" version="2.3.7" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard1.3">
+        <dependency id="NETStandard.Library" version="1.6.1" exclude="Build,Analyzers" />
+        <dependency id="protobuf-net" version="2.3.7" exclude="Build,Analyzers" />
+      </group>
+      <group targetFramework=".NETStandard2.0">
+        <dependency id="protobuf-net" version="2.3.7" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+    <frameworkAssemblies>
+      <frameworkAssembly assemblyName="Microsoft.CSharp" targetFramework=".NETFramework4.5" />
+      <frameworkAssembly assemblyName="System.Xml" targetFramework=".NETFramework4.5" />
+    </frameworkAssemblies>
+  </metadata>
+</package>
