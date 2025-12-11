@@ -4,12 +4,9 @@ using System.Collections.Generic;
 public class RoadNode : MonoBehaviour
 {
     [Header("Graph Connections")]
-    // We store which segments LEAVE this node.
-    // Pathfinding uses this to know where it can go next.
-    public List<RoadSegment> OutgoingRoads = new List<RoadSegment>();
+    public List<RoadSegment> ConnectedRoads = new List<RoadSegment>();
 
-    // Optional: ID from OSM for debugging
-    public long OSM_NodeID; 
+    public long OSM_NodeID; // for debugging, OSM lib id
 
     private void OnDrawGizmos()
     {
