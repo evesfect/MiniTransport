@@ -5,7 +5,7 @@ using System.Linq;
 public static class RoadPathfinder
 {
     /// <summary>
-    /// Calculates the optimal path from StartNode to EndNode using A* algorithm.
+    /// Calculates the optimal path from StartNode to EndNode using A*.
     /// Returns null if no path is found.
     /// </summary>
     public static List<RoadNode> FindPath(RoadNode startNode, RoadNode endNode)

@@ -4,24 +4,33 @@ using System.Linq;
 
 public class RouteDebugger : MonoBehaviour
 {
-    [Header("Route Manager")]
-    [Tooltip("Enter the name of the route you want to Create, Edit, or Delete.")]
     public string targetRouteName = "Route 1";
     public Color routeColor = Color.cyan;
     
-    [Header("Stop Editor")]
-    [Tooltip("Drag stops here to define the path. Click 'Load Route' to fill this from an existing route.")]
     public List<BusStop> editorStops = new List<BusStop>();
 
-    [Header("Visualization Settings")]
     public float baseHeight = 5f;
+
     [Tooltip("Height added per route index to avoid overlapping lines.")]
     public float heightStep = 2f; 
     public float lineWidth = 1f;
 
     private List<GameObject> _spawnedVisuals = new List<GameObject>();
 
-    // --- 1. CREATE / UPDATE ---
+    public List<string> AvailableRouteNames
+    {
+        get
+        {
+            if (TransportManager.Instance == null || TransportManager.Instance.ActiveRoutes == null)
+            {
+                return new List<string> { "Manager Missing" };
+            }
+            return TransportManager.Instance.ActiveRoutes
+                .Select(r => r.RouteName)
+                .ToList();
+        }
+    }
+
     [ContextMenu("1. Create / Update Route")]
     public void CreateOrUpdateRoute()
     {
@@ -31,7 +40,7 @@ public class RouteDebugger : MonoBehaviour
             return;
         }
 
-        // 1. Validate Input
+        // Validate Input
         List<string> ids = new List<string>();
         foreach (var stop in editorStops)
         {
@@ -44,7 +53,7 @@ public class RouteDebugger : MonoBehaviour
             return;
         }
 
-        // 2. Check if exists
+        // Check if exists
         Route existingRoute = TransportManager.Instance.ActiveRoutes.FirstOrDefault(r => r.RouteName == targetRouteName);
 
         if (existingRoute != null)
@@ -60,7 +69,6 @@ public class RouteDebugger : MonoBehaviour
         }
         else
         {
-            // CREATE
             Route newRoute = TransportManager.Instance.CreateRoute(targetRouteName, ids, routeColor);
             
             // Ensure path is calculated immediately
@@ -69,12 +77,10 @@ public class RouteDebugger : MonoBehaviour
             Debug.Log($"Created New Route: '{targetRouteName}'");
         }
 
-        // 3. Save & Refresh
         TransportManager.Instance.SaveRoutes();
         VisualizeAllRoutes();
     }
 
-    // --- 2. LOAD (Edit Mode) ---
     [ContextMenu("2. Load Route to Editor")]
     public void LoadRouteToEditor()
     {
@@ -102,7 +108,6 @@ public class RouteDebugger : MonoBehaviour
         Debug.Log($"Loaded '{targetRouteName}' into Inspector.");
     }
 
-    // --- 3. DELETE ---
     [ContextMenu("3. Delete Route")]
     public void DeleteRoute()
     {
@@ -121,7 +126,6 @@ public class RouteDebugger : MonoBehaviour
         }
     }
 
-    // --- 4. VISUALIZE ALL ---
     [ContextMenu("4. Visualize All Routes")]
     public void VisualizeAllRoutes()
     {
@@ -153,7 +157,9 @@ public class RouteDebugger : MonoBehaviour
         LineRenderer lr = lineObj.AddComponent<LineRenderer>();
         lr.useWorldSpace = true;
         lr.widthMultiplier = lineWidth;
-        lr.material = new Material(Shader.Find("Sprites/Default"));
+        Material mat = new Material(Shader.Find("Sprites/Default"));
+        mat.renderQueue = 4000;
+        lr.material = mat;
         lr.startColor = route.RouteColor;
         lr.endColor = route.RouteColor;
 
@@ -166,10 +172,10 @@ public class RouteDebugger : MonoBehaviour
 
             if (start == null || end == null) continue;
 
-            // 1. Add Start Stop
+            // Add Start Stop
             points.Add(start.transform.position + Vector3.up * heightOffset);
 
-            // 2. Add Path Nodes (from Cache)
+            // Add Path Nodes (from Cache)
             List<RoadNode> path = TransportManager.Instance.GetCachedPath(start, end);
             if (path != null)
             {
@@ -180,7 +186,7 @@ public class RouteDebugger : MonoBehaviour
             }
         }
 
-        // 3. Add Final Stop
+        // Add Final Stop
         if (route.StopIDs.Count > 0)
         {
             BusStop last = TransportManager.Instance.GetStop(route.StopIDs.Last());
