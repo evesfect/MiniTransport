@@ -183,7 +183,6 @@ public class BusDriver : MonoBehaviour
         if (Mathf.Abs(tEnd - tStart) < 0.001f) yield break;
 
         float dist = Mathf.Abs(tEnd - tStart) * segment.Length;
-        // Visual speed is constant (real-time), but simulation waits are game-time.
         float duration = dist / speed; 
         
         float elapsed = 0f;
@@ -191,7 +190,13 @@ public class BusDriver : MonoBehaviour
 
         while (elapsed < duration)
         {
-            elapsed += Time.deltaTime;
+            float multiplier = SimulationTimeManager.Instance.timeMultiplier;
+
+            // 2. Apply Multiplier to Time Delta
+            // If multiplier is 10, 'elapsed' increases 10x faster, completing the duration 10x sooner.
+            float dt = Time.deltaTime * multiplier;
+
+            elapsed += dt;
             float progress = elapsed / duration;
             float currentT = Mathf.Lerp(tStart, tEnd, progress);
 
@@ -204,9 +209,10 @@ public class BusDriver : MonoBehaviour
             transform.position = pos;
             if (Vector3.Distance(pos, lookPos) > 0.01f)
             {
+                // 3. Apply Multiplier to Rotation too
                 transform.rotation = Quaternion.Slerp(transform.rotation, 
                     Quaternion.LookRotation(lookPos - pos), 
-                    Time.deltaTime * rotationSpeed);
+                    dt * rotationSpeed);
             }
 
             yield return null;
