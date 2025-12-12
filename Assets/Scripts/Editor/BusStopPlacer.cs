@@ -255,11 +255,13 @@ public class BusStopPlacer
         stop.parentSegment = segment;
         stop.splineT = t;
         
-        // Preserve ID if prefab already had one, otherwise generate new
-        if (string.IsNullOrEmpty(stop.stopID))
+        if (string.IsNullOrEmpty(stop.stopID)) // Important for mp
         {
-            stop.stopID = System.Guid.NewGuid().ToString().Substring(0, 8);
+            stop.stopID = System.Guid.NewGuid().ToString().Substring(0, 8).ToUpper();
         }
+        
+        // Mark the component as modified so Unity writes the string to disk
+        EditorUtility.SetDirty(stop);
 
         stop.SnapToSegment();
         Debug.Log($"Placed Stop on {segment.name} at T: {t:F3}");

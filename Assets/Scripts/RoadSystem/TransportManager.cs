@@ -60,8 +60,11 @@ public class TransportManager : MonoBehaviour
         
         foreach (var stop in stops)
         {
-            if (string.IsNullOrEmpty(stop.stopID)) stop.stopID = System.Guid.NewGuid().ToString().Substring(0, 8);
-            
+            if (string.IsNullOrEmpty(stop.stopID)) 
+            {
+                Debug.LogError($"[TransportManager] Stop '{stop.name}' has NO ID! Select it in editor to generate one.");
+                continue;
+            }
             if (!_stopRegistry.ContainsKey(stop.stopID))
             {
                 _stopRegistry.Add(stop.stopID, stop);
