@@ -5,9 +5,7 @@
             "RouteName": "Debug Route",
             "StopIDs": [
                 "e2279cb2",
-                "ed8c279f",
-                "27032a18",
-                "04c0d290"
+                "ed8c279f"
             ],
             "RouteColor": {
                 "r": 1.0,

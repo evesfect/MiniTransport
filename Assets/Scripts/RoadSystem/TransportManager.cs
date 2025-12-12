@@ -84,14 +84,14 @@ public class TransportManager : MonoBehaviour
         if (route.StopIDs.Count < 2) return 0;
         int cachedCount = 0;
 
-        // "Bus has to follow the direction it entered the bus stop"
-        // We track the node we are heading towards as we leave a stop.
-        // For Spawn (First Stop), we default to NodeB (Forward).
+        // Bus has to follow the direction it entered the stop from
+        // Track the node bus is heading towards as it leaves a stop.
+        // For Spawn (First Stop), default to NodeB (Forward).
         
         BusStop firstStop = GetStop(route.StopIDs[0]);
         if (firstStop == null || firstStop.parentSegment == null) return 0;
 
-        // Default start direction: We leave the first stop via NodeB (Forward)
+        // Default start direction: Leave the first stop via NodeB (Forward)
         RoadNode searchStartNode = firstStop.parentSegment.NodeB;
 
         for (int i = 0; i < route.StopIDs.Count - 1; i++)
@@ -103,11 +103,8 @@ public class TransportManager : MonoBehaviour
             {
                 string key = start.stopID + "_" + end.stopID;
                 
-                // Even if cached, we must update 'searchStartNode' for the next loop logic
-                // But for simplicity in this prompt, we calculate fresh if not found.
                 if (!_pathCache.ContainsKey(key))
                 {
-                    // 1. Run Pathfinder ONCE
                     List<RoadNode> path = RoadPathfinder.FindPathToSegment(searchStartNode, end.parentSegment);
                     
                     if (path != null && path.Count > 0)
@@ -115,13 +112,8 @@ public class TransportManager : MonoBehaviour
                         _pathCache[key] = path;
                         cachedCount++;
 
-                        // 2. Determine Next Start Node (Continuity)
-                        // The path ends at one of the EndSegment's nodes (A or B).
-                        // That node is where we ENTER the EndSegment.
-                        // We must TRAVERSE the segment to the other node to EXIT it.
                         RoadNode entryNode = path.Last();
                         
-                        // If we entered at A, we leave via B. If we entered at B, we leave via A.
                         searchStartNode = (entryNode == end.parentSegment.NodeA) ? 
                                            end.parentSegment.NodeB : 
                                            end.parentSegment.NodeA;
@@ -129,13 +121,11 @@ public class TransportManager : MonoBehaviour
                     else
                     {
                         Debug.LogWarning($"No path found from {start.name} to {end.name} starting towards {searchStartNode.name}");
-                        // Break continuity if path fails, maybe reset to NodeB?
                         if(end.parentSegment) searchStartNode = end.parentSegment.NodeB; 
                     }
                 }
                 else
                 {
-                    // If cached, we still need to update searchStartNode for the next iteration logic
                     List<RoadNode> existingPath = _pathCache[key];
                     RoadNode entryNode = existingPath.Last();
                     searchStartNode = (entryNode == end.parentSegment.NodeA) ? end.parentSegment.NodeB : end.parentSegment.NodeA;
@@ -145,11 +135,35 @@ public class TransportManager : MonoBehaviour
         return cachedCount;
     }
 
-    public List<RoadNode> GetCachedPath(BusStop start, BusStop end)
+    public List<RoadNode> GetPath(BusStop start, BusStop end)
     {
         if (start == null || end == null) return null;
-        string key = start.stopID + "_" + end.stopID;
-        return _pathCache.TryGetValue(key, out var p) ? p : null;
+        string key = GetCacheKey(start, end);
+        if (_pathCache.TryGetValue(key, out var cachedPath))
+        {
+            return cachedPath;
+        }
+        if (start.parentSegment == null || end.parentSegment == null) return null;
+
+        // Path not cached, calculate
+        RoadNode searchStart = start.parentSegment.NodeB; 
+        List<RoadNode> newPath = RoadPathfinder.FindPathToSegment(searchStart, end.parentSegment);
+
+        if (newPath == null)
+        {
+             // Try the other direction (NodeA)
+             searchStart = start.parentSegment.NodeA;
+             newPath = RoadPathfinder.FindPathToSegment(searchStart, end.parentSegment);
+        }
+
+        if (newPath != null)
+        {
+            _pathCache[key] = newPath;
+            return newPath;
+        }
+
+        Debug.LogWarning($"TransportManager: Could not calculate path on-demand from {start.name} to {end.name}");
+        return null;
     }
 
     private string GetCacheKey(BusStop a, BusStop b) => a.stopID + "_" + b.stopID;
@@ -162,7 +176,7 @@ public class TransportManager : MonoBehaviour
         return _stopRegistry.TryGetValue(stopID, out BusStop stop) ? stop : null;
     }
 
-    // --- Route Management ---
+    // Route Management
 
     // 1. For Game UI (Empty Route)
     public Route CreateRoute(string routeName, Color color)
@@ -189,7 +203,7 @@ public class TransportManager : MonoBehaviour
         }
     }
     
-    // --- Persistence ---
+    // Persistence
 
     [ContextMenu("Save Routes")]
     public void SaveRoutes()
