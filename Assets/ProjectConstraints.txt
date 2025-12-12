@@ -18,6 +18,10 @@ Transport manager uses RoutePathFinder class to calculate paths.
 
 SimulationTimeManager singleton runs an abstract clock.
 SimulationTimeManager broadcasts OnMinuteChanged, OnHourChanged, and OnDayChanged events. Other scripts can subscribe to the appropriate granularity instead of checking related stuff with update().
+It has BaseMinutesPerSecond and TimeMultiplier.
+BaseMinutesPerSecond is for editor game configuration, not to be changed in game.
+Time Multiplier supports in game changes (1x, 3x, 10x, etc).
+Time Multiplier affects how fast busses move, but BaseMinutesPerSecond does not. (BaseMinutesPerSecond defines our simulation time granularity, Time Multiplier is global clock speedup)
 
 FleetManager is the database for the list of busses, their assigned schedules.
 Fleet data is persistent, saved to a json.
