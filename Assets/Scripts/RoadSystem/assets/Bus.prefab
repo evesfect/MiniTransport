@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &1126626225690940231
+--- !u!1 &6562850610584231395
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,11 +8,11 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1331423094265175167}
-  - component: {fileID: 1797049205811099209}
-  - component: {fileID: 553868725813020293}
-  - component: {fileID: 8473206355564557900}
-  - component: {fileID: 7976238344846153086}
+  - component: {fileID: 6223609012824419349}
+  - component: {fileID: 786138933840757386}
+  - component: {fileID: 6073327023889769816}
+  - component: {fileID: 6554430685796184253}
+  - component: {fileID: 5278763906449359771}
   m_Layer: 9
   m_Name: Bus
   m_TagString: Untagged
@@ -20,13 +20,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &1331423094265175167
+--- !u!4 &6223609012824419349
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1126626225690940231}
+  m_GameObject: {fileID: 6562850610584231395}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0.9, z: 0}
@@ -35,21 +35,21 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &1797049205811099209
+--- !u!33 &786138933840757386
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1126626225690940231}
+  m_GameObject: {fileID: 6562850610584231395}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &553868725813020293
+--- !u!23 &6073327023889769816
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1126626225690940231}
+  m_GameObject: {fileID: 6562850610584231395}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -91,13 +91,13 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!65 &8473206355564557900
+--- !u!65 &6554430685796184253
 BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1126626225690940231}
+  m_GameObject: {fileID: 6562850610584231395}
   m_Material: {fileID: 0}
   m_IncludeLayers:
     serializedVersion: 2
@@ -112,24 +112,22 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &7976238344846153086
+--- !u!114 &5278763906449359771
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1126626225690940231}
+  m_GameObject: {fileID: 6562850610584231395}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d1b2dba86c81dc64dac9e64d07a0ee2f, type: 3}
+  m_Script: {fileID: 11500000, guid: 65d8e8649a9de1348af6e3b611d41c32, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BusController
+  m_EditorClassIdentifier: Assembly-CSharp::BusDriver
   speed: 10
-  waitTimeAtStop: 2
-  assignedRouteID: 
-  currentRoute:
-    RouteID: 
-    RouteName: 
-    StopIDs: []
-    RouteColor: {r: 0, g: 0, b: 0, a: 0}
-  nextStopIndex: 0
+  rotationSpeed: 10
+  intermediateStopWaitTime: 10
+  _currentRouteID: 
+  _currentDestStopName: 
+  _isReversing: 0
+  _driverState: 0

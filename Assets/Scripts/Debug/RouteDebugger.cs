@@ -176,7 +176,7 @@ public class RouteDebugger : MonoBehaviour
             points.Add(start.transform.position + Vector3.up * heightOffset);
 
             // Add Path Nodes (from Cache)
-            List<RoadNode> path = TransportManager.Instance.GetCachedPath(start, end);
+            List<RoadNode> path = TransportManager.Instance.GetPath(start, end);
             if (path != null)
             {
                 foreach (var node in path)

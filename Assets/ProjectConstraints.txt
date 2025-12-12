@@ -16,5 +16,26 @@ Transport manager calculates the path information and caches them.
 Bus, etc asks transport manager for exact path information, if not cached Transport manager calculates it and adds it to the cache.
 Transport manager uses RoutePathFinder class to calculate paths.
 
+SimulationTimeManager singleton runs an abstract clock.
+SimulationTimeManager broadcasts OnMinuteChanged, OnHourChanged, and OnDayChanged events. Other scripts can subscribe to the appropriate granularity instead of checking related stuff with update().
+It has BaseMinutesPerSecond and TimeMultiplier.
+BaseMinutesPerSecond is for editor game configuration, not to be changed in game.
+Time Multiplier supports in game changes (1x, 3x, 10x, etc).
+Time Multiplier affects how fast busses move, but BaseMinutesPerSecond does not. (BaseMinutesPerSecond defines our simulation time granularity, Time Multiplier is global clock speedup)
 
+FleetManager is the database for the list of busses, their assigned schedules.
+Fleet data is persistent, saved to a json.
+Fleet manager only handles data.
 
+DepotController is the bus spawner, it uses fleet manager data and spawns/despawns busses appropriately. (spawns directly at the first stop of the route, for now)
+DepotController listens to OnMinuteChanged and checks schedules each time.
+
+BusDriver manages a single bus.
+BusDriver requests the path from TransportManager, and physically moves along the path.
+When arrived at an intermediate stop, it waits for a set duration (constant for now)
+When reaching a terminus, it waits for a turnaround time (different than intermediate stop wait time, set in the schedule)
+If the route is not a ring, BusDriver traverses the route in reverse order. It requests new reverse paths from TransportManager.
+When reached the first node of the route, it checks whether current time > operation end time (defined in schedule): if yes it returns to depot (despawns for now)
+If current time <= operation end time, it starts a new trip along the route.
+BusDriver only checks operation time at the first stop of the route, not at the last stop.
+If the route is a ring (first stop == last stop), it does not traverse backwards.

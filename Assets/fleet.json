@@ -1,0 +1,15 @@
+{
+    "Buses": [
+        {
+            "BusID": "01",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "02576857",
+                "StartTime": 6.150000095367432,
+                "EndTime": 20.0,
+                "TurnaroundWait": 15.0
+            },
+            "CurrentState": 1
+        }
+    ]
+}
