@@ -2,13 +2,18 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using Unity.Netcode;
+using Unity.VisualScripting;
+using System.ComponentModel;
+
+
 
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
 
 [DefaultExecutionOrder(-50)] 
-public class TransportManager : MonoBehaviour
+public class TransportManager : NetworkBehaviour
 {
     public static TransportManager Instance { get; private set; }
 
@@ -18,8 +23,12 @@ public class TransportManager : MonoBehaviour
 
     [Header("Routes")]
     public List<Route> ActiveRoutes = new List<Route>();
+    
+    // Local cache
     private Dictionary<string, List<RoadNode>> _pathCache = new Dictionary<string, List<RoadNode>>();
     
+    public enum RouteOperation { Add, Update, Remove}
+
     private string SavePath
     {
         get
@@ -43,15 +52,126 @@ public class TransportManager : MonoBehaviour
         }
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        RegisterAllStops();
-        LoadRoutes(); // triggers path calculation
     }
 
+    public override void OnNetworkSpawn()
+    {
+        RegisterAllStops();
+
+        if (IsServer)
+        {
+            LoadRoutes(); // server loads master data
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected; // sync new clients
+        }
+        else
+        {
+            // clear stale states
+            ActiveRoutes.Clear();
+            // _pathCache.Clear(); // the scene roads are static, so can use existing cache
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (IsServer && NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+        }
+    }
+
+    private void OnClientConnected(ulong clientId)
+    {
+        if (IsServer)
+        {
+            // Sync ONLY to the new client
+            string json = SerializeRoutes();
+            SyncRoutesRpc(json, RpcTarget.Single(clientId, RpcTargetUse.Temp));
+        }
+    }
     private void OnApplicationQuit()
     {
-        SaveRoutes();
+        if (IsServer) SaveRoutes();
     }
 
+    /// <summary>
+    /// Server calls this to sync client-local routes with the json string sent
+    /// </summary>
+    /// <param name="jsonRoutes"></param>
+    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
+    private void SyncRoutesRpc(string jsonRoutes, RpcParams rpcParams = default)
+    {
+        RouteContainer container = JsonUtility.FromJson<RouteContainer>(jsonRoutes);
+        if (container != null && container.Routes != null)
+        {
+            ActiveRoutes = container.Routes;
+            Debug.Log($"[TransportManager] Synced {ActiveRoutes.Count} routes from Server.");
+        }
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestRouteOperationRpc(string routeJson, RouteOperation op)
+    {
+        Route requestRoute = JsonUtility.FromJson<Route>(routeJson);
+        if (requestRoute == null) return;
+
+        bool changed = false;
+
+        switch (op)
+        {
+            case RouteOperation.Add:
+                if (!ActiveRoutes.Any(r => r.RouteID == requestRoute.RouteID))
+                {
+                    ActiveRoutes.Add(requestRoute);
+                    changed = true;
+                }
+                break;
+            case RouteOperation.Update:
+                int idx = ActiveRoutes.FindIndex(r => r.RouteID == requestRoute.RouteID);
+                if (idx != -1)
+                {
+                    ActiveRoutes[idx] = requestRoute;
+                    changed = true;
+                }
+                break;
+            case RouteOperation.Remove:
+                Route toRemove = ActiveRoutes.FirstOrDefault(r => r.RouteID == requestRoute.RouteID);
+                if (toRemove != null)
+                {
+                    ActiveRoutes.Remove(toRemove);
+                    changed = true;
+                }
+                break;
+        }
+
+        if (changed)
+        {
+            SaveRoutes(); // persist on server
+            string fullJson = SerializeRoutes();
+            SyncRoutesRpc(fullJson); // broadcast to all clients
+
+            Debug.Log($"[TransportManager] Route Operation {op} applied for {requestRoute.RouteName}");
+        }
+    }
+
+    // Public API for clients
+
+    public void AddRouteClient(Route route)
+    {
+        string json = JsonUtility.ToJson(route);
+        RequestRouteOperationRpc(json, RouteOperation.Add);
+    }
+    public void UpdateRouteClient(Route route)
+    {
+        string json = JsonUtility.ToJson(route);
+        RequestRouteOperationRpc(json, RouteOperation.Update);
+    }
+    public void DeleteRouteClient(Route route)
+    {
+        string json = JsonUtility.ToJson(route);
+        RequestRouteOperationRpc(json, RouteOperation.Remove);
+    }
+
+    // Local Logic Below
     public void RegisterAllStops()
     {
         _stopRegistry.Clear();
@@ -62,7 +182,6 @@ public class TransportManager : MonoBehaviour
         {
             if (string.IsNullOrEmpty(stop.stopID)) 
             {
-                Debug.LogError($"[TransportManager] Stop '{stop.name}' has NO ID! Select it in editor to generate one.");
                 continue;
             }
             if (!_stopRegistry.ContainsKey(stop.stopID))
@@ -71,7 +190,6 @@ public class TransportManager : MonoBehaviour
                 _debugStopList.Add(stop);
             }
         }
-        Debug.Log($"TransportManager: Indexed {_stopRegistry.Count} bus stops.");
     }
 
     public void RecalculateAllPaths()
@@ -171,59 +289,30 @@ public class TransportManager : MonoBehaviour
 
     private string GetCacheKey(BusStop a, BusStop b) => a.stopID + "_" + b.stopID;
 
-
-
     public BusStop GetStop(string stopID)
     {
         if (string.IsNullOrEmpty(stopID)) return null;
         return _stopRegistry.TryGetValue(stopID, out BusStop stop) ? stop : null;
     }
 
-    // Route Management
-
-    // 1. For Game UI (Empty Route)
-    public Route CreateRoute(string routeName, Color color)
+    public Route GetRoute(string routeID)
     {
-        Route newRoute = new Route(routeName, new List<string>(), color);
-        ActiveRoutes.Add(newRoute);
-        return newRoute;
+        return ActiveRoutes.FirstOrDefault(r => r.RouteID == routeID);
     }
 
-    // 2. For Debugger / Loader (Pre-filled)
-    public Route CreateRoute(string routeName, List<string> stopIDs, Color color)
-    {
-        Route newRoute = new Route(routeName, stopIDs, color);
-        ActiveRoutes.Add(newRoute);
-        return newRoute;
-    }
-
-    public void DeleteRoute(Route route)
-    {
-        if (ActiveRoutes.Contains(route))
-        {
-            ActiveRoutes.Remove(route);
-            SaveRoutes();
-        }
-    }
-    
-    // Persistence
-
-    [ContextMenu("Save Routes")]
-    public void SaveRoutes()
+    private string SerializeRoutes()
     {
         RouteContainer container = new RouteContainer { Routes = ActiveRoutes };
-        string json = JsonUtility.ToJson(container, true);
-        File.WriteAllText(SavePath, json);
-        Debug.Log($"Routes saved to {SavePath}");
-
-#if UNITY_EDITOR
-        // Refresh the Project window so the file appears instantly
-        AssetDatabase.Refresh();
-#endif
+        return JsonUtility.ToJson(container);
     }
 
-    [ContextMenu("Load Routes")]
-    public void LoadRoutes()
+    private void SaveRoutes()
+    {
+        string json = SerializeRoutes();
+        File.WriteAllText(SavePath, json);
+    }
+
+    private void LoadRoutes()
     {
         if (File.Exists(SavePath))
         {
@@ -232,17 +321,18 @@ public class TransportManager : MonoBehaviour
             if (container != null && container.Routes != null)
             {
                 ActiveRoutes = container.Routes;
-                Debug.Log($"Loaded {ActiveRoutes.Count} routes from {SavePath}");
             }
-            RecalculateAllPaths();
-        }
-        else
-        {
-            Debug.LogWarning("No routes file found at " + SavePath);
         }
     }
-}
 
+    public Route CreateRouteLocal(string routeName, Color color)
+    {
+        Route newRoute = new Route(routeName, new List<string>(), color);
+        ActiveRoutes.Add(newRoute);
+        return newRoute;
+    }
+  
+}
 [System.Serializable]
 public class RouteContainer
 {

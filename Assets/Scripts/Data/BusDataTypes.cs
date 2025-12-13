@@ -1,5 +1,7 @@
 using System;
 using UnityEngine;
+using Unity.Netcode;
+using Unity.Collections;
 
 // Defines the static configuration of a bus's workday
 [Serializable]
@@ -17,7 +19,7 @@ public class DepotBusEntry
 {
     public string BusID;
     public string AssignedDepotID;
-    public BusSchedule Schedule;   // The assigned schedule
+    public BusSchedule Schedule;
     
     // Runtime State (Not necessarily saved to JSON if we restart days)
     [NonSerialized] public GameObject ActiveBusInstance; 
@@ -29,4 +31,39 @@ public enum BusState
     InDepot,
     OnRoute,
     CompletingTrip // State when past EndTime but finishing the loop
+}
+
+public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState>
+{
+    public FixedString32Bytes CurrentRouteID;
+    public FixedString32Bytes PreviousStopID;
+    public FixedString32Bytes TargetStopID;
+
+    public float DepartureTime; // Server sim time
+    public float ScheduledDuration; // in-game hours (duration of the leg)
+    
+    public bool IsReverseDirection;
+    public bool IsInService;
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref CurrentRouteID);
+        serializer.SerializeValue(ref PreviousStopID);
+        serializer.SerializeValue(ref TargetStopID);
+        serializer.SerializeValue(ref DepartureTime);
+        serializer.SerializeValue(ref ScheduledDuration);
+        serializer.SerializeValue(ref IsReverseDirection);
+        serializer.SerializeValue(ref IsInService);
+    }
+    public bool Equals(BusNetworkState other)
+    {
+        return CurrentRouteID == other.CurrentRouteID &&
+               PreviousStopID == other.PreviousStopID &&
+               TargetStopID == other.TargetStopID &&
+               DepartureTime == other.DepartureTime &&
+               ScheduledDuration == other.ScheduledDuration &&
+               IsReverseDirection == other.IsReverseDirection &&
+               IsInService == other.IsInService;
+    }
+
 }

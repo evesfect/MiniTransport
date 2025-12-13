@@ -9,7 +9,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "CurrentState": 0
+            "CurrentState": 1
         }
     ]
 }
