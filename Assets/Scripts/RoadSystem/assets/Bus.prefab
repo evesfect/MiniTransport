@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 786138933840757386}
   - component: {fileID: 6073327023889769816}
   - component: {fileID: 6554430685796184253}
+  - component: {fileID: 3768606629377159741}
   - component: {fileID: 5278763906449359771}
   m_Layer: 9
   m_Name: Bus
@@ -112,6 +113,31 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &3768606629377159741
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6562850610584231395}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
+  GlobalObjectIdHash: 4179128176
+  InScenePlacedSourceGlobalObjectIdHash: 0
+  DeferredDespawnTick: 0
+  Ownership: 1
+  AlwaysReplicateAsRoot: 0
+  SynchronizeTransform: 1
+  ActiveSceneSynchronization: 0
+  SceneMigrationSynchronization: 1
+  SpawnWithObservers: 1
+  DontDestroyWithOwner: 0
+  AutoObjectParentSync: 1
+  SyncOwnerTransformWhenParented: 1
+  AllowOwnerToParent: 0
 --- !u!114 &5278763906449359771
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -124,10 +150,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 65d8e8649a9de1348af6e3b611d41c32, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BusDriver
-  speed: 10
+  ShowTopMostFoldoutHeaderGroup: 1
+  baseSpeed: 10
+  clientSpeedBuffer: 1.1
   rotationSpeed: 10
-  intermediateStopWaitTime: 10
-  _currentRouteID: 
-  _currentDestStopName: 
-  _isReversing: 0
-  _driverState: 0

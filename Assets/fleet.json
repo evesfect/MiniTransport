@@ -27,7 +27,7 @@
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
-                "StartTime": 6.200000286102295,
+                "StartTime": 6.599999904632568,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },

@@ -40,7 +40,6 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
     public FixedString32Bytes TargetStopID;
 
     public float DepartureTime; // Server sim time
-    public float ScheduledDuration; // in-game hours (duration of the leg)
     
     public bool IsReverseDirection;
     public bool IsInService;
@@ -51,7 +50,6 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
         serializer.SerializeValue(ref PreviousStopID);
         serializer.SerializeValue(ref TargetStopID);
         serializer.SerializeValue(ref DepartureTime);
-        serializer.SerializeValue(ref ScheduledDuration);
         serializer.SerializeValue(ref IsReverseDirection);
         serializer.SerializeValue(ref IsInService);
     }
@@ -61,7 +59,6 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
                PreviousStopID == other.PreviousStopID &&
                TargetStopID == other.TargetStopID &&
                DepartureTime == other.DepartureTime &&
-               ScheduledDuration == other.ScheduledDuration &&
                IsReverseDirection == other.IsReverseDirection &&
                IsInService == other.IsInService;
     }
