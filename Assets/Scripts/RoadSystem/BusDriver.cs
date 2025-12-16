@@ -1,230 +1,416 @@
 using UnityEngine;
-using System.Collections;
+using Unity.Netcode;
+using Unity.Collections;
 using System.Collections.Generic;
 using System.Linq;
 
-public class BusDriver : MonoBehaviour
+public class BusDriver : NetworkBehaviour
 {
     [Header("Configuration")]
-    public float speed = 10f; // Real-time speed (approx units/sec)
-    public float rotationSpeed = 5f;
-    [Tooltip("Time to wait at intermediate stops (Game Minutes)")]
-    public float intermediateStopWaitTime = 10f; 
+    [Tooltip("Base speed in Units/Sec")]
+    public float baseSpeed = 20f; 
+    
+    [Tooltip("Multiplier for Clients to ensure they arrive before Server")]
+    public float clientSpeedBuffer = 1.1f; 
+    public float rotationSpeed = 10f;
+    
+    [Header("Network State")]
+    private readonly NetworkVariable<BusNetworkState> _netState = new NetworkVariable<BusNetworkState>(
+        new BusNetworkState { IsInService = false },
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
-    [Header("Runtime Info")]
-    [SerializeField] private string _currentRouteID;
-    [SerializeField] private string _currentDestStopName;
-    [SerializeField] private bool _isReversing; 
+    // Server Side Data
+    private DepotBusEntry _serverEntry;
+    private DepotController _serverDepot;
+    private Route _serverRoute;
+    private int _serverRouteIndex;
+    
+    // Server Ghost Simulation
+    private float _serverDistanceTraveled; 
+    private float _serverCurrentLegLength;
+    private bool _serverIsWaiting;
+    private float _serverWaitTimer;
 
-    private DepotBusEntry _myEntry;
-    private DepotController _myDepot;
-    private Route _activeRoute;
-
-    public enum DriverState { Idle, Driving, WaitingAtStop, WaitingAtTerminus, Completed }
-    [SerializeField] private DriverState _driverState = DriverState.Idle;
-    public DriverState CurrentState => _driverState; // For future UI
-
-    public void Initialize(DepotBusEntry entry, DepotController depot)
+    // Client Side Simulation
+    private struct PathLeg
     {
-        _myEntry = entry;
-        _myDepot = depot;
-        _currentRouteID = entry.Schedule.RouteID;
-        _activeRoute = TransportManager.Instance.ActiveRoutes.Find(r => r.RouteID == _currentRouteID);
-        
-        if (_activeRoute != null && _activeRoute.StopIDs.Count >= 2)
+        public RoadSegment Segment;
+        public float Length;
+        public bool HeadingToB; // True = A->B (0->1), False = B->A (1->0)
+        public float StartT;    // For start/end segments (0 or 1 for full segments)
+        public float EndT;
+    }
+
+    private List<PathLeg> _localPathSegments;
+    private float _clientDistanceTraveled; 
+    private float _totalLegLength;
+    private bool _clientIsMoving;
+
+    public override void OnNetworkSpawn()
+    {
+        _netState.OnValueChanged += OnNetworkStateChanged;
+
+        if (_netState.Value.IsInService)
         {
-            StartCoroutine(RunSchedule());
+            OnNetworkStateChanged(default, _netState.Value);
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        _netState.OnValueChanged -= OnNetworkStateChanged;
+    }
+
+    public void ServerInitialize(DepotBusEntry entry, DepotController depot)
+    {
+        if (!IsServer) return;
+
+        _serverEntry = entry;
+        _serverDepot = depot;
+        _serverRoute = TransportManager.Instance.GetRoute(entry.Schedule.RouteID);
+
+        if (_serverRoute == null) { DespawnBus(); return; }
+
+        _serverRouteIndex = 0; 
+        
+        _serverIsWaiting = true;
+        _serverWaitTimer = 0.5f; 
+        
+        string firstStop = _serverRoute.StopIDs[0];
+        
+        BusNetworkState initState = new BusNetworkState
+        {
+            CurrentRouteID = _serverRoute.RouteID,
+            PreviousStopID = firstStop,
+            TargetStopID = firstStop, 
+            DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay,
+            IsReverseDirection = false,
+            IsInService = true
+        };
+        _netState.Value = initState;
+    }
+
+    private void Update()
+    {
+        if (IsServer) ServerUpdateLoop();
+        if (IsClient) ClientUpdateLoop();
+    }
+
+    private void ServerUpdateLoop()
+    {
+        if (!_netState.Value.IsInService) return;
+
+        float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
+
+        if (_serverIsWaiting)
+        {
+            _serverWaitTimer -= (dt * SimulationTimeManager.Instance.baseMinutesPerSecond) / 60f; 
+            
+            if (_serverWaitTimer <= 0)
+            {
+                ServerStartNextLeg();
+            }
         }
         else
         {
-            Debug.LogError($"BusDriver: Invalid route {_currentRouteID}");
-            _myDepot.ReturnBusToDepot(_myEntry);
+            // GRID MANAGER INTEGRATION here
+            float trafficModifier = 1.0f; 
+
+            float step = baseSpeed * trafficModifier * dt;
+            _serverDistanceTraveled += step;
+
+            if (_serverDistanceTraveled >= _serverCurrentLegLength)
+            {
+                ServerArriveAtStop();
+            }
         }
     }
 
-    private IEnumerator RunSchedule()
+    private void ServerStartNextLeg()
     {
-        // Default Start: Forward
-        _isReversing = false;
+        var state = _netState.Value;
+        int nextIndex = _serverRouteIndex + (state.IsReverseDirection ? -1 : 1);
 
-        while (true)
+        if (nextIndex >= _serverRoute.StopIDs.Count || nextIndex < 0)
         {
-            // 1. Prepare Stop List for this Leg
-            List<string> stopsToVisit = new List<string>(_activeRoute.StopIDs);
-            if (_isReversing) stopsToVisit.Reverse();
-
-            // 2. Drive the Leg (Stop by Stop)
-            for (int i = 0; i < stopsToVisit.Count - 1; i++)
+            if (_serverRoute.StopIDs.First() == _serverRoute.StopIDs.Last())
             {
-                string currentStopID = stopsToVisit[i];
-                string nextStopID = stopsToVisit[i + 1];
-
-                BusStop fromStop = TransportManager.Instance.GetStop(currentStopID);
-                BusStop toStop = TransportManager.Instance.GetStop(nextStopID);
-                
-                _currentDestStopName = toStop.name;
-                _driverState = DriverState.Driving;
-
-                // A. Drive
-                yield return StartCoroutine(MoveAlongPath(fromStop, toStop));
-
-                // B. Handle Arrival
-                bool isTerminus = (i + 1 == stopsToVisit.Count - 1);
-                
-                if (isTerminus)
-                {
-                    _driverState = DriverState.WaitingAtTerminus;
-                    // Wait Turnaround Time
-                    yield return StartCoroutine(WaitRoutine(_myEntry.Schedule.TurnaroundWait));
-                }
-                else
-                {
-                    _driverState = DriverState.WaitingAtStop;
-                    // Wait Standard Stop Time
-                    yield return StartCoroutine(WaitRoutine(intermediateStopWaitTime));
-                }
-            }
-
-            // 3. End of Leg Decision
-            // Check if Shift is Over
-            if (SimulationTimeManager.Instance.CurrentTimeOfDay >= _myEntry.Schedule.EndTime)
-            {
-                _driverState = DriverState.Completed;
-                _myDepot.ReturnBusToDepot(_myEntry);
-                yield break; // Stop Coroutine
-            }
-
-            // Prepare for Next Leg
-            bool isRing = _activeRoute.StopIDs.First() == _activeRoute.StopIDs.Last();
-            
-            if (isRing)
-            {
-                // Ring Route: Just loop forward again
-                _isReversing = false;
+                nextIndex = (nextIndex >= _serverRoute.StopIDs.Count) ? 1 : _serverRoute.StopIDs.Count - 2;
             }
             else
             {
-                // Linear Route: Toggle Direction
-                // We are physically at End. Reversed list starts at End. Matches perfectly.
-                _isReversing = !_isReversing;
+                state.IsReverseDirection = !state.IsReverseDirection;
+                nextIndex = _serverRouteIndex + (state.IsReverseDirection ? -1 : 1);
             }
-            
-            // Loop continues -> Generates new stop list -> Drives
         }
+
+        if (_serverEntry.Schedule.EndTime < SimulationTimeManager.Instance.CurrentTimeOfDay)
+        {
+            DespawnBus();
+            return;
+        }
+
+        string fromID = _serverRoute.StopIDs[_serverRouteIndex];
+        string toID = _serverRoute.StopIDs[nextIndex];
+        _serverRouteIndex = nextIndex;
+
+        _serverCurrentLegLength = CalculatePathDistanceServer(fromID, toID);
+        _serverDistanceTraveled = 0f;
+        _serverIsWaiting = false;
+
+        state.PreviousStopID = fromID;
+        state.TargetStopID = toID;
+        state.DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
+        
+        _netState.Value = state;
     }
 
-    private IEnumerator WaitRoutine(float gameMinutes)
+    private void ServerArriveAtStop()
     {
-        float hoursToWait = gameMinutes / 60f;
-        float targetTime = SimulationTimeManager.Instance.CurrentTimeOfDay + hoursToWait;
+        _serverIsWaiting = true;
+        // GRID MANAGER INTEGRATION POINT - Check if turnaround stop
+        float minutesToWait = 10f; 
+        _serverWaitTimer = minutesToWait / 60f; 
+    }
+
+    private float CalculatePathDistanceServer(string fromID, string toID)
+    {
+        BusStop a = TransportManager.Instance.GetStop(fromID);
+        BusStop b = TransportManager.Instance.GetStop(toID);
+        if(!a || !b) return 10f; 
+
+        var nodes = TransportManager.Instance.GetPath(a, b);
+        if (nodes == null) return Vector3.Distance(a.transform.position, b.transform.position);
+
+        float totalDist = 0f;
         
-        float startHour = SimulationTimeManager.Instance.CurrentTimeOfDay;
-        
-        // Loop until enough game-time has passed
-        while (true)
+        // Start Seg
+        RoadSegment startSeg = a.parentSegment;
+        if(startSeg)
         {
-            float currentHour = SimulationTimeManager.Instance.CurrentTimeOfDay;
-            
-            // Handle day wrap for calculation (if current < start, we wrapped)
-            float adjustedCurrent = (currentHour < startHour) ? currentHour + 24f : currentHour;
-            
-            if (adjustedCurrent >= startHour + hoursToWait)
+            float exitT = (nodes[0] == startSeg.NodeA) ? 0f : 1f;
+            totalDist += Mathf.Abs(exitT - a.splineT) * startSeg.Length;
+        }
+
+        // Middle
+        for (int i = 0; i < nodes.Count - 1; i++)
+        {
+            foreach (var seg in nodes[i].ConnectedRoads)
             {
-                break;
+                if (seg.GetConnectedNode(nodes[i]) == nodes[i + 1])
+                {
+                    totalDist += seg.Length;
+                    break;
+                }
             }
-            yield return null;
+        }
+
+        // End Seg
+        RoadSegment endSeg = b.parentSegment;
+        if(endSeg && endSeg != startSeg) 
+        {
+            float entryT = (nodes.Last() == endSeg.NodeA) ? 0f : 1f;
+            totalDist += Mathf.Abs(b.splineT - entryT) * endSeg.Length;
+        }
+        else if(endSeg == startSeg)
+        {
+             totalDist = Mathf.Abs(b.splineT - a.splineT) * startSeg.Length;
+        }
+
+        return totalDist;
+    }
+
+    private void DespawnBus()
+    {
+        if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry);
+    }
+
+    // Client Logic (visuals)
+
+    private void OnNetworkStateChanged(BusNetworkState oldState, BusNetworkState newState)
+    {
+        if (!newState.IsInService) return;
+
+        BusStop from = TransportManager.Instance.GetStop(newState.PreviousStopID.ToString());
+        BusStop to = TransportManager.Instance.GetStop(newState.TargetStopID.ToString());
+
+        if (from != null && to != null)
+        {
+            if (from == to)
+            {
+                _clientIsMoving = false;
+                transform.position = from.transform.position;
+                transform.rotation = from.transform.rotation;
+                return;
+            }
+
+            ReconstructLocalPath(from, to);
+            
+            // JIP / Catch Up
+            float currentGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
+            float timePassedGameHours = currentGameTime - newState.DepartureTime;
+            if (timePassedGameHours < 0) timePassedGameHours += 24f;
+
+            float timeMult = SimulationTimeManager.Instance.TimeMultiplier > 0 ? SimulationTimeManager.Instance.TimeMultiplier : 1f;
+            float realSecondsPassed = (timePassedGameHours * 60f) / (SimulationTimeManager.Instance.baseMinutesPerSecond * timeMult);
+
+            // GRID MANAGER INTEGRATION POINT
+            _clientDistanceTraveled = realSecondsPassed * baseSpeed * clientSpeedBuffer;
+            _clientIsMoving = true;
         }
     }
 
-    // Movement
-
-    private IEnumerator MoveAlongPath(BusStop from, BusStop to)
+    private void ReconstructLocalPath(BusStop from, BusStop to)
     {
-        // Use the new TransportManager method that calculates if missing
-        List<RoadNode> path = TransportManager.Instance.GetPath(from, to);
+        _localPathSegments = new List<PathLeg>();
+        _totalLegLength = 0f;
+        _clientDistanceTraveled = 0f;
 
-        if (path == null)
+        var nodes = TransportManager.Instance.GetPath(from, to);
+        
+        if (nodes == null || nodes.Count == 0)
         {
-            // Fallback: Same segment?
+            // Same segment fallback
             if (from.parentSegment == to.parentSegment)
             {
-                yield return StartCoroutine(DriveSegment(from.parentSegment, from.splineT, to.splineT));
+                AddPathLeg(from.parentSegment, from.splineT, to.splineT);
             }
-            yield break;
+            return;
         }
 
-        // 1. Exit Start Segment
+        // Start Segment (Partial)
         RoadSegment startSeg = from.parentSegment;
-        float exitT = (path[0] == startSeg.NodeA) ? 0f : 1f;
-        yield return StartCoroutine(DriveSegment(startSeg, from.splineT, exitT));
-
-        // 2. Intermediates
-        for (int i = 0; i < path.Count - 1; i++)
+        if(startSeg)
         {
-            RoadNode a = path[i];
-            RoadNode b = path[i+1];
-            RoadSegment road = FindConnection(a, b);
-            if (road != null)
+            // If path start node is NodeA, we are heading TO NodeA (so tEnd=0)
+            float exitT = (nodes[0] == startSeg.NodeA) ? 0f : 1f;
+            AddPathLeg(startSeg, from.splineT, exitT);
+        }
+
+        // Middle Segments
+        for (int i = 0; i < nodes.Count - 1; i++)
+        {
+            RoadNode nA = nodes[i];
+            RoadNode nB = nodes[i + 1];
+            
+            foreach (var seg in nA.ConnectedRoads)
             {
-                float t1 = (road.NodeA == a) ? 0f : 1f;
-                float t2 = (road.NodeA == a) ? 1f : 0f;
-                yield return StartCoroutine(DriveSegment(road, t1, t2));
+                if (seg.GetConnectedNode(nA) == nB)
+                {
+                    // If NodeA is start, we go 0->1. If NodeB is start, 1->0.
+                    float tStart = (seg.NodeA == nA) ? 0f : 1f;
+                    float tEnd = (seg.NodeA == nA) ? 1f : 0f;
+                    AddPathLeg(seg, tStart, tEnd);
+                    break;
+                }
             }
         }
 
-        // 3. Enter Target Segment
+        // End Segment (Partial)
         RoadSegment endSeg = to.parentSegment;
-        float entryT = (path.Last() == endSeg.NodeA) ? 0f : 1f;
-        yield return StartCoroutine(DriveSegment(endSeg, entryT, to.splineT));
+        if(endSeg && endSeg != startSeg) 
+        {
+            float entryT = (nodes.Last() == endSeg.NodeA) ? 0f : 1f;
+            AddPathLeg(endSeg, entryT, to.splineT);
+        }
+        else if (endSeg && endSeg == startSeg)
+        {
+            _localPathSegments.Clear();
+            _totalLegLength = 0f;
+            AddPathLeg(startSeg, from.splineT, to.splineT);
+        }
     }
 
-    private IEnumerator DriveSegment(RoadSegment segment, float tStart, float tEnd)
+    private void AddPathLeg(RoadSegment seg, float tStart, float tEnd)
     {
-        if (Mathf.Abs(tEnd - tStart) < 0.001f) yield break;
-
-        float dist = Mathf.Abs(tEnd - tStart) * segment.Length;
-        float duration = dist / speed; 
+        PathLeg leg = new PathLeg();
+        leg.Segment = seg;
+        leg.Length = Mathf.Abs(tEnd - tStart) * seg.Length;
+        leg.StartT = tStart;
+        leg.EndT = tEnd;
+        leg.HeadingToB = tEnd > tStart; 
         
-        float elapsed = 0f;
-        bool headingToB = tEnd > tStart;
+        _localPathSegments.Add(leg);
+        _totalLegLength += leg.Length;
+    }
 
-        while (elapsed < duration)
+    private void ClientUpdateLoop()
+    {
+        if (!_clientIsMoving || _localPathSegments == null || _localPathSegments.Count == 0) return;
+
+        float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
+        
+        // GRID MANAGER INTEGRATION POINT
+        float localTraffic = 1.0f;
+
+        float step = baseSpeed * localTraffic * clientSpeedBuffer * dt;
+        
+        _clientDistanceTraveled += step;
+
+        if (_clientDistanceTraveled >= _totalLegLength)
         {
-            float multiplier = SimulationTimeManager.Instance.timeMultiplier;
+            _clientDistanceTraveled = _totalLegLength;
+            _clientIsMoving = false; // Wait for server
+        }
 
-            // 2. Apply Multiplier to Time Delta
-            // If multiplier is 10, 'elapsed' increases 10x faster, completing the duration 10x sooner.
-            float dt = Time.deltaTime * multiplier;
+        UpdateTransformOnSpline(_clientDistanceTraveled);
+    }
 
-            elapsed += dt;
-            float progress = elapsed / duration;
-            float currentT = Mathf.Lerp(tStart, tEnd, progress);
+    private void UpdateTransformOnSpline(float currentDist)
+    {
+        // Calculate Position
+        Vector3 pos = CalculatePoint(currentDist, out Vector3 currentTangent);
+        transform.position = pos;
 
-            Vector3 pos = segment.GetPointOnRoad(currentT, headingToB);
-            
-            // Lookahead
-            float lookT = Mathf.Lerp(tStart, tEnd, Mathf.Min(1f, progress + 0.05f));
-            Vector3 lookPos = segment.GetPointOnRoad(lookT, headingToB);
-            
-            transform.position = pos;
-            if (Vector3.Distance(pos, lookPos) > 0.01f)
+        // Lookahead Rotation
+        float lookDist = currentDist + 1.0f; // Look 1 meter ahead
+        if (lookDist > _totalLegLength) lookDist = _totalLegLength;
+
+        if (lookDist - currentDist > 0.01f)
+        {
+            Vector3 lookPos = CalculatePoint(lookDist, out _);
+            Vector3 dir = lookPos - pos;
+            if (dir.sqrMagnitude > 0.001f)
             {
-                // 3. Apply Multiplier to Rotation too
-                transform.rotation = Quaternion.Slerp(transform.rotation, 
-                    Quaternion.LookRotation(lookPos - pos), 
-                    dt * rotationSpeed);
+                Quaternion targetRot = Quaternion.LookRotation(dir);
+                // Smooth rotation
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotationSpeed * SimulationTimeManager.Instance.TimeMultiplier);
             }
-
-            yield return null;
         }
     }
 
-    private RoadSegment FindConnection(RoadNode a, RoadNode b)
+    // Helper to find point across multiple legs
+    private Vector3 CalculatePoint(float dist, out Vector3 tangent)
     {
-        foreach (var seg in a.ConnectedRoads)
+        tangent = Vector3.forward; // Default
+        float remaining = dist;
+
+        foreach (var leg in _localPathSegments)
         {
-            if (seg.GetConnectedNode(a) == b) return seg;
+            if (remaining <= leg.Length)
+            {
+                float pct = remaining / leg.Length;
+                float t = Mathf.Lerp(leg.StartT, leg.EndT, pct);
+                
+                if (leg.Segment.Container != null)
+                {
+                    Vector3 p = leg.Segment.GetPointOnRoad(t, leg.HeadingToB);
+                    tangent = (Vector3)leg.Segment.Container.EvaluateTangent(t); 
+                    return p;
+                }
+            }
+            remaining -= leg.Length;
         }
-        return null;
+
+        // End snap
+        if (_localPathSegments.Count > 0)
+        {
+            var last = _localPathSegments.Last();
+            return last.Segment.GetPointOnRoad(last.EndT, last.HeadingToB);
+        }
+
+        return transform.position;
     }
 }

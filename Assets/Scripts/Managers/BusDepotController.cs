@@ -1,117 +1,113 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.Netcode;
 
-public class DepotController : MonoBehaviour
+// BusDepotController logic is dependant on BusDriver, be cautious!
+public class DepotController : NetworkBehaviour
 {
     [Header("Identity")]
     public string depotID = "Depot_Main";
 
     [Header("Fleet Configuration")]
-    public GameObject busPrefab;
-    
-    // This list is populated at runtime from FleetManager
-    [SerializeField] // For debugging only
-    private List<DepotBusEntry> fleet = new List<DepotBusEntry>();
+    public GameObject busPrefab; // must have networkobject component
+    private List<DepotBusEntry> _activeFleetCache = new List<DepotBusEntry>();
 
-    [Header("Debug")]
-    [SerializeField] private bool _debugLogs = true;
 
-    private void Start()
+    public override void OnNetworkSpawn()
     {
-        // 1. Fetch Data from Manager
+        if (!IsServer)
+        {
+            enabled = false;
+            return;
+        }
         if (FleetManager.Instance != null)
         {
-            fleet = FleetManager.Instance.GetBusesForDepot(depotID);
-            if(_debugLogs) Debug.Log($"Depot '{depotID}' initialized with {fleet.Count} buses.");
+            _activeFleetCache = FleetManager.Instance.GetBusesForDepot(depotID);
         }
-        else
-        {
-            Debug.LogError("FleetManager missing! Depot cannot initialize fleet.");
-        }
-
-        // 2. Subscribe to Time
         if (SimulationTimeManager.Instance != null)
         {
             SimulationTimeManager.Instance.OnMinuteChanged += CheckSchedules;
         }
-        
-        CheckSchedules();
     }
 
-    private void OnDestroy()
+    public override void OnNetworkDespawn()
     {
-        if (SimulationTimeManager.Instance != null)
+        if (IsServer && SimulationTimeManager.Instance != null)
         {
             SimulationTimeManager.Instance.OnMinuteChanged -= CheckSchedules;
         }
     }
-    
+
     public void CheckSchedules()
     {
-        if (fleet == null) return;
-        
+        if (_activeFleetCache == null) return;
         float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
 
-        foreach (var entry in fleet)
+        foreach (var entry in _activeFleetCache)
         {
-            if (entry.CurrentState == BusState.InDepot)
+            // Spawning Conditions
+            bool shouldBeActive = currentTime >= entry.Schedule.StartTime && currentTime < entry.Schedule.EndTime;
+            if (shouldBeActive && entry.CurrentState == BusState.InDepot)
             {
-                if (currentTime >= entry.Schedule.StartTime && currentTime < entry.Schedule.EndTime)
-                {
-                    SpawnBus(entry);
-                }
+                SpawnBus(entry);
             }
         }
     }
 
     private void SpawnBus(DepotBusEntry entry)
     {
-        if (busPrefab == null) return;
-        if (TransportManager.Instance == null) return;
-
-        Route route = TransportManager.Instance.ActiveRoutes.FirstOrDefault(r => r.RouteID == entry.Schedule.RouteID);
+        if (busPrefab == null) {
+            Debug.LogError("DepotBusEntry has no busPrefab!");
+            return;
+        }
+        Route route = TransportManager.Instance.GetRoute(entry.Schedule.RouteID);
         if (route == null || route.StopIDs.Count == 0) return;
-
         BusStop startStop = TransportManager.Instance.GetStop(route.StopIDs[0]);
         if (startStop == null) return;
 
-        Vector3 spawnPos = startStop.transform.position;
-        Quaternion spawnRot = startStop.transform.rotation; 
-        
-        if(startStop.parentSegment != null)
+        GameObject newBusObj = Instantiate(busPrefab, startStop.transform.position, startStop.transform.rotation);
+        var netObj = newBusObj.GetComponent<NetworkObject>();
+        if(netObj != null)
         {
-            spawnPos = startStop.parentSegment.GetPointOnRoad(startStop.splineT, true); 
+            netObj.Spawn(); // replicate to all clients
+        }
+        else
+        {
+            Debug.LogError("Bus prefab misses NetworkObject component.");
+            Destroy(newBusObj);
+            return;
         }
 
-        GameObject newBusObj = Instantiate(busPrefab, spawnPos, spawnRot);
-        newBusObj.name = $"{entry.BusID}_({route.RouteName})";
-
         BusDriver driver = newBusObj.GetComponent<BusDriver>();
-        if (driver == null) driver = newBusObj.AddComponent<BusDriver>();
-
-        driver.Initialize(entry, this);
+        if(driver != null)
+        {
+            driver.ServerInitialize(entry, this);
+        }
 
         entry.ActiveBusInstance = newBusObj;
         entry.CurrentState = BusState.OnRoute;
 
-        if (_debugLogs) 
-        {
-            float time = SimulationTimeManager.Instance.CurrentTimeOfDay;
-            Debug.Log($"Depot: Spawned {entry.BusID} on route {route.RouteName} at {time:F2}");
-        }
+        Debug.Log($"[Depot] Spawned Bus {entry.BusID} on Route {route.RouteName}");
     }
 
     public void ReturnBusToDepot(DepotBusEntry entry)
     {
         if (entry.ActiveBusInstance != null)
         {
-            Destroy(entry.ActiveBusInstance);
+            var netObj = entry.ActiveBusInstance.GetComponent<NetworkObject>();
+            if (netObj != null && netObj.IsSpawned)
+            {
+                netObj.Despawn();
+            }
+            else
+            {
+                Destroy(entry.ActiveBusInstance);
+            }
         }
 
         entry.ActiveBusInstance = null;
         entry.CurrentState = BusState.InDepot;
-        
-        if (_debugLogs) Debug.Log($"Depot: Bus {entry.BusID} returned to depot.");
+        Debug.Log($"[Depot] Bus {entry.BusID} returned to depot.");
     }
 }
