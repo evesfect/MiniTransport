@@ -21,7 +21,7 @@ public class BusDriver : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
-    // --- Server Side Data ---
+    // Server Side Data
     private DepotBusEntry _serverEntry;
     private DepotController _serverDepot;
     private Route _serverRoute;
@@ -33,8 +33,7 @@ public class BusDriver : NetworkBehaviour
     private bool _serverIsWaiting;
     private float _serverWaitTimer;
 
-    // --- Client Side Simulation ---
-    // We need a struct to store direction info per segment
+    // Client Side Simulation
     private struct PathLeg
     {
         public RoadSegment Segment;
@@ -63,10 +62,6 @@ public class BusDriver : NetworkBehaviour
     {
         _netState.OnValueChanged -= OnNetworkStateChanged;
     }
-
-    // ============================================================================================
-    // SERVER LOGIC (Ghost Driver)
-    // ============================================================================================
 
     public void ServerInitialize(DepotBusEntry entry, DepotController depot)
     {
@@ -111,7 +106,6 @@ public class BusDriver : NetworkBehaviour
 
         if (_serverIsWaiting)
         {
-            // Convert dt to GameHours for consistency with schedule
             _serverWaitTimer -= (dt * SimulationTimeManager.Instance.baseMinutesPerSecond) / 60f; 
             
             if (_serverWaitTimer <= 0)
@@ -121,7 +115,7 @@ public class BusDriver : NetworkBehaviour
         }
         else
         {
-            // [GRID MANAGER INTEGRATION POINT]
+            // GRID MANAGER INTEGRATION here
             float trafficModifier = 1.0f; 
 
             float step = baseSpeed * trafficModifier * dt;
@@ -176,7 +170,7 @@ public class BusDriver : NetworkBehaviour
     private void ServerArriveAtStop()
     {
         _serverIsWaiting = true;
-        // [GRID MANAGER INTEGRATION POINT] - Check if turnaround stop
+        // GRID MANAGER INTEGRATION POINT - Check if turnaround stop
         float minutesToWait = 10f; 
         _serverWaitTimer = minutesToWait / 60f; 
     }
@@ -192,7 +186,7 @@ public class BusDriver : NetworkBehaviour
 
         float totalDist = 0f;
         
-        // 1. Start Seg
+        // Start Seg
         RoadSegment startSeg = a.parentSegment;
         if(startSeg)
         {
@@ -200,7 +194,7 @@ public class BusDriver : NetworkBehaviour
             totalDist += Mathf.Abs(exitT - a.splineT) * startSeg.Length;
         }
 
-        // 2. Middle
+        // Middle
         for (int i = 0; i < nodes.Count - 1; i++)
         {
             foreach (var seg in nodes[i].ConnectedRoads)
@@ -213,7 +207,7 @@ public class BusDriver : NetworkBehaviour
             }
         }
 
-        // 3. End Seg
+        // End Seg
         RoadSegment endSeg = b.parentSegment;
         if(endSeg && endSeg != startSeg) 
         {
@@ -233,9 +227,7 @@ public class BusDriver : NetworkBehaviour
         if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry);
     }
 
-    // ============================================================================================
-    // CLIENT LOGIC (The Visuals)
-    // ============================================================================================
+    // Client Logic (visuals)
 
     private void OnNetworkStateChanged(BusNetworkState oldState, BusNetworkState newState)
     {
@@ -264,7 +256,7 @@ public class BusDriver : NetworkBehaviour
             float timeMult = SimulationTimeManager.Instance.TimeMultiplier > 0 ? SimulationTimeManager.Instance.TimeMultiplier : 1f;
             float realSecondsPassed = (timePassedGameHours * 60f) / (SimulationTimeManager.Instance.baseMinutesPerSecond * timeMult);
 
-            // [GRID MANAGER INTEGRATION POINT] 
+            // GRID MANAGER INTEGRATION POINT
             _clientDistanceTraveled = realSecondsPassed * baseSpeed * clientSpeedBuffer;
             _clientIsMoving = true;
         }
@@ -288,7 +280,7 @@ public class BusDriver : NetworkBehaviour
             return;
         }
 
-        // 1. Start Segment (Partial)
+        // Start Segment (Partial)
         RoadSegment startSeg = from.parentSegment;
         if(startSeg)
         {
@@ -297,7 +289,7 @@ public class BusDriver : NetworkBehaviour
             AddPathLeg(startSeg, from.splineT, exitT);
         }
 
-        // 2. Middle Segments
+        // Middle Segments
         for (int i = 0; i < nodes.Count - 1; i++)
         {
             RoadNode nA = nodes[i];
@@ -316,19 +308,15 @@ public class BusDriver : NetworkBehaviour
             }
         }
 
-        // 3. End Segment (Partial)
+        // End Segment (Partial)
         RoadSegment endSeg = to.parentSegment;
         if(endSeg && endSeg != startSeg) 
         {
-            // We enter from the node that ISN'T the target node? No.
-            // nodes.Last() is the entry node for this segment.
             float entryT = (nodes.Last() == endSeg.NodeA) ? 0f : 1f;
             AddPathLeg(endSeg, entryT, to.splineT);
         }
         else if (endSeg && endSeg == startSeg)
         {
-            // Already handled start logic, just overwrite it? 
-            // Better to clear and just add the A->B partial if it's the same segment logic
             _localPathSegments.Clear();
             _totalLegLength = 0f;
             AddPathLeg(startSeg, from.splineT, to.splineT);
@@ -342,8 +330,6 @@ public class BusDriver : NetworkBehaviour
         leg.Length = Mathf.Abs(tEnd - tStart) * seg.Length;
         leg.StartT = tStart;
         leg.EndT = tEnd;
-        // Logic from old MoveAlongPath: HeadingToB = tEnd > tStart
-        // But if tStart=0.5, tEnd=0 (going to A), HeadingToB is False. Correct.
         leg.HeadingToB = tEnd > tStart; 
         
         _localPathSegments.Add(leg);
@@ -356,7 +342,7 @@ public class BusDriver : NetworkBehaviour
 
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
         
-        // [GRID MANAGER INTEGRATION POINT]
+        // GRID MANAGER INTEGRATION POINT
         float localTraffic = 1.0f;
 
         float step = baseSpeed * localTraffic * clientSpeedBuffer * dt;
@@ -374,15 +360,14 @@ public class BusDriver : NetworkBehaviour
 
     private void UpdateTransformOnSpline(float currentDist)
     {
-        // 1. Calculate Position
+        // Calculate Position
         Vector3 pos = CalculatePoint(currentDist, out Vector3 currentTangent);
         transform.position = pos;
 
-        // 2. Lookahead Rotation
+        // Lookahead Rotation
         float lookDist = currentDist + 1.0f; // Look 1 meter ahead
         if (lookDist > _totalLegLength) lookDist = _totalLegLength;
 
-        // If lookahead is basically the same as current, don't rotate (avoids jitters at stop)
         if (lookDist - currentDist > 0.01f)
         {
             Vector3 lookPos = CalculatePoint(lookDist, out _);
@@ -406,19 +391,13 @@ public class BusDriver : NetworkBehaviour
         {
             if (remaining <= leg.Length)
             {
-                // Interpolate T between leg.StartT and leg.EndT
                 float pct = remaining / leg.Length;
                 float t = Mathf.Lerp(leg.StartT, leg.EndT, pct);
                 
                 if (leg.Segment.Container != null)
                 {
-                    // Use GetPointOnRoad to handle Lane Offsets correctly
                     Vector3 p = leg.Segment.GetPointOnRoad(t, leg.HeadingToB);
                     tangent = (Vector3)leg.Segment.Container.EvaluateTangent(t); 
-                    // Tangent from container might be backwards if HeadingToB is false?
-                    // EvaluateTangent always points 0->1.
-                    // If we are going 1->0, we might want to invert tangent for some logic, 
-                    // but LookRotation(lookPos - pos) handles the actual orientation better.
                     return p;
                 }
             }
