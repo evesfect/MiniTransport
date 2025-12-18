@@ -1,0 +1,30 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/Styles/HudStyles.uss?fileID=7433441132597879392&amp;guid=e098907893cf0274890d93ead4593cdb&amp;type=3#HudStyles" />
+    
+    <ui:VisualElement name="Root" style="flex-grow: 1; justify-content: space-between; picking-mode: Ignore;">
+        
+        <ui:VisualElement name="TopContainer" style="flex-direction: row; align-items: flex-start; justify-content: center; padding: 8px; picking-mode: Ignore;">
+        </ui:VisualElement>
+
+        <ui:VisualElement name="CenterContainer" style="flex-grow: 1; flex-direction: row; justify-content: space-between; picking-mode: Ignore;">
+            <ui:VisualElement name="LeftSidebar" style="picking-mode: Ignore;" />
+            <ui:VisualElement name="RightSidebar" style="picking-mode: Ignore;" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="BottomContainer" style="flex-direction: row; justify-content: flex-end; align-items: flex-end; padding: 8px; picking-mode: Ignore;">
+            
+            <ui:VisualElement name="TimerWidget" class="stat-box" style="width: 370px;">
+                <ui:VisualElement name="Icon" class="icon-time" style="flex-grow: 1; background-image: url(&quot;project://database/Assets/UI/Sprites/day-icon.png?fileID=2800000&amp;guid=3043c45a47d55e14c89252b240482950&amp;type=3#day-icon&quot;);" />
+                <ui:Label text="Day 1" name="DateLabel" class="hud-text" style="width: 50px;" />
+                <ui:Label text="06:00" name="TimeLabel" class="hud-text spacer-right" style="width: 50px;" />
+                
+                <ui:Button name="BtnPause" class="speed-btn btn-pause" />
+                
+                <ui:Button text="1x" name="Btn1x" class="speed-btn" />
+                <ui:Button text="3x" name="Btn3x" class="speed-btn" />
+                <ui:Button text="10x" name="Btn10x" class="speed-btn" />
+            </ui:VisualElement>
+
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
