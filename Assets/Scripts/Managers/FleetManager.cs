@@ -26,8 +26,6 @@ public class FleetManager : NetworkBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        
-        LoadFleet();
     }
 
     public override void OnNetworkSpawn()
