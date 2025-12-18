@@ -5,7 +5,8 @@ using System.Linq;
 public class InventoryDebugger : MonoBehaviour
 {
     // --- UI State ---
-    private Rect _windowRect = new Rect(20, 20, 420, 650);
+    // Start with a reasonable default, but height will be overridden dynamically
+    private Rect _windowRect = new Rect(20, 20, 420, 100);
     private bool _isCollapsed = true;
 
     private Vector2 _scroll;
@@ -15,11 +16,36 @@ public class InventoryDebugger : MonoBehaviour
     private int _editAmount = 1;
 
     private const float COLLAPSED_HEIGHT = 60f;
-    private const float EXPANDED_HEIGHT = 850f;
 
     private void OnGUI()
     {
-        _windowRect.height = _isCollapsed ? COLLAPSED_HEIGHT : EXPANDED_HEIGHT;
+        // --- DYNAMIC HEIGHT CALCULATION ---
+        float targetHeight = COLLAPSED_HEIGHT;
+
+        if (!_isCollapsed && InventoryManager.Instance != null)
+        {
+            // 1. Calculate Static Content Height (Header + NetworkInfo + Editor + Spacing)
+            // Header: ~30, Network: ~85, Editor: ~280, Spacing/Padding: ~25
+            float staticContentHeight = 420f; 
+
+            // 2. Calculate List Height based on item count
+            int itemCount = 0;
+            if (InventoryManager.Instance.allAvailableItems != null)
+            {
+                itemCount = InventoryManager.Instance.allAvailableItems.Length;
+            }
+
+            // 3. Limit the list height so the window doesn't explode off-screen.
+            // Min 50px, Max 300px (scrolls if larger)
+            float listHeight = Mathf.Clamp(itemCount * 36f + 10f, 50f, 300f);
+
+            targetHeight = staticContentHeight + listHeight;
+        }
+
+        // Apply the calculated height
+        _windowRect.height = targetHeight;
+        
+        // Render the window
         _windowRect = GUI.Window(10, _windowRect, DrawWindow, "");
     }
 
@@ -40,7 +66,13 @@ public class InventoryDebugger : MonoBehaviour
         {
             DrawNetworkInfo();
             GUILayout.Space(5);
-            DrawInventoryList();
+            
+            // Pass the calculated list height to the Draw function so the ScrollView matches
+            int itemCount = InventoryManager.Instance.allAvailableItems != null ? InventoryManager.Instance.allAvailableItems.Length : 0;
+            float listHeight = Mathf.Clamp(itemCount * 36f + 10f, 50f, 300f);
+            
+            DrawInventoryList(listHeight);
+            
             GUILayout.Space(10);
             DrawItemEditor();
         }
@@ -73,9 +105,11 @@ public class InventoryDebugger : MonoBehaviour
 
         GUILayout.Label("Network State");
 
-        GUILayout.Label($"Is Server: {NetworkManager.Singleton.IsServer}");
-        GUILayout.Label($"Is Client: {NetworkManager.Singleton.IsClient}");
-        GUILayout.Label($"Is Host: {NetworkManager.Singleton.IsHost}");
+        string serverStatus = NetworkManager.Singleton.IsServer ? "Yes" : "No";
+        string clientStatus = NetworkManager.Singleton.IsClient ? "Yes" : "No";
+        string hostStatus = NetworkManager.Singleton.IsHost ? "Yes" : "No";
+
+        GUILayout.Label($"Is Server: {serverStatus} | Is Client: {clientStatus} | Is Host: {hostStatus}");
 
         GUILayout.EndVertical();
     }
@@ -84,11 +118,12 @@ public class InventoryDebugger : MonoBehaviour
 
     #region Inventory List
 
-    private void DrawInventoryList()
+    private void DrawInventoryList(float height)
     {
         GUILayout.Label("Inventory Contents", GUI.skin.box);
 
-        _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(260));
+        // Use the calculated height for the ScrollView
+        _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(height));
 
         var manager = InventoryManager.Instance;
         var items = manager.allAvailableItems;
@@ -135,7 +170,7 @@ public class InventoryDebugger : MonoBehaviour
 
         if (string.IsNullOrEmpty(_selectedItemID))
         {
-            GUILayout.Label("Select an item to edit.");
+            GUILayout.Label("Select an item above to edit.");
             return;
         }
 
@@ -144,7 +179,7 @@ public class InventoryDebugger : MonoBehaviour
 
         if (item == null)
         {
-            GUILayout.Label("Item not found.");
+            GUILayout.Label("Item not found (Refresh list).");
             return;
         }
 

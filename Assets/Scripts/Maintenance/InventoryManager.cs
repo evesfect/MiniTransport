@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System;
 using Unity.Netcode;
 using System.Linq;
+using System.IO;
 
 public class InventoryManager : NetworkBehaviour
 {
@@ -18,6 +19,12 @@ public class InventoryManager : NetworkBehaviour
 
     // --- Events to notify UI Logic of changes ---
     public event Action<string, int> OnItemQuantityChanged;
+
+    #if UNITY_EDITOR
+    private string SavePath => Path.Combine(Application.dataPath, "inventory.json");
+#else
+    private string SavePath => Path.Combine(Application.persistentDataPath, "inventory.json");
+#endif
 
     private void Awake()
     {
@@ -36,7 +43,7 @@ public class InventoryManager : NetworkBehaviour
     {
         if (IsServer)
         {
-            InitializeInventory();
+            LoadInventory();
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
         else
@@ -53,12 +60,16 @@ public class InventoryManager : NetworkBehaviour
         }
     }
 
+    private void OnApplicationQuit()
+    {
+        if(IsServer) SaveInventory();
+    }
+
     private void OnClientConnected(ulong clientId)
     {
         if (IsServer)
         {
-            string json = SerializeInventory();
-            // FIXED: RPC attribute now allows target override
+            string json = SerializeInventory(); 
             SyncInventoryRpc(json, RpcTarget.Single(clientId, RpcTargetUse.Temp));
         }
     }
@@ -75,6 +86,46 @@ public class InventoryManager : NetworkBehaviour
                 }
             }
             Debug.Log($"[InventoryManager] Initialized {inventoryDatabase.Count} items on Server.");
+        }
+    }
+
+    [ContextMenu("Save Inventory")]
+    public void SaveInventory()
+    {
+        string json = SerializeInventory();
+        File.WriteAllText(SavePath, json);
+        Debug.Log($"[InventoryManager] Saved to {SavePath}");
+    }
+
+    [ContextMenu("Load Inventory")]
+    public void LoadInventory()
+    {
+        // First setup the keys from the ScriptableObjects
+        InitializeInventory(); 
+
+        if (File.Exists(SavePath))
+        {
+            try
+            {
+                string json = File.ReadAllText(SavePath);
+                InventorySaveData data = JsonUtility.FromJson<InventorySaveData>(json);
+                if (data != null && data.Items != null)
+                {
+                    foreach (var entry in data.Items)
+                    {
+                        // Only load if the item ID is still valid in our config
+                        if (inventoryDatabase.ContainsKey(entry.ID))
+                        {
+                            inventoryDatabase[entry.ID] = entry.Count;
+                        }
+                    }
+                    Debug.Log($"[InventoryManager] Loaded {data.Items.Count} items from disk.");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[InventoryManager] Load failed: {e.Message}");
+            }
         }
     }
 
