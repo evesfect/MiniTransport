@@ -10,7 +10,7 @@ public class FleetDebugger : MonoBehaviour
     // Editing state
     private string _busID = "";
     private string _depotID = "";
-    private BusSchedule _schedule = new BusSchedule(); // assumes serializable
+    private BusSchedule _schedule = new BusSchedule();
 
     private Vector2 _scroll;
 
@@ -33,7 +33,6 @@ public class FleetDebugger : MonoBehaviour
         }
 
         GUILayout.BeginVertical();
-
         DrawHeader();
 
         if (!_isCollapsed)
@@ -67,7 +66,7 @@ public class FleetDebugger : MonoBehaviour
 
     private void DrawFleetList()
     {
-        GUILayout.Label("Active Fleet", GUI.skin.box);
+        GUILayout.Label("Active Fleet (Global)", GUI.skin.box);
 
         _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(250));
 
@@ -81,8 +80,11 @@ public class FleetDebugger : MonoBehaviour
             {
                 GUILayout.BeginHorizontal(GUI.skin.box);
 
+                // Determine state via FleetManager lookup instead of cached enum
+                bool isActive = FleetManager.Instance.IsBusActive(bus.BusID);
+                
                 Color prev = GUI.color;
-                GUI.color = GetStateColor(bus.CurrentState);
+                GUI.color = isActive ? Color.green : Color.cyan;
 
                 if (GUILayout.Button(bus.BusID, GUILayout.Width(120)))
                 {
@@ -90,7 +92,7 @@ public class FleetDebugger : MonoBehaviour
                 }
 
                 GUILayout.Label(bus.AssignedDepotID, GUILayout.Width(80));
-                GUILayout.Label(bus.CurrentState.ToString(), GUILayout.Width(80));
+                GUILayout.Label(isActive ? "Active" : "Depot", GUILayout.Width(80));
 
                 GUI.color = prev;
 
@@ -100,24 +102,6 @@ public class FleetDebugger : MonoBehaviour
 
         GUILayout.EndScrollView();
     }
-
-    private Color GetStateColor(BusState state)
-{
-    switch (state)
-    {
-        case BusState.InDepot:
-            return Color.cyan;
-
-        case BusState.OnRoute:
-            return Color.green;
-
-        case BusState.CompletingTrip:
-            return Color.yellow;
-
-        default:
-            return Color.white;
-    }
-}
 
     #endregion
 
@@ -146,7 +130,7 @@ public class FleetDebugger : MonoBehaviour
 
         if (GUILayout.Button("Update"))
         {
-            DepotBusEntry entry = FleetManager.Instance.allBuses
+            BusData entry = FleetManager.Instance.allBuses
                 .FirstOrDefault(b => b.BusID == _busID);
 
             if (entry != null)
@@ -180,7 +164,7 @@ public class FleetDebugger : MonoBehaviour
 
     #region Helpers
 
-    private void LoadBus(DepotBusEntry bus)
+    private void LoadBus(BusData bus)
     {
         _busID = bus.BusID;
         _depotID = bus.AssignedDepotID;
