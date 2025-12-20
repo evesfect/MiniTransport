@@ -3,18 +3,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
-using System.ComponentModel;
 
-[DefaultExecutionOrder(-50)] // Init after TimeManager, but before DepotController
+[DefaultExecutionOrder(-50)]
 public class FleetManager : NetworkBehaviour
 {
     public static FleetManager Instance { get; private set; }
 
     [Header("Master Fleet Data")]
-    public List<DepotBusEntry> allBuses = new List<DepotBusEntry>();
+    public List<BusData> allBuses = new List<BusData>();
+    
+    // Runtime Lookup: Maps BusID -> Spawned GameObject
+    private Dictionary<string, GameObject> _activeBusInstances = new Dictionary<string, GameObject>();
+
     public enum FleetOperation { Add, Remove, Update }
 
-    // persistentDataPath for builds, dataPath for Editor visibility
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "fleet.json");
 #else
@@ -26,8 +28,6 @@ public class FleetManager : NetworkBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        
-        LoadFleet();
     }
 
     public override void OnNetworkSpawn()
@@ -39,7 +39,7 @@ public class FleetManager : NetworkBehaviour
         }
         else
         {
-            allBuses.Clear(); // client starts empty until synced
+            allBuses.Clear();
         }
     }
 
@@ -65,7 +65,34 @@ public class FleetManager : NetworkBehaviour
         if (IsServer) SaveFleet();
     }
 
-    // RPCs
+    // --- Runtime Management (Server Only) ---
+
+    public bool IsBusActive(string busID)
+    {
+        return _activeBusInstances.ContainsKey(busID) && _activeBusInstances[busID] != null;
+    }
+
+    public void RegisterSpawnedBus(string busID, GameObject busInstance)
+    {
+        if (_activeBusInstances.ContainsKey(busID))
+            _activeBusInstances[busID] = busInstance;
+        else
+            _activeBusInstances.Add(busID, busInstance);
+    }
+
+    public void UnregisterBus(string busID)
+    {
+        if (_activeBusInstances.ContainsKey(busID))
+            _activeBusInstances.Remove(busID);
+    }
+
+    public GameObject GetActiveBus(string busID)
+    {
+        if (_activeBusInstances.TryGetValue(busID, out GameObject obj)) return obj;
+        return null;
+    }
+
+    // --- Networking & Data ---
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncFleetRpc(string jsonFleet, RpcParams rpcParams = default)
@@ -74,11 +101,6 @@ public class FleetManager : NetworkBehaviour
         if (container != null && container.Buses != null)
         {
             allBuses = container.Buses;
-            foreach(var bus in allBuses)
-            {
-                bus.ActiveBusInstance = null;
-                bus.CurrentState = BusState.InDepot;
-            }
             Debug.Log($"[FleetManager] Synced {allBuses.Count} buses from Server.");
         }
     }
@@ -86,7 +108,7 @@ public class FleetManager : NetworkBehaviour
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void RequestFleetOperationRpc(string busEntryJson, FleetOperation op)
     {
-        DepotBusEntry requestEntry = JsonUtility.FromJson<DepotBusEntry>(busEntryJson);
+        BusData requestEntry = JsonUtility.FromJson<BusData>(busEntryJson);
         if (requestEntry == null) return;
 
         bool changed = false;
@@ -94,12 +116,8 @@ public class FleetManager : NetworkBehaviour
         switch (op)
         {
             case FleetOperation.Add:
-                // Check for duplicates
                 if (!allBuses.Any(b => b.BusID == requestEntry.BusID))
                 {
-                    // Ensure clean state
-                    requestEntry.CurrentState = BusState.InDepot;
-                    requestEntry.ActiveBusInstance = null;
                     allBuses.Add(requestEntry);
                     changed = true;
                 }
@@ -109,7 +127,6 @@ public class FleetManager : NetworkBehaviour
                 int idx = allBuses.FindIndex(b => b.BusID == requestEntry.BusID);
                 if (idx != -1)
                 {
-                    // Update data (Assignments/Schedule)
                     allBuses[idx].AssignedDepotID = requestEntry.AssignedDepotID;
                     allBuses[idx].Schedule = requestEntry.Schedule;
                     changed = true;
@@ -117,7 +134,7 @@ public class FleetManager : NetworkBehaviour
                 break;
 
             case FleetOperation.Remove:
-                DepotBusEntry toRemove = allBuses.FirstOrDefault(b => b.BusID == requestEntry.BusID);
+                BusData toRemove = allBuses.FirstOrDefault(b => b.BusID == requestEntry.BusID);
                 if (toRemove != null)
                 {
                     allBuses.Remove(toRemove);
@@ -128,55 +145,10 @@ public class FleetManager : NetworkBehaviour
 
         if (changed)
         {
-            SaveFleet(); // Persist changes on Server
-            
-            // Broadcast new state to ALL clients
+            SaveFleet();
             string json = SerializeFleet();
             SyncFleetRpc(json);
-            
-            Debug.Log($"[FleetManager] Fleet Operation {op} applied for {requestEntry.BusID}");
         }
-    }
-
-
-    // Client API
-
-
-
-    /// <summary>
-    /// Returns all buses assigned to the specified Depot ID.
-    /// </summary>
-    public List<DepotBusEntry> GetBusesForDepot(string depotID)
-    {
-        return allBuses.Where(b => b.AssignedDepotID == depotID).ToList();
-    }
-
-    public void CreateBusClient(string busID, string depotID, BusSchedule schedule)
-    {
-        DepotBusEntry newBus = new DepotBusEntry
-        {
-            BusID = busID,
-            AssignedDepotID = depotID,
-            Schedule = schedule,
-            CurrentState = BusState.InDepot
-        };
-        
-        string json = JsonUtility.ToJson(newBus);
-        RequestFleetOperationRpc(json, FleetOperation.Add);
-    }
-
-    public void DeleteBusClient(string busID)
-    {
-        // Minimal object for ID matching
-        DepotBusEntry dummy = new DepotBusEntry { BusID = busID };
-        string json = JsonUtility.ToJson(dummy);
-        RequestFleetOperationRpc(json, FleetOperation.Remove);
-    }
-
-    public void UpdateBusClient(DepotBusEntry entry)
-    {
-        string json = JsonUtility.ToJson(entry);
-        RequestFleetOperationRpc(json, FleetOperation.Update);
     }
 
     // --- Persistence ---
@@ -207,13 +179,8 @@ public class FleetManager : NetworkBehaviour
                 if (container != null && container.Buses != null)
                 {
                     allBuses = container.Buses;
-                    
-                    // Reset runtime states on load
-                    foreach(var bus in allBuses) 
-                    {
-                        bus.ActiveBusInstance = null;
-                        bus.CurrentState = BusState.InDepot; 
-                    }
+                    // Clear runtime map on load to prevent stale references
+                    _activeBusInstances.Clear();
                     Debug.Log($"FleetManager: Loaded {allBuses.Count} buses.");
                 }
             }
@@ -222,15 +189,48 @@ public class FleetManager : NetworkBehaviour
                 Debug.LogError($"FleetManager: Failed to load fleet.json. Error: {e.Message}");
             }
         }
-        else
+    }
+
+    // Data Modificiation API
+    public void UpdateBusDurability(string busID, float newDurability)
+    {
+        var bus = allBuses.FirstOrDefault(b => b.BusID == busID);
+        if (bus != null)
         {
-            Debug.LogWarning($"FleetManager: No fleet file found at {SavePath}");
+            bus.Durability = Mathf.Clamp(newDurability, 0f, 100f);
         }
+    }
+
+    // Client Helper Wrappers
+    public List<BusData> GetBusesForDepot(string depotID)
+    {
+        return allBuses.Where(b => b.AssignedDepotID == depotID).ToList();
+    }
+
+    public void CreateBusClient(string busID, string depotID, BusSchedule schedule)
+    {
+        BusData newBus = new BusData
+        {
+            BusID = busID,
+            AssignedDepotID = depotID,
+            Schedule = schedule
+        };
+        RequestFleetOperationRpc(JsonUtility.ToJson(newBus), FleetOperation.Add);
+    }
+
+    public void DeleteBusClient(string busID)
+    {
+        RequestFleetOperationRpc(JsonUtility.ToJson(new BusData { BusID = busID }), FleetOperation.Remove);
+    }
+
+    public void UpdateBusClient(BusData entry)
+    {
+        RequestFleetOperationRpc(JsonUtility.ToJson(entry), FleetOperation.Update);
     }
 }
 
 [System.Serializable]
 public class FleetContainer
 {
-    public List<DepotBusEntry> Buses;
+    public List<BusData> Buses;
 }

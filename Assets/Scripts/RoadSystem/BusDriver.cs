@@ -21,8 +21,10 @@ public class BusDriver : NetworkBehaviour
         NetworkVariableWritePermission.Server
     );
 
+    public bool IsBroken => _netState.Value.IsBrokenDown;
+
     // Server Side Data
-    private DepotBusEntry _serverEntry;
+    private BusData _serverEntry; // Updated from DepotBusEntry
     private DepotController _serverDepot;
     private Route _serverRoute;
     private int _serverRouteIndex;
@@ -63,7 +65,8 @@ public class BusDriver : NetworkBehaviour
         _netState.OnValueChanged -= OnNetworkStateChanged;
     }
 
-    public void ServerInitialize(DepotBusEntry entry, DepotController depot)
+    // Updated Signature to match new BusData class
+    public void ServerInitialize(BusData entry, DepotController depot)
     {
         if (!IsServer) return;
 
@@ -100,7 +103,7 @@ public class BusDriver : NetworkBehaviour
 
     private void ServerUpdateLoop()
     {
-        if (!_netState.Value.IsInService) return;
+        if (!_netState.Value.IsInService || _netState.Value.IsBrokenDown) return;
 
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
 
@@ -115,7 +118,6 @@ public class BusDriver : NetworkBehaviour
         }
         else
         {
-            // GRID MANAGER INTEGRATION here
             float trafficModifier = 1.0f; 
 
             float step = baseSpeed * trafficModifier * dt;
@@ -126,6 +128,15 @@ public class BusDriver : NetworkBehaviour
                 ServerArriveAtStop();
             }
         }
+    }
+
+    // Called by MaintenanceManager on Server
+    public void SetBrokenDown(bool isBroken)
+    {
+        if (!IsServer) return;
+        var state = _netState.Value;
+        state.IsBrokenDown = isBroken;
+        _netState.Value = state;
     }
 
     private void ServerStartNextLeg()
@@ -146,6 +157,7 @@ public class BusDriver : NetworkBehaviour
             }
         }
 
+        // Use BusData schedule
         if (_serverEntry.Schedule.EndTime < SimulationTimeManager.Instance.CurrentTimeOfDay)
         {
             DespawnBus();
@@ -170,8 +182,7 @@ public class BusDriver : NetworkBehaviour
     private void ServerArriveAtStop()
     {
         _serverIsWaiting = true;
-        // GRID MANAGER INTEGRATION POINT - Check if turnaround stop
-        float minutesToWait = 10f; 
+        float minutesToWait = _serverEntry.Schedule.TurnaroundWait; 
         _serverWaitTimer = minutesToWait / 60f; 
     }
 
@@ -186,7 +197,6 @@ public class BusDriver : NetworkBehaviour
 
         float totalDist = 0f;
         
-        // Start Seg
         RoadSegment startSeg = a.parentSegment;
         if(startSeg)
         {
@@ -194,7 +204,6 @@ public class BusDriver : NetworkBehaviour
             totalDist += Mathf.Abs(exitT - a.splineT) * startSeg.Length;
         }
 
-        // Middle
         for (int i = 0; i < nodes.Count - 1; i++)
         {
             foreach (var seg in nodes[i].ConnectedRoads)
@@ -207,7 +216,6 @@ public class BusDriver : NetworkBehaviour
             }
         }
 
-        // End Seg
         RoadSegment endSeg = b.parentSegment;
         if(endSeg && endSeg != startSeg) 
         {
@@ -224,11 +232,11 @@ public class BusDriver : NetworkBehaviour
 
     private void DespawnBus()
     {
-        if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry);
+        // Fix: Use BusID string for the new DepotController method
+        if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry.BusID);
     }
 
-    // Client Logic (visuals)
-
+    // Client Logic (Visuals) - No changes needed, relies on NetworkVariable
     private void OnNetworkStateChanged(BusNetworkState oldState, BusNetworkState newState)
     {
         if (!newState.IsInService) return;
@@ -248,7 +256,6 @@ public class BusDriver : NetworkBehaviour
 
             ReconstructLocalPath(from, to);
             
-            // JIP / Catch Up
             float currentGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
             float timePassedGameHours = currentGameTime - newState.DepartureTime;
             if (timePassedGameHours < 0) timePassedGameHours += 24f;
@@ -256,7 +263,6 @@ public class BusDriver : NetworkBehaviour
             float timeMult = SimulationTimeManager.Instance.TimeMultiplier > 0 ? SimulationTimeManager.Instance.TimeMultiplier : 1f;
             float realSecondsPassed = (timePassedGameHours * 60f) / (SimulationTimeManager.Instance.baseMinutesPerSecond * timeMult);
 
-            // GRID MANAGER INTEGRATION POINT
             _clientDistanceTraveled = realSecondsPassed * baseSpeed * clientSpeedBuffer;
             _clientIsMoving = true;
         }
@@ -272,7 +278,6 @@ public class BusDriver : NetworkBehaviour
         
         if (nodes == null || nodes.Count == 0)
         {
-            // Same segment fallback
             if (from.parentSegment == to.parentSegment)
             {
                 AddPathLeg(from.parentSegment, from.splineT, to.splineT);
@@ -280,16 +285,13 @@ public class BusDriver : NetworkBehaviour
             return;
         }
 
-        // Start Segment (Partial)
         RoadSegment startSeg = from.parentSegment;
         if(startSeg)
         {
-            // If path start node is NodeA, we are heading TO NodeA (so tEnd=0)
             float exitT = (nodes[0] == startSeg.NodeA) ? 0f : 1f;
             AddPathLeg(startSeg, from.splineT, exitT);
         }
 
-        // Middle Segments
         for (int i = 0; i < nodes.Count - 1; i++)
         {
             RoadNode nA = nodes[i];
@@ -299,7 +301,6 @@ public class BusDriver : NetworkBehaviour
             {
                 if (seg.GetConnectedNode(nA) == nB)
                 {
-                    // If NodeA is start, we go 0->1. If NodeB is start, 1->0.
                     float tStart = (seg.NodeA == nA) ? 0f : 1f;
                     float tEnd = (seg.NodeA == nA) ? 1f : 0f;
                     AddPathLeg(seg, tStart, tEnd);
@@ -308,7 +309,6 @@ public class BusDriver : NetworkBehaviour
             }
         }
 
-        // End Segment (Partial)
         RoadSegment endSeg = to.parentSegment;
         if(endSeg && endSeg != startSeg) 
         {
@@ -338,13 +338,10 @@ public class BusDriver : NetworkBehaviour
 
     private void ClientUpdateLoop()
     {
-        if (!_clientIsMoving || _localPathSegments == null || _localPathSegments.Count == 0) return;
+        if (!_clientIsMoving || _localPathSegments == null || _localPathSegments.Count == 0 || _netState.Value.IsBrokenDown) return;
 
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
-        
-        // GRID MANAGER INTEGRATION POINT
         float localTraffic = 1.0f;
-
         float step = baseSpeed * localTraffic * clientSpeedBuffer * dt;
         
         _clientDistanceTraveled += step;
@@ -352,7 +349,7 @@ public class BusDriver : NetworkBehaviour
         if (_clientDistanceTraveled >= _totalLegLength)
         {
             _clientDistanceTraveled = _totalLegLength;
-            _clientIsMoving = false; // Wait for server
+            _clientIsMoving = false;
         }
 
         UpdateTransformOnSpline(_clientDistanceTraveled);
@@ -360,12 +357,10 @@ public class BusDriver : NetworkBehaviour
 
     private void UpdateTransformOnSpline(float currentDist)
     {
-        // Calculate Position
         Vector3 pos = CalculatePoint(currentDist, out Vector3 currentTangent);
         transform.position = pos;
 
-        // Lookahead Rotation
-        float lookDist = currentDist + 1.0f; // Look 1 meter ahead
+        float lookDist = currentDist + 1.0f;
         if (lookDist > _totalLegLength) lookDist = _totalLegLength;
 
         if (lookDist - currentDist > 0.01f)
@@ -375,16 +370,14 @@ public class BusDriver : NetworkBehaviour
             if (dir.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRot = Quaternion.LookRotation(dir);
-                // Smooth rotation
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotationSpeed * SimulationTimeManager.Instance.TimeMultiplier);
             }
         }
     }
 
-    // Helper to find point across multiple legs
     private Vector3 CalculatePoint(float dist, out Vector3 tangent)
     {
-        tangent = Vector3.forward; // Default
+        tangent = Vector3.forward;
         float remaining = dist;
 
         foreach (var leg in _localPathSegments)
@@ -404,7 +397,6 @@ public class BusDriver : NetworkBehaviour
             remaining -= leg.Length;
         }
 
-        // End snap
         if (_localPathSegments.Count > 0)
         {
             var last = _localPathSegments.Last();
@@ -413,4 +405,6 @@ public class BusDriver : NetworkBehaviour
 
         return transform.position;
     }
+
+    
 }

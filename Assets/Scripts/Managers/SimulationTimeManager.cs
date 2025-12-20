@@ -41,6 +41,7 @@ public class SimulationTimeManager : NetworkBehaviour
     private float _lastServerTime;
     private float _timeSinceLastSync;
     private bool IsDedicatedServer => IsServer && !IsClient;
+    public float VisualTime => IsServer ? _netTimeOfDay.Value : _clientVisualTime;
 
     public void Awake()
     {
