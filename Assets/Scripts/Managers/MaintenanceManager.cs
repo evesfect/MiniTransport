@@ -1,6 +1,7 @@
-using UnityEngine;
+using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
+using UnityEngine;
 
 [DefaultExecutionOrder(-45)] // Run after TimeManager/FleetManager, before Depot
 public class MaintenanceManager : NetworkBehaviour
@@ -16,6 +17,13 @@ public class MaintenanceManager : NetworkBehaviour
 
     [Tooltip("Durability gained per in-game hour while in depot")]
     public float repairRatePerHour = 10f;
+
+    [Header("Recovery Settings")]
+    public GameObject recoveryVehiclePrefab;
+    public Transform recoverySpawnPoint;
+
+    private Queue<string> _breakdownQueue = new Queue<string>();
+    private RecoveryVehicle _activeRecoveryVehicle;
 
     private void Awake()
     {
@@ -98,7 +106,44 @@ public class MaintenanceManager : NetworkBehaviour
             {
                 driver.SetBrokenDown(true);
                 Debug.Log($"[Maintenance] Bus {busID} has broken down!");
+
+                if (!_breakdownQueue.Contains(busID))
+                {
+                    _breakdownQueue.Enqueue(busID);
+                    ProcessRecoveryQueue();
+                }
             }
         }
+    }
+
+    public void OnRecoveryVehicleFinished()
+    {
+        ProcessRecoveryQueue();
+    }
+
+    private void ProcessRecoveryQueue()
+    {
+        // 1. Check if vehicle is busy
+        if (_activeRecoveryVehicle != null && _activeRecoveryVehicle.IsBusy) return;
+
+        // 2. Check if jobs exist
+        if (_breakdownQueue.Count == 0) return;
+
+        // 3. Spawn vehicle if needed
+        if (_activeRecoveryVehicle == null)
+        {
+            if (recoveryVehiclePrefab == null || recoverySpawnPoint == null)
+            {
+                Debug.LogError("Recovery Vehicle Prefab or SpawnPoint not assigned!");
+                return;
+            }
+            GameObject go = Instantiate(recoveryVehiclePrefab.gameObject, recoverySpawnPoint.position, recoverySpawnPoint.rotation);
+            go.GetComponent<NetworkObject>().Spawn();
+            _activeRecoveryVehicle = go.GetComponent<RecoveryVehicle>();
+        }
+
+        // 4. Dispatch
+        string busID = _breakdownQueue.Dequeue();
+        _activeRecoveryVehicle.StartMission(busID, recoverySpawnPoint);
     }
 }
