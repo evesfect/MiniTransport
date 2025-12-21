@@ -9,7 +9,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 19.20067596435547
+            "Durability": 4.80059814453125
         },
         {
             "BusID": "02",
@@ -20,7 +20,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 19.800678253173829
+            "Durability": 4.80059814453125
         },
         {
             "BusID": "03",
@@ -31,7 +31,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 24.600696563720704
+            "Durability": 4.800636291503906
         }
     ]
 }
