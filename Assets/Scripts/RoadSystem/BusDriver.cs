@@ -25,7 +25,7 @@ public class BusDriver : NetworkBehaviour
     public bool IsBroken => _netState.Value.IsBrokenDown;
 
     // Server Side Data
-    private BusData _serverEntry; // Updated from DepotBusEntry
+    private BusData _serverEntry;
     private DepotController _serverDepot;
     private Route _serverRoute;
     private int _serverRouteIndex;
@@ -47,7 +47,7 @@ public class BusDriver : NetworkBehaviour
         public float EndT;
     }
 
-    private List<PathLeg> _localPathSegments;
+    private List<PathLeg> _localPathSegments = new List<PathLeg>();
     private float _clientDistanceTraveled; 
     private float _totalLegLength;
     private bool _clientIsMoving;
@@ -67,7 +67,6 @@ public class BusDriver : NetworkBehaviour
         _netState.OnValueChanged -= OnNetworkStateChanged;
     }
 
-    // Updated Signature to match new BusData class
     public void ServerInitialize(BusData entry, DepotController depot)
     {
         if (!IsServer) return;
@@ -178,9 +177,6 @@ public class BusDriver : NetworkBehaviour
         string toID = _serverRoute.StopIDs[nextIndex];
         _serverRouteIndex = nextIndex;
 
-        // OLD: _serverCurrentLegLength = CalculatePathDistanceServer(fromID, toID);
-        
-        // NEW: Populate the path list and get length
         BusStop fromStop = TransportManager.Instance.GetStop(fromID);
         BusStop toStop = TransportManager.Instance.GetStop(toID);
 
@@ -213,7 +209,6 @@ public class BusDriver : NetworkBehaviour
 
     private void DespawnBus()
     {
-        // Fix: Use BusID string for the new DepotController method
         if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry.BusID);
     }
 
@@ -287,15 +282,23 @@ public class BusDriver : NetworkBehaviour
         {
             Vector3 lookPos = CalculatePoint(lookDist, _localPathSegments, out _);
             Vector3 dir = lookPos - pos;
+
+            dir.y = 0;
+            dir.Normalize();
+
             if (dir.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRot = Quaternion.LookRotation(dir);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotationSpeed * SimulationTimeManager.Instance.TimeMultiplier);
+
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation, 
+                    targetRot, 
+                    Time.deltaTime * rotationSpeed * SimulationTimeManager.Instance.TimeMultiplier
+                );
             }
         }
     }
 
-    // Updated to accept 'List<PathLeg> segments' so both Server and Client can use it
     private Vector3 CalculatePoint(float dist, List<PathLeg> segments, out Vector3 tangent)
     {
         tangent = Vector3.forward;

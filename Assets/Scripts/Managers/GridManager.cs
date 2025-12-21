@@ -39,8 +39,22 @@ public class GridManager : NetworkBehaviour
     // Update Buffer (Used by Client AND Host)
     private List<PendingGridUpdate> _pendingUpdates = new List<PendingGridUpdate>();
 
+    // Bus stop lookup table
+    private Dictionary<int, List<BusStop>> _tileStops = new Dictionary<int, List<BusStop>>();
+
     // Server State
     private float _lastSimGameTime;
+
+    // --- NEW: Scheduled Updates (Server Side Waiting List) ---
+    private struct ScheduledServerUpdate
+    {
+        public int TileIndex;
+        public TileData Data;
+        public TileUpdateFlags Mask;
+        public float TargetTimeOfDay; // e.g., 7.0f or 18.0f
+    }
+    private List<ScheduledServerUpdate> _serverScheduledUpdates = new List<ScheduledServerUpdate>();
+    private float _prevFrameTime;
 
     // Public Accessors
     public int TotalTiles => resolutionX * resolutionZ;
@@ -99,6 +113,7 @@ public class GridManager : NetworkBehaviour
         {
             Debug.Log($"Grid: Initialized as Server/Host. Total Tiles: {TotalTiles}");
             _lastSimGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
+            _prevFrameTime = _lastSimGameTime; // Initialize prev time
         }
         else
         {
@@ -108,16 +123,18 @@ public class GridManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer) ServerSimulationLoop();
+        if (IsServer) 
+        {
+            ProcessServerScheduledUpdates();
+            ServerSimulationLoop();
+        }
         
         // IMPORTANT: ClientUpdateLoop runs on both Client AND Host/Server
         // This ensures the Host waits for the simulation clock just like clients.
         if (IsClient || IsServer) ClientUpdateLoop();
     }
 
-    // ===========================================================================================
-    // SERVER LOGIC
-    // ===========================================================================================
+    #region Server Logic
 
     private void ServerSimulationLoop()
     {
@@ -143,11 +160,13 @@ public class GridManager : NetworkBehaviour
         // It should call ScheduleTileUpdate(...) when it decides to change a tile.
     }
 
+    /// <summary>
+    /// Schedules an update to apply ASAP (Current Time + Lookahead).
+    /// </summary>
     public void ScheduleTileUpdate(int tileIndex, TileData newData, TileUpdateFlags mask)
     {
         if (!IsServer) return;
 
-        // FIXED: Do NOT apply to _gridData immediately. 
         // We let the RPC/Buffer handle it so the Host waits for the correct time.
 
         // 1. Calculate Schedule Time
@@ -166,15 +185,74 @@ public class GridManager : NetworkBehaviour
         ScheduleGridUpdateClientRpc(executionTime, packet);
     }
 
+    /// <summary>
+    /// Schedules an update to apply exactly at a specific Time of Day (e.g. 18.0f).
+    /// The Server will wait until the correct moment (TargetTime - Lookahead) to broadcast this.
+    /// </summary>
+    public void ScheduleTileUpdateAtGameTime(int tileIndex, TileData newData, TileUpdateFlags mask, float targetTimeOfDay)
+    {
+        if (!IsServer) return;
+
+        // Add to the waiting list. The server loop will pick it up when it's time.
+        _serverScheduledUpdates.Add(new ScheduledServerUpdate
+        {
+            TileIndex = tileIndex,
+            Data = newData,
+            Mask = mask,
+            TargetTimeOfDay = targetTimeOfDay
+        });
+    }
+
+    private void ProcessServerScheduledUpdates()
+    {
+        if (SimulationTimeManager.Instance == null) return;
+        
+        float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
+        float lookahead = scheduleLookaheadHours;
+
+        // Iterate backwards so we can remove items efficiently
+        for (int i = _serverScheduledUpdates.Count - 1; i >= 0; i--)
+        {
+            ScheduledServerUpdate update = _serverScheduledUpdates[i];
+            
+            // Calculate when we need to pull the trigger (send the RPC)
+            // Trigger Time = Target Time - Lookahead
+            // e.g. Target 18:00, Lookahead 0.5 -> Trigger at 17:30
+            float triggerTime = update.TargetTimeOfDay - lookahead;
+            if (triggerTime < 0) triggerTime += 24f;
+
+            // Check if we crossed the trigger time in this frame
+            if (WasTimeCrossed(_prevFrameTime, currentTime, triggerTime))
+            {
+                // Execute the standard update (which adds the lookahead back, landing exactly on TargetTime)
+                ScheduleTileUpdate(update.TileIndex, update.Data, update.Mask);
+                _serverScheduledUpdates.RemoveAt(i);
+            }
+        }
+
+        _prevFrameTime = currentTime;
+    }
+
+    private bool WasTimeCrossed(float prev, float curr, float target)
+    {
+        if (prev < curr) // Normal time flow
+        {
+            return prev < target && target <= curr;
+        }
+        else // Day wrap (e.g. 23.9 -> 0.1)
+        {
+            return target > prev || target <= curr;
+        }
+    }
+
     [Rpc(SendTo.Server)]
     private void RequestGridStateServerRpc(RpcParams rpcParams = default)
     {
         SendFullStateClientRpc(_gridData, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
     }
+    #endregion
 
-    // ===========================================================================================
-    // CLIENT (AND HOST) LOGIC
-    // ===========================================================================================
+    #region Client and Host Logic
 
     [Rpc(SendTo.SpecifiedInParams)]
     private void SendFullStateClientRpc(TileData[] fullState, RpcParams rpcParams = default)
@@ -252,10 +330,47 @@ public class GridManager : NetworkBehaviour
 
         _gridData[packet.TileIndex] = current;
     }
+    #endregion
+    #region bus stops
 
-    // ===========================================================================================
-    // HELPERS & GIZMOS
-    // ===========================================================================================
+    public void RegisterStop(BusStop stop)
+    {
+        if (stop == null) return;
+
+        // Find which tile this stop belongs to
+        if (WorldToGrid(stop.transform.position, out int x, out int y))
+        {
+            int index = GetIndex(x, y);
+
+            if (!_tileStops.ContainsKey(index))
+            {
+                _tileStops[index] = new List<BusStop>();
+            }
+
+            if (!_tileStops[index].Contains(stop))
+            {
+                _tileStops[index].Add(stop);
+                // Debug.Log($"Grid: Registered Stop '{stop.name}' to Tile {x},{y} (Index {index})");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"Grid: Stop '{stop.name}' is outside the grid bounds!");
+        }
+    }
+
+    public List<BusStop> GetStopsInTile(int index)
+    {
+        if (_tileStops.TryGetValue(index, out List<BusStop> stops))
+        {
+            return stops;
+        }
+        return null;
+    }
+
+    #endregion
+
+    #region Helpers and Gizmos
 
     public TileData GetTileData(int x, int y)
     {
@@ -264,6 +379,12 @@ public class GridManager : NetworkBehaviour
     }
 
     public int GetIndex(int x, int y) => (y * resolutionX) + x;
+
+    public void GetXY(int index, out int x, out int y)
+    {
+        x = index % resolutionX;
+        y = index / resolutionX;
+    }
     
     public bool WorldToGrid(Vector3 worldPos, out int x, out int y)
     {
@@ -373,4 +494,5 @@ public class GridManager : NetworkBehaviour
         }
     }
 #endif
+    #endregion
 }
