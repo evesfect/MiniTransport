@@ -149,7 +149,7 @@ public class SimulationTimeManager : NetworkBehaviour
         return $"{hours:00}:{minutes:00}";
     }
 
-    void OnGUI()
+    /*void OnGUI()
     {
         const float width = 220f;
         const float height = 200f;
@@ -193,5 +193,5 @@ public class SimulationTimeManager : NetworkBehaviour
 
         GUILayout.EndArea();
     }
-
+    */
 }

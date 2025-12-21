@@ -1,7 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
 
-
 public class NetworkManagerUI : MonoBehaviour
 {
     private NetworkManager m_NetworkManager;
@@ -13,7 +12,17 @@ public class NetworkManagerUI : MonoBehaviour
 
     void OnGUI()
     {
-        GUILayout.BeginArea(new Rect(10, 10, 300, 300));
+        // Define the size of the area
+        float areaWidth = 300;
+        float areaHeight = 300;
+        float padding = 10;
+
+        // Calculate position: Screen Width - Area Width - Padding
+        float xPosition = Screen.width - areaWidth - padding;
+        float yPosition = padding;
+
+        GUILayout.BeginArea(new Rect(xPosition, yPosition, areaWidth, areaHeight));
+
         if (!m_NetworkManager.IsClient && !m_NetworkManager.IsServer)
         {
             StartButtons();
@@ -42,6 +51,4 @@ public class NetworkManagerUI : MonoBehaviour
             m_NetworkManager.NetworkConfig.NetworkTransport.GetType().Name);
         GUILayout.Label("Mode: " + mode);
     }
-
 }
-
