@@ -18,6 +18,10 @@ public class BusDriver : VehicleDriver
 
     // Breakdown logic
     public bool IsBroken => _netState.Value.IsBrokenDown;
+    public string PreviousStopID => _netState.Value.PreviousStopID.ToString();
+    public string TargetStopID => _netState.Value.TargetStopID.ToString();
+
+    public float RemainingPathDistance => Mathf.Max(0f, m_ServerCurrentLegLength - m_ServerDistanceTraveled);
 
     // Server Side Data ()
     private BusData _serverEntry;

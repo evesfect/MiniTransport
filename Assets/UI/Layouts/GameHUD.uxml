@@ -25,5 +25,18 @@
                 <ui:Button text="Fleet" name="BtnToggleFleets" class="menu-item" style="background-image: url(&quot;project://database/Assets/UI/Sprites/bus.png?fileID=2800000&amp;guid=58bf50a564a3a9f4c979217e3b465199&amp;type=3#bus&quot;);" />
             </ui:ScrollView>
         </ui:VisualElement>
+        
+        <ui:VisualElement name="FleetListPanel" class="fleet-panel" style="display: none;">
+            <ui:Label text="Fleet Overview" class="panel-header" />
+            
+            <ui:VisualElement class="fleet-row header-row">
+                <ui:Label text="ID" class="fleet-col-id header-text" />
+                <ui:Label text="Status" class="fleet-col-status header-text" />
+                <ui:Label text="Health" class="fleet-col-health header-text" />
+            </ui:VisualElement>
+
+            <ui:ScrollView name="FleetListContainer" mode="Vertical" style="flex-grow: 1;" />
+        </ui:VisualElement>
+        
     </ui:VisualElement>
 </ui:UXML>
