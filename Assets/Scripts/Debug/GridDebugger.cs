@@ -5,12 +5,12 @@ using System.Collections.Generic;
 public class GridDebugger : MonoBehaviour
 {
     // --- UI State ---
-    private Rect _windowRect = new Rect(20, 20, 340, 700);
+    private Rect _windowRect = new Rect(20, 20, 340, 750); // Increased height for new fields
     private bool _isCollapsed = false;
     private Vector2 _scrollPosition;
 
     private const float COLLAPSED_HEIGHT = 60f;
-    private const float EXPANDED_HEIGHT = 700f;
+    private const float EXPANDED_HEIGHT = 750f;
 
     // Selection State
     private int _selectedIndex = -1;
@@ -25,7 +25,9 @@ public class GridDebugger : MonoBehaviour
     // Edit State
     private int _editTraffic;
     private int _editPopulation;
-    private int _editDemand;
+    private int _editJobs;          // New
+    private int _editInDemand;      // New
+    private int _editOutDemand;     // New
     
     // Structure Edit State
     private int _editResRatio;
@@ -135,8 +137,13 @@ public class GridDebugger : MonoBehaviour
         GUILayout.BeginHorizontal();
         GUILayout.Label($"Traffic: {data.Traffic}%");
         GUILayout.Label($"Pop: {data.Population}");
+        GUILayout.Label($"Jobs: {data.Jobs}");
         GUILayout.EndHorizontal();
-        GUILayout.Label($"Demand: {data.Demand}");
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Label($"In-Dem: {data.InDemand}");
+        GUILayout.Label($"Out-Dem: {data.OutDemand}");
+        GUILayout.EndHorizontal();
 
         // Structure Data
         GUILayout.Space(5);
@@ -205,8 +212,19 @@ public class GridDebugger : MonoBehaviour
         GUILayout.EndHorizontal();
 
         GUILayout.BeginHorizontal();
-        GUILayout.Label("Demand:");
-        _editDemand = IntField(_editDemand);
+        GUILayout.Label("Jobs:");
+        _editJobs = IntField(_editJobs);
+        GUILayout.EndHorizontal();
+
+        GUILayout.Label("--- Procedural Demand ---");
+        GUILayout.BeginHorizontal();
+        GUILayout.Label("In-Demand:");
+        _editInDemand = IntField(_editInDemand);
+        GUILayout.EndHorizontal();
+        
+        GUILayout.BeginHorizontal();
+        GUILayout.Label("Out-Demand:");
+        _editOutDemand = IntField(_editOutDemand);
         GUILayout.EndHorizontal();
 
         GUILayout.Space(5);
@@ -288,7 +306,9 @@ public class GridDebugger : MonoBehaviour
         TileData data = GridManager.Instance.GetTileData(_selectedX, _selectedY);
         _editTraffic = data.Traffic;
         _editPopulation = data.Population;
-        _editDemand = data.Demand;
+        _editJobs = data.Jobs; // New
+        _editInDemand = data.InDemand; // New
+        _editOutDemand = data.OutDemand; // New
         
         _editResRatio = data.ResidentialRatio;
         _editComRatio = data.CommercialRatio;
@@ -314,7 +334,11 @@ public class GridDebugger : MonoBehaviour
         // 1. Check Standard Fields
         if (_editTraffic != current.Traffic) mask |= TileUpdateFlags.Traffic;
         if (_editPopulation != current.Population) mask |= TileUpdateFlags.Population;
-        if (_editDemand != current.Demand) mask |= TileUpdateFlags.Demand;
+        if (_editJobs != current.Jobs) mask |= TileUpdateFlags.Jobs; // New Flag
+
+        // Check Demand Values
+        if (_editInDemand != current.InDemand || _editOutDemand != current.OutDemand) 
+            mask |= TileUpdateFlags.DemandValues; // New Flag
 
         // 2. Check Structure Fields
         bool ratiosChanged = (_editResRatio != current.ResidentialRatio) || 
@@ -329,7 +353,10 @@ public class GridDebugger : MonoBehaviour
         TileData newData = current;
         newData.Traffic = (byte)Mathf.Clamp(_editTraffic, 0, 100);
         newData.Population = (ushort)Mathf.Clamp(_editPopulation, 0, 65535);
-        newData.Demand = (byte)Mathf.Clamp(_editDemand, 0, 100);
+        newData.Jobs = (ushort)Mathf.Clamp(_editJobs, 0, 65535);
+        
+        newData.InDemand = (byte)Mathf.Clamp(_editInDemand, 0, 255);
+        newData.OutDemand = (byte)Mathf.Clamp(_editOutDemand, 0, 255);
         
         // Assign Structure directly
         newData.ResidentialRatio = (byte)_editResRatio;

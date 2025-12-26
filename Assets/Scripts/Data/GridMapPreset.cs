@@ -5,7 +5,6 @@ using System.Collections.Generic;
 public enum LinearGridTarget
 {
     Traffic,            // byte (0-100)
-    Demand,             // byte (0-100)
     ResidentialRatio,   // byte (0-100)
     CommercialRatio,    // byte (0-100)
     IndustrialRatio,    // byte (0-100)
@@ -15,7 +14,8 @@ public enum LinearGridTarget
 // Targets that rely on density distribution (Total Amount)
 public enum DistributionGridTarget
 {
-    Population          // ushort (Accumulated Count)
+    Population,
+    Jobs 
 }
 
 public enum TextureChannel

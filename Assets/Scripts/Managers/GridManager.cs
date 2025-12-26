@@ -78,8 +78,10 @@ public class GridManager : NetworkBehaviour
             _gridData[i] = new TileData
             {
                 Traffic = 0,
-                Population = 50,
-                Demand = 20,
+                Population = 100,
+                Jobs = 50,
+                InDemand = 0,
+                OutDemand = 0,
                 ResidentialRatio = 100,
                 EcoClass = EconomicClass.Medium
             };
@@ -225,12 +227,19 @@ public class GridManager : NetworkBehaviour
 
         if ((packet.Mask & TileUpdateFlags.Traffic) != 0) current.Traffic = packet.Data.Traffic;
         if ((packet.Mask & TileUpdateFlags.Population) != 0) current.Population = packet.Data.Population;
-        if ((packet.Mask & TileUpdateFlags.Demand) != 0) current.Demand = packet.Data.Demand;
+        if ((packet.Mask & TileUpdateFlags.Jobs) != 0) current.Jobs = packet.Data.Jobs;
         if ((packet.Mask & TileUpdateFlags.Ratios) != 0) 
         {
             current.ResidentialRatio = packet.Data.ResidentialRatio;
             current.CommercialRatio = packet.Data.CommercialRatio;
             current.IndustrialRatio = packet.Data.IndustrialRatio;
+        }
+        if ((packet.Mask & TileUpdateFlags.Jobs) != 0) current.Jobs = packet.Data.Jobs;
+
+        if ((packet.Mask & TileUpdateFlags.DemandValues) != 0) 
+        {
+            current.OutDemand = packet.Data.OutDemand;
+            current.InDemand = packet.Data.InDemand;
         }
         if ((packet.Mask & TileUpdateFlags.Economy) != 0) current.EcoClass = packet.Data.EcoClass;
 
@@ -381,8 +390,7 @@ public class GridManager : NetworkBehaviour
                 int y = i / resolutionX;
                 Vector3 pos = GridToWorld(x,y);
                 
-                string label = $"T:{_gridData[i].Traffic}\nP:{_gridData[i].Population}\nD:{_gridData[i].Demand}";
-                
+                string label = $"Pop:{_gridData[i].Population}\nJob:{_gridData[i].Jobs}\nIn:{_gridData[i].InDemand} Out:{_gridData[i].OutDemand}";
 #if UNITY_EDITOR
                 UnityEditor.Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
 #endif

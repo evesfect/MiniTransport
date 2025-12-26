@@ -141,7 +141,6 @@ public static class GridInitializer
         switch (target)
         {
             case LinearGridTarget.Traffic:          data.Traffic = (byte)Mathf.Clamp(val, 0, 100); break;
-            case LinearGridTarget.Demand:           data.Demand = (byte)Mathf.Clamp(val, 0, 100); break;
             case LinearGridTarget.ResidentialRatio: data.ResidentialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
             case LinearGridTarget.CommercialRatio:  data.CommercialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
             case LinearGridTarget.IndustrialRatio:  data.IndustrialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
@@ -155,6 +154,9 @@ public static class GridInitializer
         {
             case DistributionGridTarget.Population: 
                 data.Population = (ushort)Mathf.Clamp(val, 0, 65535); 
+                break;
+            case DistributionGridTarget.Jobs:
+                data.Jobs = (ushort)Mathf.Clamp(val, 0, 65535);
                 break;
         }
     }
