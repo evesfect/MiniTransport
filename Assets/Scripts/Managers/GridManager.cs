@@ -1,10 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
-using System.Linq;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 [DefaultExecutionOrder(-50)]
 public class GridManager : NetworkBehaviour
@@ -13,6 +9,11 @@ public class GridManager : NetworkBehaviour
 
     [Header("Configuration")]
     [SerializeField] private Terrain _targetTerrain;
+
+    [Header("Map Presets")]
+    [SerializeField] private List<GridMapPreset> _availablePresets = new List<GridMapPreset>();
+    [Tooltip("If true, the first preset in the list is loaded on start.")]
+    [SerializeField] private bool _loadDefaultPresetOnStart = false;
 
     [Header("Resolution")]
     [Min(1)] public int resolutionX = 20;
@@ -36,27 +37,22 @@ public class GridManager : NetworkBehaviour
     private Vector2 _cellSize;
     private Vector3 _gridOrigin;
     
-    // Update Buffer (Used by Client AND Host)
+    // Update Buffer
     private List<PendingGridUpdate> _pendingUpdates = new List<PendingGridUpdate>();
-
-    // Bus stop lookup table
     private Dictionary<int, List<BusStop>> _tileStops = new Dictionary<int, List<BusStop>>();
 
     // Server State
     private float _lastSimGameTime;
-
-    // --- NEW: Scheduled Updates (Server Side Waiting List) ---
     private struct ScheduledServerUpdate
     {
         public int TileIndex;
         public TileData Data;
         public TileUpdateFlags Mask;
-        public float TargetTimeOfDay; // e.g., 7.0f or 18.0f
+        public float TargetTimeOfDay;
     }
     private List<ScheduledServerUpdate> _serverScheduledUpdates = new List<ScheduledServerUpdate>();
     private float _prevFrameTime;
 
-    // Public Accessors
     public int TotalTiles => resolutionX * resolutionZ;
     public Vector3 Origin => _gridOrigin;
     public Vector2 CellSize => _cellSize;
@@ -71,10 +67,12 @@ public class GridManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        InitializeGrid();
+        
+        // Ensure data array is allocated before we try to fill it
+        InitializeGridStructure();
     }
 
-    private void InitializeGrid()
+    private void InitializeGridStructure()
     {
         if (_targetTerrain == null) _targetTerrain = Terrain.activeTerrain;
         if (_targetTerrain == null)
@@ -93,7 +91,7 @@ public class GridManager : NetworkBehaviour
 
         _gridData = new TileData[resolutionX * resolutionZ];
         
-        // Initial Defaults
+        // Initial Defaults (Fallback)
         for(int i=0; i<_gridData.Length; i++)
         {
             _gridData[i] = new TileData
@@ -113,7 +111,13 @@ public class GridManager : NetworkBehaviour
         {
             Debug.Log($"Grid: Initialized as Server/Host. Total Tiles: {TotalTiles}");
             _lastSimGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-            _prevFrameTime = _lastSimGameTime; // Initialize prev time
+            _prevFrameTime = _lastSimGameTime;
+
+            // Load default preset if configured
+            if (_loadDefaultPresetOnStart && _availablePresets.Count > 0)
+            {
+                LoadPreset(0);
+            }
         }
         else
         {
@@ -129,10 +133,148 @@ public class GridManager : NetworkBehaviour
             ServerSimulationLoop();
         }
         
-        // IMPORTANT: ClientUpdateLoop runs on both Client AND Host/Server
-        // This ensures the Host waits for the simulation clock just like clients.
         if (IsClient || IsServer) ClientUpdateLoop();
     }
+
+    #region Preset Loading & Texture Logic
+
+    /// <summary>
+    /// SERVER ONLY: Loads a preset by index and replicates to all clients.
+    /// </summary>
+    public void LoadPreset(int presetIndex)
+    {
+        if (!IsServer) return;
+        if (presetIndex < 0 || presetIndex >= _availablePresets.Count)
+        {
+            Debug.LogError($"Grid: Invalid Preset Index {presetIndex}");
+            return;
+        }
+
+        Debug.Log($"Grid: Server loading preset {presetIndex}...");
+        
+        // 1. Load locally
+        ApplyPresetLocal(presetIndex);
+
+        // 2. Tell clients to load the same preset
+        LoadPresetClientRpc(presetIndex);
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void LoadPresetClientRpc(int presetIndex)
+    {
+        // Host has already loaded it in the direct call, check to avoid double load
+        if (IsServer && !IsHost) return; 
+        if (IsHost && IsServer) return;  
+        
+        if (!IsServer) // Clients only
+        {
+            ApplyPresetLocal(presetIndex);
+        }
+    }
+
+    private void ApplyPresetLocal(int presetIndex)
+    {
+        if (presetIndex < 0 || presetIndex >= _availablePresets.Count) return;
+        
+        GridMapPreset preset = _availablePresets[presetIndex];
+        if (preset == null) return;
+
+        foreach (var layer in preset.Layers)
+        {
+            ApplyTextureLayer(layer);
+        }
+        
+        Debug.Log($"Grid: Loaded Preset '{preset.name}'");
+    }
+
+    private void ApplyTextureLayer(GridTextureLayer layer)
+    {
+        if (layer.Texture == null) return;
+        if (layer.Mappings == null || layer.Mappings.Count == 0) return;
+
+        Texture2D tex = layer.Texture;
+        Color32[] pixels = tex.GetPixels32(); 
+        int texW = tex.width;
+        int texH = tex.height;
+
+        for (int y = 0; y < resolutionZ; y++)
+        {
+            for (int x = 0; x < resolutionX; x++)
+            {
+                int gridIndex = GetIndex(x, y);
+
+
+                // center of tile
+                float u = (x + 0.5f) / (float)resolutionX;
+                float v = (y + 0.5f) / (float)resolutionZ;
+
+                // Map UV to Texture Coordinates
+                int tx = Mathf.FloorToInt(u * texW);
+                int ty = Mathf.FloorToInt(v * texH);
+
+                tx = Mathf.Clamp(tx, 0, texW - 1);
+                ty = Mathf.Clamp(ty, 0, texH - 1);
+
+
+                int pixelIndex = ty * texW + tx;
+                Color32 color = pixels[pixelIndex];
+
+                // Apply Mappings
+                TileData data = _gridData[gridIndex];
+                
+                foreach (var mapping in layer.Mappings)
+                {
+                    if (!mapping.Enabled) continue;
+
+                    // 1. Get Value 0-255
+                    byte channelValue = 0;
+                    switch (mapping.SourceChannel)
+                    {
+                        case TextureChannel.Red: channelValue = color.r; break;
+                        case TextureChannel.Green: channelValue = color.g; break;
+                        case TextureChannel.Blue: channelValue = color.b; break;
+                        case TextureChannel.Alpha: channelValue = color.a; break;
+                    }
+
+                    // 2. Normalize to 0-1
+                    float t = channelValue / 255f;
+
+                    // 3. Lerp between Min and Max
+                    float finalValue = Mathf.Lerp(mapping.MinValue, mapping.MaxValue, t);
+
+                    // 4. Assign to Data
+                    switch (mapping.TargetField)
+                    {
+                        case GridTargetField.Traffic:
+                            data.Traffic = (byte)Mathf.Clamp(finalValue, 0, 100);
+                            break;
+                        case GridTargetField.Population:
+                            data.Population = (ushort)Mathf.Clamp(finalValue, 0, 65535);
+                            break;
+                        case GridTargetField.Demand:
+                            data.Demand = (byte)Mathf.Clamp(finalValue, 0, 100);
+                            break;
+                        case GridTargetField.ResidentialRatio:
+                            data.ResidentialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
+                            break;
+                        case GridTargetField.CommercialRatio:
+                            data.CommercialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
+                            break;
+                        case GridTargetField.IndustrialRatio:
+                            data.IndustrialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
+                            break;
+                        case GridTargetField.EconomicClass:
+                            // Round to nearest int for Enum
+                            int enumVal = Mathf.RoundToInt(finalValue);
+                            data.EcoClass = (EconomicClass)Mathf.Clamp(enumVal, 0, 2);
+                            break;
+                    }
+                }
+                _gridData[gridIndex] = data;
+            }
+        }
+    }
+    #endregion
 
     #region Server Logic
 
@@ -160,20 +302,13 @@ public class GridManager : NetworkBehaviour
         // It should call ScheduleTileUpdate(...) when it decides to change a tile.
     }
 
-    /// <summary>
-    /// Schedules an update to apply ASAP (Current Time + Lookahead).
-    /// </summary>
     public void ScheduleTileUpdate(int tileIndex, TileData newData, TileUpdateFlags mask)
     {
         if (!IsServer) return;
 
-        // We let the RPC/Buffer handle it so the Host waits for the correct time.
-
-        // 1. Calculate Schedule Time
         float executionTime = SimulationTimeManager.Instance.CurrentTimeOfDay + scheduleLookaheadHours;
         if (executionTime >= 24f) executionTime -= 24f;
 
-        // 2. Prepare Packet
         TileUpdatePacket packet = new TileUpdatePacket
         {
             TileIndex = tileIndex,
@@ -181,19 +316,13 @@ public class GridManager : NetworkBehaviour
             Mask = mask
         };
 
-        // 3. Send Network Packet (Sends to Clients AND Host)
         ScheduleGridUpdateClientRpc(executionTime, packet);
     }
 
-    /// <summary>
-    /// Schedules an update to apply exactly at a specific Time of Day (e.g. 18.0f).
-    /// The Server will wait until the correct moment (TargetTime - Lookahead) to broadcast this.
-    /// </summary>
     public void ScheduleTileUpdateAtGameTime(int tileIndex, TileData newData, TileUpdateFlags mask, float targetTimeOfDay)
     {
         if (!IsServer) return;
 
-        // Add to the waiting list. The server loop will pick it up when it's time.
         _serverScheduledUpdates.Add(new ScheduledServerUpdate
         {
             TileIndex = tileIndex,
@@ -210,21 +339,15 @@ public class GridManager : NetworkBehaviour
         float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
         float lookahead = scheduleLookaheadHours;
 
-        // Iterate backwards so we can remove items efficiently
         for (int i = _serverScheduledUpdates.Count - 1; i >= 0; i--)
         {
             ScheduledServerUpdate update = _serverScheduledUpdates[i];
             
-            // Calculate when we need to pull the trigger (send the RPC)
-            // Trigger Time = Target Time - Lookahead
-            // e.g. Target 18:00, Lookahead 0.5 -> Trigger at 17:30
             float triggerTime = update.TargetTimeOfDay - lookahead;
             if (triggerTime < 0) triggerTime += 24f;
 
-            // Check if we crossed the trigger time in this frame
             if (WasTimeCrossed(_prevFrameTime, currentTime, triggerTime))
             {
-                // Execute the standard update (which adds the lookahead back, landing exactly on TargetTime)
                 ScheduleTileUpdate(update.TileIndex, update.Data, update.Mask);
                 _serverScheduledUpdates.RemoveAt(i);
             }
@@ -235,14 +358,8 @@ public class GridManager : NetworkBehaviour
 
     private bool WasTimeCrossed(float prev, float curr, float target)
     {
-        if (prev < curr) // Normal time flow
-        {
-            return prev < target && target <= curr;
-        }
-        else // Day wrap (e.g. 23.9 -> 0.1)
-        {
-            return target > prev || target <= curr;
-        }
+        if (prev < curr) return prev < target && target <= curr;
+        else return target > prev || target <= curr;
     }
 
     [Rpc(SendTo.Server)]
@@ -260,6 +377,7 @@ public class GridManager : NetworkBehaviour
         if (fullState.Length != _gridData.Length)
         {
             Debug.LogError($"Grid Size Mismatch! Server: {fullState.Length}, Client: {_gridData.Length}");
+            // Optional: Could trigger a texture reload here if we tracked current preset index
             return;
         }
 
@@ -270,7 +388,6 @@ public class GridManager : NetworkBehaviour
     [Rpc(SendTo.ClientsAndHost)]
     private void ScheduleGridUpdateClientRpc(float executionGameTime, TileUpdatePacket packet)
     {
-        // Both Clients and Host execute this.
         _pendingUpdates.Add(new PendingGridUpdate
         {
             ExecutionTime = executionGameTime,
@@ -284,19 +401,14 @@ public class GridManager : NetworkBehaviour
     {
         if (_pendingUpdates.Count == 0) return;
 
-        // On Host, VisualTime == NetTimeOfDay. On Client, it is Interpolated.
         float visualTime = SimulationTimeManager.Instance.VisualTime;
         
         while(_pendingUpdates.Count > 0)
         {
             var nextUpdate = _pendingUpdates[0];
-
             bool isTime = visualTime >= nextUpdate.ExecutionTime;
             
-            // Handle day wrap (Packet is for 23.9, we are at 0.1 -> we missed it, apply now)
             if (visualTime < 1f && nextUpdate.ExecutionTime > 23f) isTime = true;
-            
-            // Prevent premature firing on day wrap (Packet is for 0.1, we are at 23.9 -> wait)
             if (visualTime > 23f && nextUpdate.ExecutionTime < 1f) isTime = false;
 
             if (isTime) 
@@ -304,10 +416,7 @@ public class GridManager : NetworkBehaviour
                  ApplyUpdate(nextUpdate.Packet);
                 _pendingUpdates.RemoveAt(0);
             }
-            else
-            {
-                break;
-            }
+            else break;
         }
     }
 
@@ -331,46 +440,25 @@ public class GridManager : NetworkBehaviour
         _gridData[packet.TileIndex] = current;
     }
     #endregion
-    #region bus stops
+
+    #region Bus Stops and Helpers
 
     public void RegisterStop(BusStop stop)
     {
         if (stop == null) return;
-
-        // Find which tile this stop belongs to
         if (WorldToGrid(stop.transform.position, out int x, out int y))
         {
             int index = GetIndex(x, y);
-
-            if (!_tileStops.ContainsKey(index))
-            {
-                _tileStops[index] = new List<BusStop>();
-            }
-
-            if (!_tileStops[index].Contains(stop))
-            {
-                _tileStops[index].Add(stop);
-                // Debug.Log($"Grid: Registered Stop '{stop.name}' to Tile {x},{y} (Index {index})");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"Grid: Stop '{stop.name}' is outside the grid bounds!");
+            if (!_tileStops.ContainsKey(index)) _tileStops[index] = new List<BusStop>();
+            if (!_tileStops[index].Contains(stop)) _tileStops[index].Add(stop);
         }
     }
 
     public List<BusStop> GetStopsInTile(int index)
     {
-        if (_tileStops.TryGetValue(index, out List<BusStop> stops))
-        {
-            return stops;
-        }
+        if (_tileStops.TryGetValue(index, out List<BusStop> stops)) return stops;
         return null;
     }
-
-    #endregion
-
-    #region Helpers and Gizmos
 
     public TileData GetTileData(int x, int y)
     {
@@ -412,14 +500,6 @@ public class GridManager : NetworkBehaviour
             return Mathf.Lerp(1.0f, 0.2f, traffic / 100f);
         }
         return 1.0f;
-    }
-
-    public void SetTileData(int index, TileData newData)
-    {
-        if (index >= 0 && index < _gridData.Length)
-        {
-            _gridData[index] = newData;
-        }
     }
     
 #if UNITY_EDITOR
@@ -479,15 +559,16 @@ public class GridManager : NetworkBehaviour
                 Vector3 pos = GridToWorld(x,y);
                 
                 string label = $"T:{_gridData[i].Traffic}\nP:{_gridData[i].Population}\nD:{_gridData[i].Demand}";
-                Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
+                
+#if UNITY_EDITOR
+                UnityEditor.Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
+#endif
 
                 if (_gridData[i].Traffic > 0)
                 {
                     Gizmos.color = new Color(1f, 0f, 0f, 0.4f); 
                     float h = (_gridData[i].Traffic / 100f) * 20f; 
                     Gizmos.DrawCube(pos + Vector3.up * (h/2), new Vector3(_cellSize.x * 0.8f, h, _cellSize.y * 0.8f));
-                    
-                    Gizmos.color = Color.red;
                     Gizmos.DrawWireCube(pos + Vector3.up * (h/2), new Vector3(_cellSize.x * 0.8f, h, _cellSize.y * 0.8f));
                 }
             }
