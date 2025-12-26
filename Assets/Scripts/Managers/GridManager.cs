@@ -19,10 +19,7 @@ public class GridManager : NetworkBehaviour
     [Min(1)] public int resolutionX = 20;
     [Min(1)] public int resolutionZ = 20;
 
-    [Header("Simulation Timing")]
-    [Tooltip("How often (in Game Minutes) the simulation calculates changes.")]
-    public float simulationStepMinutes = 15f; 
-
+    [Header("Network Config")]
     [Tooltip("How far in the future (Game Hours) to schedule the update on clients.")]
     public float scheduleLookaheadHours = 0.5f; 
 
@@ -32,26 +29,12 @@ public class GridManager : NetworkBehaviour
     public Color gridColor = new Color(0, 1, 0, 0.3f);
     public float gizmoHeight = 0.5f;
 
-    // Data State
     private TileData[] _gridData;
     private Vector2 _cellSize;
     private Vector3 _gridOrigin;
     
-    // Update Buffer
     private List<PendingGridUpdate> _pendingUpdates = new List<PendingGridUpdate>();
     private Dictionary<int, List<BusStop>> _tileStops = new Dictionary<int, List<BusStop>>();
-
-    // Server State
-    private float _lastSimGameTime;
-    private struct ScheduledServerUpdate
-    {
-        public int TileIndex;
-        public TileData Data;
-        public TileUpdateFlags Mask;
-        public float TargetTimeOfDay;
-    }
-    private List<ScheduledServerUpdate> _serverScheduledUpdates = new List<ScheduledServerUpdate>();
-    private float _prevFrameTime;
 
     public int TotalTiles => resolutionX * resolutionZ;
     public Vector3 Origin => _gridOrigin;
@@ -67,8 +50,6 @@ public class GridManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        
-        // Ensure data array is allocated before we try to fill it
         InitializeGridStructure();
     }
 
@@ -91,7 +72,7 @@ public class GridManager : NetworkBehaviour
 
         _gridData = new TileData[resolutionX * resolutionZ];
         
-        // Initial Defaults (Fallback)
+        // Initial Defaults
         for(int i=0; i<_gridData.Length; i++)
         {
             _gridData[i] = new TileData
@@ -110,10 +91,7 @@ public class GridManager : NetworkBehaviour
         if (IsServer)
         {
             Debug.Log($"Grid: Initialized as Server/Host. Total Tiles: {TotalTiles}");
-            _lastSimGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-            _prevFrameTime = _lastSimGameTime;
-
-            // Load default preset if configured
+            
             if (_loadDefaultPresetOnStart && _availablePresets.Count > 0)
             {
                 LoadPreset(0);
@@ -127,20 +105,16 @@ public class GridManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer) 
+        // Both Client and Server (Host/Dedicated) process the update buffer
+        // to ensure the simulation state changes at the exact same 'Visual Time'.
+        if (IsClient || IsServer) 
         {
-            ProcessServerScheduledUpdates();
-            ServerSimulationLoop();
+            ClientUpdateLoop();
         }
-        
-        if (IsClient || IsServer) ClientUpdateLoop();
     }
 
-    #region Preset Loading & Texture Logic
+    #region Preset Loading
 
-    /// <summary>
-    /// SERVER ONLY: Loads a preset by index and replicates to all clients.
-    /// </summary>
     public void LoadPreset(int presetIndex)
     {
         if (!IsServer) return;
@@ -152,21 +126,17 @@ public class GridManager : NetworkBehaviour
 
         Debug.Log($"Grid: Server loading preset {presetIndex}...");
         
-        // 1. Load locally
         ApplyPresetLocal(presetIndex);
-
-        // 2. Tell clients to load the same preset
         LoadPresetClientRpc(presetIndex);
     }
 
     [Rpc(SendTo.ClientsAndHost)]
     private void LoadPresetClientRpc(int presetIndex)
     {
-        // Host has already loaded it in the direct call, check to avoid double load
         if (IsServer && !IsHost) return; 
         if (IsHost && IsServer) return;  
         
-        if (!IsServer) // Clients only
+        if (!IsServer)
         {
             ApplyPresetLocal(presetIndex);
         }
@@ -174,152 +144,14 @@ public class GridManager : NetworkBehaviour
 
     private void ApplyPresetLocal(int presetIndex)
     {
-        if (presetIndex < 0 || presetIndex >= _availablePresets.Count) return;
-        
-        GridMapPreset preset = _availablePresets[presetIndex];
-        if (preset == null) return;
-
-        foreach (var layer in preset.Layers)
-        {
-            ApplyTextureLayer(layer);
-        }
-        
+        var preset = _availablePresets[presetIndex];
+        GridInitializer.ApplyPreset(_gridData, preset, resolutionX, resolutionZ);
         Debug.Log($"Grid: Loaded Preset '{preset.name}'");
     }
 
-    private void ApplyTextureLayer(GridTextureLayer layer)
-    {
-        if (layer.Texture == null) return;
-        
-        Texture2D tex = layer.Texture;
-        Color32[] pixels = tex.GetPixels32(); 
-        int texW = tex.width;
-        int texH = tex.height;
-
-        // -----------------------------------------------------------------------
-        // PASS 1: Calculate Total Density Weights (For Distribution Mappings Only)
-        // -----------------------------------------------------------------------
-        Dictionary<int, float> distributionSums = new Dictionary<int, float>();
-        
-        // FIX: Create a separate list of keys to iterate over, so we don't break the dictionary loop
-        List<int> activeIndices = new List<int>();
-
-        if (layer.DistributionMappings != null && layer.DistributionMappings.Count > 0)
-        {
-            for (int i = 0; i < layer.DistributionMappings.Count; i++)
-            {
-                if (layer.DistributionMappings[i].Enabled)
-                {
-                    distributionSums[i] = 0f;
-                    activeIndices.Add(i);
-                }
-            }
-
-            // Only loop pixels if we actually have distributions to calculate
-            if (activeIndices.Count > 0)
-            {
-                for (int y = 0; y < resolutionZ; y++)
-                {
-                    for (int x = 0; x < resolutionX; x++)
-                    {
-                        Color32 c = SampleColor(x, y, texW, texH, pixels);
-
-                        // FIX: Iterate over the LIST (activeIndices), while modifying the DICTIONARY (distributionSums)
-                        for (int i = 0; i < activeIndices.Count; i++)
-                        {
-                            int index = activeIndices[i];
-                            var mapping = layer.DistributionMappings[index];
-                            distributionSums[index] += GetChannelValue(c, mapping.SourceChannel);
-                        }
-                    }
-                }
-            }
-        }
-
-        // -----------------------------------------------------------------------
-        // PASS 2: Assign Values (Linear + Distribution)
-        // -----------------------------------------------------------------------
-        for (int y = 0; y < resolutionZ; y++)
-        {
-            for (int x = 0; x < resolutionX; x++)
-            {
-                int gridIndex = (y * resolutionX) + x;
-                TileData data = _gridData[gridIndex];
-                Color32 c = SampleColor(x, y, texW, texH, pixels);
-
-                // A. Apply Linear Mappings (Min/Max)
-                if (layer.LinearMappings != null)
-                {
-                    foreach (var map in layer.LinearMappings)
-                    {
-                        if (!map.Enabled) continue;
-
-                        byte rawVal = GetChannelValue(c, map.SourceChannel);
-                        float t = rawVal / 255f;
-                        float val = Mathf.Lerp(map.MinValue, map.MaxValue, t);
-
-                        ApplyLinearValue(ref data, map.TargetField, val);
-                    }
-                }
-
-                // B. Apply Distribution Mappings (Share of Total)
-                if (layer.DistributionMappings != null)
-                {
-                    for (int i = 0; i < layer.DistributionMappings.Count; i++)
-                    {
-                        var map = layer.DistributionMappings[i];
-                        if (!map.Enabled) continue;
-                        
-                        // If the total weight on the map is 0, we can't distribute, so assign 0.
-                        if (distributionSums.TryGetValue(i, out float totalWeight) && totalWeight > 0)
-                        {
-                            byte rawVal = GetChannelValue(c, map.SourceChannel);
-                            float share = rawVal / totalWeight;
-                            float assignedAmount = share * map.TotalAmount;
-                            
-                            ApplyDistributionValue(ref data, map.TargetField, assignedAmount);
-                        }
-                        else
-                        {
-                            ApplyDistributionValue(ref data, map.TargetField, 0);
-                        }
-                    }
-                }
-
-                // C. Normalize Ratios (Self-Correction)
-                NormalizeRatios(ref data);
-
-                _gridData[gridIndex] = data;
-            }
-        }
-    }
     #endregion
 
-    #region Server Logic
-
-    private void ServerSimulationLoop()
-    {
-        if (SimulationTimeManager.Instance == null) return;
-
-        float currentGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-        
-        float timeDelta = currentGameTime - _lastSimGameTime;
-        if (timeDelta < 0) timeDelta += 24f; // Wrapped around midnight
-
-        float minutesPassed = timeDelta * 60f;
-
-        if (minutesPassed >= simulationStepMinutes)
-        {
-            _lastSimGameTime = currentGameTime;
-            PerformSimulationStep();
-        }
-    }
-
-    private void PerformSimulationStep()
-    {
-        // Future simulation logic will go here.
-        // It should call ScheduleTileUpdate(...) when it decides to change a tile.
-    }
+    #region Data Access & Updates
 
     public void ScheduleTileUpdate(int tileIndex, TileData newData, TileUpdateFlags mask)
     {
@@ -336,72 +168,18 @@ public class GridManager : NetworkBehaviour
         };
 
         ScheduleGridUpdateClientRpc(executionTime, packet);
-    }
 
-    public void ScheduleTileUpdateAtGameTime(int tileIndex, TileData newData, TileUpdateFlags mask, float targetTimeOfDay)
-    {
-        if (!IsServer) return;
-
-        _serverScheduledUpdates.Add(new ScheduledServerUpdate
+        // If this is a Dedicated Server (not a Host), the RPC won't loop back
+        // must schedule it manually so the server state stays in sync with clients.
+        if (!IsHost)
         {
-            TileIndex = tileIndex,
-            Data = newData,
-            Mask = mask,
-            TargetTimeOfDay = targetTimeOfDay
-        });
-    }
-
-    private void ProcessServerScheduledUpdates()
-    {
-        if (SimulationTimeManager.Instance == null) return;
-        
-        float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-        float lookahead = scheduleLookaheadHours;
-
-        for (int i = _serverScheduledUpdates.Count - 1; i >= 0; i--)
-        {
-            ScheduledServerUpdate update = _serverScheduledUpdates[i];
-            
-            float triggerTime = update.TargetTimeOfDay - lookahead;
-            if (triggerTime < 0) triggerTime += 24f;
-
-            if (WasTimeCrossed(_prevFrameTime, currentTime, triggerTime))
+            _pendingUpdates.Add(new PendingGridUpdate
             {
-                ScheduleTileUpdate(update.TileIndex, update.Data, update.Mask);
-                _serverScheduledUpdates.RemoveAt(i);
-            }
+                ExecutionTime = executionTime,
+                Packet = packet
+            });
+            _pendingUpdates.Sort((a, b) => a.ExecutionTime.CompareTo(b.ExecutionTime));
         }
-
-        _prevFrameTime = currentTime;
-    }
-
-    private bool WasTimeCrossed(float prev, float curr, float target)
-    {
-        if (prev < curr) return prev < target && target <= curr;
-        else return target > prev || target <= curr;
-    }
-
-    [Rpc(SendTo.Server)]
-    private void RequestGridStateServerRpc(RpcParams rpcParams = default)
-    {
-        SendFullStateClientRpc(_gridData, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
-    }
-    #endregion
-
-    #region Client and Host Logic
-
-    [Rpc(SendTo.SpecifiedInParams)]
-    private void SendFullStateClientRpc(TileData[] fullState, RpcParams rpcParams = default)
-    {
-        if (fullState.Length != _gridData.Length)
-        {
-            Debug.LogError($"Grid Size Mismatch! Server: {fullState.Length}, Client: {_gridData.Length}");
-            // Optional: Could trigger a texture reload here if we tracked current preset index
-            return;
-        }
-
-        _gridData = fullState;
-        Debug.Log("Grid [Client]: Received Initial Full State from Server.");
     }
 
     [Rpc(SendTo.ClientsAndHost)]
@@ -458,9 +236,33 @@ public class GridManager : NetworkBehaviour
 
         _gridData[packet.TileIndex] = current;
     }
+
     #endregion
 
-    #region Bus Stops and Helpers
+    #region Network Sync
+
+    [Rpc(SendTo.Server)]
+    private void RequestGridStateServerRpc(RpcParams rpcParams = default)
+    {
+        SendFullStateClientRpc(_gridData, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void SendFullStateClientRpc(TileData[] fullState, RpcParams rpcParams = default)
+    {
+        if (fullState.Length != _gridData.Length)
+        {
+            Debug.LogError($"Grid Size Mismatch! Server: {fullState.Length}, Client: {_gridData.Length}");
+            return;
+        }
+
+        _gridData = fullState;
+        Debug.Log("Grid [Client]: Received Initial Full State from Server.");
+    }
+
+    #endregion
+
+    #region Helpers & Gizmos
 
     public void RegisterStop(BusStop stop)
     {
@@ -484,6 +286,8 @@ public class GridManager : NetworkBehaviour
         if (x < 0 || x >= resolutionX || y < 0 || y >= resolutionZ) return default;
         return _gridData[GetIndex(x, y)];
     }
+
+    public TileData GetTileData(int index) => _gridData[index];
 
     public int GetIndex(int x, int y) => (y * resolutionX) + x;
 
@@ -519,75 +323,6 @@ public class GridManager : NetworkBehaviour
             return Mathf.Lerp(1.0f, 0.2f, traffic / 100f);
         }
         return 1.0f;
-    }
-
-    private Color32 SampleColor(int x, int y, int w, int h, Color32[] pixels)
-    {
-        // Samples the center of the grid tile
-        float u = (x + 0.5f) / (float)resolutionX;
-        float v = (y + 0.5f) / (float)resolutionZ;
-        int tx = Mathf.Clamp(Mathf.FloorToInt(u * w), 0, w - 1);
-        int ty = Mathf.Clamp(Mathf.FloorToInt(v * h), 0, h - 1);
-        return pixels[ty * w + tx];
-    }
-
-    private byte GetChannelValue(Color32 c, TextureChannel channel)
-    {
-        switch (channel)
-        {
-            case TextureChannel.Red: return c.r;
-            case TextureChannel.Green: return c.g;
-            case TextureChannel.Blue: return c.b;
-            case TextureChannel.Alpha: return c.a;
-            default: return 0;
-        }
-    }
-
-    private void ApplyLinearValue(ref TileData data, LinearGridTarget target, float val)
-    {
-        switch (target)
-        {
-            case LinearGridTarget.Traffic:          data.Traffic = (byte)Mathf.Clamp(val, 0, 100); break;
-            case LinearGridTarget.Demand:           data.Demand = (byte)Mathf.Clamp(val, 0, 100); break;
-            case LinearGridTarget.ResidentialRatio: data.ResidentialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
-            case LinearGridTarget.CommercialRatio:  data.CommercialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
-            case LinearGridTarget.IndustrialRatio:  data.IndustrialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
-            case LinearGridTarget.EconomicClass:    data.EcoClass = (EconomicClass)Mathf.Clamp(Mathf.RoundToInt(val), 0, 2); break;
-        }
-    }
-
-    private void ApplyDistributionValue(ref TileData data, DistributionGridTarget target, float val)
-    {
-        switch (target)
-        {
-            case DistributionGridTarget.Population: 
-                data.Population = (ushort)Mathf.Clamp(val, 0, 65535); 
-                break;
-        }
-    }
-
-    private void NormalizeRatios(ref TileData data)
-    {
-        int total = data.ResidentialRatio + data.CommercialRatio + data.IndustrialRatio;
-        if (total > 0 && total != 100)
-        {
-            float scale = 100f / total;
-            int r = Mathf.RoundToInt(data.ResidentialRatio * scale);
-            int c = Mathf.RoundToInt(data.CommercialRatio * scale);
-            int i = 100 - r - c;
-            
-            // Safety adjustment to ensure sum is exactly 100
-            if (i < 0) 
-            { 
-                i = 0; 
-                if (r > c) r += (100 - r - c); 
-                else c += (100 - r - c); 
-            }
-
-            data.ResidentialRatio = (byte)r;
-            data.CommercialRatio = (byte)c;
-            data.IndustrialRatio = (byte)i;
-        }
     }
     
 #if UNITY_EDITOR
