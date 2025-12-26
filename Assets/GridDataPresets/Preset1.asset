@@ -12,4 +12,38 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0385f895f17374542863a9371ca7b817, type: 3}
   m_Name: Preset1
   m_EditorClassIdentifier: Assembly-CSharp::GridMapPreset
-  Layers: []
+  Layers:
+  - Texture: {fileID: 2800000, guid: 13e1164d635a9614fb83954810873a85, type: 3}
+    Mappings:
+    - Enabled: 1
+      TargetField: 4
+      SourceChannel: 0
+      MinValue: 0
+      MaxValue: 100
+    - Enabled: 1
+      TargetField: 5
+      SourceChannel: 1
+      MinValue: 0
+      MaxValue: 100
+    - Enabled: 1
+      TargetField: 6
+      SourceChannel: 2
+      MinValue: 0
+      MaxValue: 100
+  - Texture: {fileID: 2800000, guid: f51b5f35dd6a96946a86fa2830ebb818, type: 3}
+    Mappings:
+    - Enabled: 1
+      TargetField: 0
+      SourceChannel: 0
+      MinValue: 0
+      MaxValue: 100
+    - Enabled: 1
+      TargetField: 1
+      SourceChannel: 1
+      MinValue: 500
+      MaxValue: 10000
+    - Enabled: 1
+      TargetField: 6
+      SourceChannel: 2
+      MinValue: 0
+      MaxValue: 10000

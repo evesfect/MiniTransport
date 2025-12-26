@@ -197,36 +197,31 @@ public class GridManager : NetworkBehaviour
         int texW = tex.width;
         int texH = tex.height;
 
+        // Iterate through all grid tiles
         for (int y = 0; y < resolutionZ; y++)
         {
             for (int x = 0; x < resolutionX; x++)
             {
                 int gridIndex = GetIndex(x, y);
+                TileData data = _gridData[gridIndex];
 
-
-                // center of tile
+                // --- SAMPLING LOGIC ---
                 float u = (x + 0.5f) / (float)resolutionX;
                 float v = (y + 0.5f) / (float)resolutionZ;
 
-                // Map UV to Texture Coordinates
                 int tx = Mathf.FloorToInt(u * texW);
                 int ty = Mathf.FloorToInt(v * texH);
-
                 tx = Mathf.Clamp(tx, 0, texW - 1);
                 ty = Mathf.Clamp(ty, 0, texH - 1);
-
 
                 int pixelIndex = ty * texW + tx;
                 Color32 color = pixels[pixelIndex];
 
-                // Apply Mappings
-                TileData data = _gridData[gridIndex];
-                
+                // --- APPLY MAPPINGS ---
                 foreach (var mapping in layer.Mappings)
                 {
                     if (!mapping.Enabled) continue;
 
-                    // 1. Get Value 0-255
                     byte channelValue = 0;
                     switch (mapping.SourceChannel)
                     {
@@ -236,13 +231,9 @@ public class GridManager : NetworkBehaviour
                         case TextureChannel.Alpha: channelValue = color.a; break;
                     }
 
-                    // 2. Normalize to 0-1
                     float t = channelValue / 255f;
-
-                    // 3. Lerp between Min and Max
                     float finalValue = Mathf.Lerp(mapping.MinValue, mapping.MaxValue, t);
 
-                    // 4. Assign to Data
                     switch (mapping.TargetField)
                     {
                         case GridTargetField.Traffic:
@@ -264,12 +255,35 @@ public class GridManager : NetworkBehaviour
                             data.IndustrialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
                             break;
                         case GridTargetField.EconomicClass:
-                            // Round to nearest int for Enum
                             int enumVal = Mathf.RoundToInt(finalValue);
                             data.EcoClass = (EconomicClass)Mathf.Clamp(enumVal, 0, 2);
                             break;
                     }
                 }
+
+                // --- RATIO NORMALIZATION ---
+                // Automatically ensures R + C + I = 100
+                int totalRatio = data.ResidentialRatio + data.CommercialRatio + data.IndustrialRatio;
+                if (totalRatio > 0)
+                {
+                    float scale = 100f / totalRatio;
+
+                    // Round to nearest to minimize error
+                    int r = Mathf.RoundToInt(data.ResidentialRatio * scale);
+                    int c = Mathf.RoundToInt(data.CommercialRatio * scale);
+                    
+                    // Assign remainder to Industrial to ensure perfect sum of 100
+                    // (Handling edge case where r+c > 100 due to rounding)
+                    if (r + c > 100) 
+                    {
+                        if (r > c) r = 100 - c; else c = 100 - r;
+                    }
+
+                    data.ResidentialRatio = (byte)r;
+                    data.CommercialRatio = (byte)c;
+                    data.IndustrialRatio = (byte)(100 - r - c);
+                }
+
                 _gridData[gridIndex] = data;
             }
         }
