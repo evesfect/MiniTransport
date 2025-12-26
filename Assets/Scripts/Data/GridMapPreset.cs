@@ -1,11 +1,10 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-// Enum to select which Grid Data field we are targeting
-public enum GridTargetField
+// Targets that rely on simple 0-1 normalization (Min/Max)
+public enum LinearGridTarget
 {
     Traffic,            // byte (0-100)
-    Population,         // ushort (0-65535)
     Demand,             // byte (0-100)
     ResidentialRatio,   // byte (0-100)
     CommercialRatio,    // byte (0-100)
@@ -13,7 +12,12 @@ public enum GridTargetField
     EconomicClass       // Enum (0, 1, 2)
 }
 
-// Enum for Texture Channels
+// Targets that rely on density distribution (Total Amount)
+public enum DistributionGridTarget
+{
+    Population          // ushort (Accumulated Count)
+}
+
 public enum TextureChannel
 {
     Red,
@@ -23,39 +27,45 @@ public enum TextureChannel
 }
 
 [System.Serializable]
-public struct ChannelMapping
+public struct LinearChannelMapping
 {
-    [Tooltip("Enable to write this value to the grid.")]
     public bool Enabled;
-
-    [Tooltip("The field in TileData to update.")]
-    public GridTargetField TargetField;
-
-    [Tooltip("Which channel of the texture to read from.")]
+    public LinearGridTarget TargetField;
     public TextureChannel SourceChannel;
 
-    [Header("Range Mapping")]
-    [Tooltip("Value when the texture channel is 0.")]
+    [Tooltip("Value when pixel is black (0).")]
     public float MinValue;
-
-    [Tooltip("Value when the texture channel is 255 (Max).")]
+    [Tooltip("Value when pixel is white (255).")]
     public float MaxValue;
+}
+
+[System.Serializable]
+public struct DistributionChannelMapping
+{
+    public bool Enabled;
+    public DistributionGridTarget TargetField;
+    public TextureChannel SourceChannel;
+
+    [Tooltip("The total sum of this value across the ENTIRE grid.")]
+    public int TotalAmount;
 }
 
 [System.Serializable]
 public struct GridTextureLayer
 {
-    [Tooltip("The texture to read data from. Ensure 'Read/Write' is enabled in Import Settings.")]
+    [Tooltip("Input Texture. Read/Write must be enabled.")]
     public Texture2D Texture;
 
-    [Tooltip("List of mappings from this texture's channels to grid data.")]
-    public List<ChannelMapping> Mappings;
+    [Header("Linear Mappings (Intensity -> Value)")]
+    public List<LinearChannelMapping> LinearMappings;
+
+    [Header("Distribution Mappings (Density -> Share of Total)")]
+    public List<DistributionChannelMapping> DistributionMappings;
 }
 
 [CreateAssetMenu(fileName = "NewGridMapPreset", menuName = "Grid Map Preset")]
 public class GridMapPreset : ScriptableObject
 {
-    [Header("Grid Initialization Layers")]
-    [Tooltip("Layers are applied in order. Later layers can overwrite earlier ones.")]
+    [Header("Composition Layers")]
     public List<GridTextureLayer> Layers;
 }

@@ -190,99 +190,104 @@ public class GridManager : NetworkBehaviour
     private void ApplyTextureLayer(GridTextureLayer layer)
     {
         if (layer.Texture == null) return;
-        if (layer.Mappings == null || layer.Mappings.Count == 0) return;
-
+        
         Texture2D tex = layer.Texture;
         Color32[] pixels = tex.GetPixels32(); 
         int texW = tex.width;
         int texH = tex.height;
 
-        // Iterate through all grid tiles
+        // -----------------------------------------------------------------------
+        // PASS 1: Calculate Total Density Weights (For Distribution Mappings Only)
+        // -----------------------------------------------------------------------
+        Dictionary<int, float> distributionSums = new Dictionary<int, float>();
+        
+        // FIX: Create a separate list of keys to iterate over, so we don't break the dictionary loop
+        List<int> activeIndices = new List<int>();
+
+        if (layer.DistributionMappings != null && layer.DistributionMappings.Count > 0)
+        {
+            for (int i = 0; i < layer.DistributionMappings.Count; i++)
+            {
+                if (layer.DistributionMappings[i].Enabled)
+                {
+                    distributionSums[i] = 0f;
+                    activeIndices.Add(i);
+                }
+            }
+
+            // Only loop pixels if we actually have distributions to calculate
+            if (activeIndices.Count > 0)
+            {
+                for (int y = 0; y < resolutionZ; y++)
+                {
+                    for (int x = 0; x < resolutionX; x++)
+                    {
+                        Color32 c = SampleColor(x, y, texW, texH, pixels);
+
+                        // FIX: Iterate over the LIST (activeIndices), while modifying the DICTIONARY (distributionSums)
+                        for (int i = 0; i < activeIndices.Count; i++)
+                        {
+                            int index = activeIndices[i];
+                            var mapping = layer.DistributionMappings[index];
+                            distributionSums[index] += GetChannelValue(c, mapping.SourceChannel);
+                        }
+                    }
+                }
+            }
+        }
+
+        // -----------------------------------------------------------------------
+        // PASS 2: Assign Values (Linear + Distribution)
+        // -----------------------------------------------------------------------
         for (int y = 0; y < resolutionZ; y++)
         {
             for (int x = 0; x < resolutionX; x++)
             {
-                int gridIndex = GetIndex(x, y);
+                int gridIndex = (y * resolutionX) + x;
                 TileData data = _gridData[gridIndex];
+                Color32 c = SampleColor(x, y, texW, texH, pixels);
 
-                // --- SAMPLING LOGIC ---
-                float u = (x + 0.5f) / (float)resolutionX;
-                float v = (y + 0.5f) / (float)resolutionZ;
-
-                int tx = Mathf.FloorToInt(u * texW);
-                int ty = Mathf.FloorToInt(v * texH);
-                tx = Mathf.Clamp(tx, 0, texW - 1);
-                ty = Mathf.Clamp(ty, 0, texH - 1);
-
-                int pixelIndex = ty * texW + tx;
-                Color32 color = pixels[pixelIndex];
-
-                // --- APPLY MAPPINGS ---
-                foreach (var mapping in layer.Mappings)
+                // A. Apply Linear Mappings (Min/Max)
+                if (layer.LinearMappings != null)
                 {
-                    if (!mapping.Enabled) continue;
-
-                    byte channelValue = 0;
-                    switch (mapping.SourceChannel)
+                    foreach (var map in layer.LinearMappings)
                     {
-                        case TextureChannel.Red: channelValue = color.r; break;
-                        case TextureChannel.Green: channelValue = color.g; break;
-                        case TextureChannel.Blue: channelValue = color.b; break;
-                        case TextureChannel.Alpha: channelValue = color.a; break;
-                    }
+                        if (!map.Enabled) continue;
 
-                    float t = channelValue / 255f;
-                    float finalValue = Mathf.Lerp(mapping.MinValue, mapping.MaxValue, t);
+                        byte rawVal = GetChannelValue(c, map.SourceChannel);
+                        float t = rawVal / 255f;
+                        float val = Mathf.Lerp(map.MinValue, map.MaxValue, t);
 
-                    switch (mapping.TargetField)
-                    {
-                        case GridTargetField.Traffic:
-                            data.Traffic = (byte)Mathf.Clamp(finalValue, 0, 100);
-                            break;
-                        case GridTargetField.Population:
-                            data.Population = (ushort)Mathf.Clamp(finalValue, 0, 65535);
-                            break;
-                        case GridTargetField.Demand:
-                            data.Demand = (byte)Mathf.Clamp(finalValue, 0, 100);
-                            break;
-                        case GridTargetField.ResidentialRatio:
-                            data.ResidentialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
-                            break;
-                        case GridTargetField.CommercialRatio:
-                            data.CommercialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
-                            break;
-                        case GridTargetField.IndustrialRatio:
-                            data.IndustrialRatio = (byte)Mathf.Clamp(finalValue, 0, 100);
-                            break;
-                        case GridTargetField.EconomicClass:
-                            int enumVal = Mathf.RoundToInt(finalValue);
-                            data.EcoClass = (EconomicClass)Mathf.Clamp(enumVal, 0, 2);
-                            break;
+                        ApplyLinearValue(ref data, map.TargetField, val);
                     }
                 }
 
-                // --- RATIO NORMALIZATION ---
-                // Automatically ensures R + C + I = 100
-                int totalRatio = data.ResidentialRatio + data.CommercialRatio + data.IndustrialRatio;
-                if (totalRatio > 0)
+                // B. Apply Distribution Mappings (Share of Total)
+                if (layer.DistributionMappings != null)
                 {
-                    float scale = 100f / totalRatio;
-
-                    // Round to nearest to minimize error
-                    int r = Mathf.RoundToInt(data.ResidentialRatio * scale);
-                    int c = Mathf.RoundToInt(data.CommercialRatio * scale);
-                    
-                    // Assign remainder to Industrial to ensure perfect sum of 100
-                    // (Handling edge case where r+c > 100 due to rounding)
-                    if (r + c > 100) 
+                    for (int i = 0; i < layer.DistributionMappings.Count; i++)
                     {
-                        if (r > c) r = 100 - c; else c = 100 - r;
+                        var map = layer.DistributionMappings[i];
+                        if (!map.Enabled) continue;
+                        
+                        // If the total weight on the map is 0, we can't distribute, so assign 0.
+                        if (distributionSums.TryGetValue(i, out float totalWeight) && totalWeight > 0)
+                        {
+                            byte rawVal = GetChannelValue(c, map.SourceChannel);
+                            float share = rawVal / totalWeight;
+                            float assignedAmount = share * map.TotalAmount;
+                            
+                            ApplyDistributionValue(ref data, map.TargetField, assignedAmount);
+                        }
+                        else
+                        {
+                            ApplyDistributionValue(ref data, map.TargetField, 0);
+                        }
                     }
-
-                    data.ResidentialRatio = (byte)r;
-                    data.CommercialRatio = (byte)c;
-                    data.IndustrialRatio = (byte)(100 - r - c);
                 }
+
+                // C. Normalize Ratios (Self-Correction)
+                NormalizeRatios(ref data);
 
                 _gridData[gridIndex] = data;
             }
@@ -515,6 +520,75 @@ public class GridManager : NetworkBehaviour
         }
         return 1.0f;
     }
+
+    private Color32 SampleColor(int x, int y, int w, int h, Color32[] pixels)
+    {
+        // Samples the center of the grid tile
+        float u = (x + 0.5f) / (float)resolutionX;
+        float v = (y + 0.5f) / (float)resolutionZ;
+        int tx = Mathf.Clamp(Mathf.FloorToInt(u * w), 0, w - 1);
+        int ty = Mathf.Clamp(Mathf.FloorToInt(v * h), 0, h - 1);
+        return pixels[ty * w + tx];
+    }
+
+    private byte GetChannelValue(Color32 c, TextureChannel channel)
+    {
+        switch (channel)
+        {
+            case TextureChannel.Red: return c.r;
+            case TextureChannel.Green: return c.g;
+            case TextureChannel.Blue: return c.b;
+            case TextureChannel.Alpha: return c.a;
+            default: return 0;
+        }
+    }
+
+    private void ApplyLinearValue(ref TileData data, LinearGridTarget target, float val)
+    {
+        switch (target)
+        {
+            case LinearGridTarget.Traffic:          data.Traffic = (byte)Mathf.Clamp(val, 0, 100); break;
+            case LinearGridTarget.Demand:           data.Demand = (byte)Mathf.Clamp(val, 0, 100); break;
+            case LinearGridTarget.ResidentialRatio: data.ResidentialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
+            case LinearGridTarget.CommercialRatio:  data.CommercialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
+            case LinearGridTarget.IndustrialRatio:  data.IndustrialRatio = (byte)Mathf.Clamp(val, 0, 100); break;
+            case LinearGridTarget.EconomicClass:    data.EcoClass = (EconomicClass)Mathf.Clamp(Mathf.RoundToInt(val), 0, 2); break;
+        }
+    }
+
+    private void ApplyDistributionValue(ref TileData data, DistributionGridTarget target, float val)
+    {
+        switch (target)
+        {
+            case DistributionGridTarget.Population: 
+                data.Population = (ushort)Mathf.Clamp(val, 0, 65535); 
+                break;
+        }
+    }
+
+    private void NormalizeRatios(ref TileData data)
+    {
+        int total = data.ResidentialRatio + data.CommercialRatio + data.IndustrialRatio;
+        if (total > 0 && total != 100)
+        {
+            float scale = 100f / total;
+            int r = Mathf.RoundToInt(data.ResidentialRatio * scale);
+            int c = Mathf.RoundToInt(data.CommercialRatio * scale);
+            int i = 100 - r - c;
+            
+            // Safety adjustment to ensure sum is exactly 100
+            if (i < 0) 
+            { 
+                i = 0; 
+                if (r > c) r += (100 - r - c); 
+                else c += (100 - r - c); 
+            }
+
+            data.ResidentialRatio = (byte)r;
+            data.CommercialRatio = (byte)c;
+            data.IndustrialRatio = (byte)i;
+        }
+    }
     
 #if UNITY_EDITOR
     private void OnDrawGizmos()
@@ -577,14 +651,6 @@ public class GridManager : NetworkBehaviour
 #if UNITY_EDITOR
                 UnityEditor.Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
 #endif
-
-                if (_gridData[i].Traffic > 0)
-                {
-                    Gizmos.color = new Color(1f, 0f, 0f, 0.4f); 
-                    float h = (_gridData[i].Traffic / 100f) * 20f; 
-                    Gizmos.DrawCube(pos + Vector3.up * (h/2), new Vector3(_cellSize.x * 0.8f, h, _cellSize.y * 0.8f));
-                    Gizmos.DrawWireCube(pos + Vector3.up * (h/2), new Vector3(_cellSize.x * 0.8f, h, _cellSize.y * 0.8f));
-                }
             }
         }
     }
