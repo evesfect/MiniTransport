@@ -163,22 +163,41 @@ public class GridDebugger : MonoBehaviour
         {
             foreach (var stop in stops)
             {
-                GUILayout.BeginHorizontal();
-                // Accessing name directly since we have the reference
-                GUILayout.Label($"🚏 {stop.name}"); 
+                GUILayout.BeginVertical(GUI.skin.box);
                 
+                GUILayout.BeginHorizontal();
+                GUILayout.Label($"🚏 {stop.name}"); 
                 if (GUILayout.Button("Go", GUILayout.Width(30)))
                 {
                     FocusCamera(stop.transform.position);
                 }
                 GUILayout.EndHorizontal();
+
+                // --- Passenger Info ---
+                if (PassengerManager.Instance != null)
+                {
+                    int total = PassengerManager.Instance.GetTotalWaitingCount(stop.stopID);
+                    GUILayout.Label($"Waiting: {total}");
+
+                    // Optional: Show breakdown
+                    /*
+                    var groups = PassengerManager.Instance.GetPassengersAtStop(stop.stopID);
+                    if (groups != null)
+                    {
+                        foreach(var g in groups)
+                            GUILayout.Label($"   -> To Tile {g.DestinationTileIndex}: {g.PassengerCount}");
+                    }
+                    */
+                }
+                
+                GUILayout.EndVertical();
             }
         }
         else
         {
             GUILayout.Label("(None)");
         }
-    }   
+    }  
 
     private void DrawModifySection()
     {
