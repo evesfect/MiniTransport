@@ -1,17 +1,14 @@
 <ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
     <Style src="project://database/Assets/UI/Styles/HudStyles.uss?fileID=7433441132597879392&amp;guid=e098907893cf0274890d93ead4593cdb&amp;type=3#HudStyles" />
     <ui:VisualElement name="Root" style="flex-grow: 1; justify-content: space-between; picking-mode: Ignore;">
-        
         <ui:VisualElement name="TopContainer" style="flex-direction: row; align-items: center; justify-content: flex-start; padding: 8px; picking-mode: Ignore;">
-            <ui:Button name="BtnInspection" class="inspection-btn" tooltip="Inspection Mode" />
-            <ui:Button name="BtnManagement" class="management-btn" tooltip="Management Panels" />
+            <ui:Button name="BtnInspection" tooltip="Inspection Mode" class="inspection-btn" />
+            <ui:Button name="BtnManagement" tooltip="Management Panels" class="management-btn" />
         </ui:VisualElement>
-
         <ui:VisualElement name="CenterContainer" style="flex-grow: 1; flex-direction: row; justify-content: space-between; picking-mode: Ignore;">
             <ui:VisualElement name="LeftSidebar" style="picking-mode: Ignore;" />
             <ui:VisualElement name="RightSidebar" style="picking-mode: Ignore;" />
         </ui:VisualElement>
-
         <ui:VisualElement name="BottomContainer" style="flex-direction: row; justify-content: flex-end; align-items: flex-end; padding: 8px; picking-mode: Ignore;">
             <ui:VisualElement name="TimerWidget" class="stat-box" style="width: 370px;">
                 <ui:VisualElement name="Icon" class="icon-time" style="flex-grow: 1;" />
@@ -23,20 +20,143 @@
                 <ui:Button text="10x" name="Btn10x" class="speed-btn" />
             </ui:VisualElement>
         </ui:VisualElement>
-
         <ui:VisualElement name="InspectionDropdown" class="dropdown-panel">
             <ui:ScrollView mode="Vertical">
                 <ui:Button text="Routes" name="BtnToggleRoutes" class="menu-item" style="background-image: url(&quot;project://database/Assets/UI/Sprites/routes.png?fileID=2800000&amp;guid=2b4798b808ec8cc41a5e862ea1bfa1a6&amp;type=3#routes&quot;);" />
                 <ui:Button text="Fleet" name="BtnToggleFleets" class="menu-item" style="background-image: url(&quot;project://database/Assets/UI/Sprites/bus.png?fileID=2800000&amp;guid=58bf50a564a3a9f4c979217e3b465199&amp;type=3#bus&quot;);" />
             </ui:ScrollView>
         </ui:VisualElement>
-
         <ui:VisualElement name="ManagementDropdown" class="dropdown-panel">
             <ui:ScrollView mode="Vertical">
+                <ui:Button text="Bus Stops" name="BtnOpenBusStops" class="menu-item" />
                 <ui:Button text="Inventory" name="BtnOpenInventory" class="menu-item" />
                 <ui:Button text="Depot" name="BtnOpenDepot" class="menu-item" />
             </ui:ScrollView>
         </ui:VisualElement>
-
+        <ui:VisualElement name="BusStopsPanel" class="floating-panel" style="display: flex; left: 300px; top: 200px; width: 500px; height: 350px;">
+            <ui:VisualElement class="panel-header">
+                <ui:Label text="Bus Stops" class="panel-title" style="margin-top: -2px; padding-left: 2px;" />
+                <ui:Button name="BtnClosePanel" class="close-btn icon-close" />
+            </ui:VisualElement>
+            <ui:VisualElement class="panel-content" style="flex-direction: row; padding: 0; overflow: hidden;">
+                <ui:VisualElement class="data-column">
+                    <ui:VisualElement class="column-header">
+                        <ui:Label text="Waiting" class="header-text" />
+                        <ui:Button name="BtnSortWaiting" class="sort-btn icon-sort-desc" />
+                    </ui:VisualElement>
+                    <ui:ScrollView name="ScrollWaiting" class="data-scroll">
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Central Station" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="142" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Very Long Bus Stop Name That Should Truncate" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="85" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="University" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="12" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="West Side" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="34" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="East End" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="5" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="North Gate" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="67" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="South Park" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="89" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Industrial Zone" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="120" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Harbor View" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="45" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Old Town" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="12" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="New City" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="99" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Suburbs A" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="23" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Suburbs B" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="11" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Forest Edge" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="4" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Lake Side" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="78" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Mountain Top" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="0" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Valley Deep" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="150" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="River Bend" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="32" class="item-count" />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                </ui:VisualElement>
+                <ui:VisualElement style="width: 1px; background-color: rgba(255, 255, 255, 0.1); margin-top: 4px; margin-bottom: 4px;" />
+                <ui:VisualElement class="data-column">
+                    <ui:VisualElement class="column-header">
+                        <ui:Label text="Onboarded (today)" class="header-text" />
+                        <ui:Button name="BtnSortBoarded" class="sort-btn icon-sort-desc" />
+                    </ui:VisualElement>
+                    <ui:ScrollView name="ScrollBoarded" class="data-scroll">
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Central Station" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="1,204" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Airport Terminal" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="890" class="item-count" />
+                        </ui:VisualElement>
+                    </ui:ScrollView>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

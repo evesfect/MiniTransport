@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -10,25 +11,37 @@ public class GameHUDController : MonoBehaviour
     private Label _timeLabel;
     private Button _btnPause, _btn1x, _btn3x, _btn10x;
 
-    // Inspection Elements (Existing)
+    // Inspection Elements
     private Button _btnInspection;
-    private VisualElement _inspectionDropdown; // Renamed from _dropdownPanel for clarity
+    private VisualElement _inspectionDropdown;
     private Button _btnToggleRoutes;
     private Button _btnToggleFleets;
 
-    // Management Elements (New)
+    // Management Elements
     private Button _btnManagement;
     private VisualElement _managementDropdown;
-    // Add references to new buttons inside the management dropdown here
-    // private Button _btnInventory; 
+    private Button _btnBusStops;
+
+    // BusStopPanel
+    private VisualElement _busStopsPanel;
+    private Button _btnSortWaiting;
+    private Button _btnSortBoarded;
+
+    private ScrollView _scrollWaiting;
+    private ScrollView _scrollBoarded;
+
+    private bool _sortWaitingAsc = false;
+    private bool _sortBoardedAsc = false;
 
     private const string SelectedClassName = "selected";
     private const string ActiveClassName = "active"; 
 
     private bool _isInspectionOpen = false;
-    private bool _isManagementOpen = false; // New state
+    private bool _isManagementOpen = false;
     private bool _isRoutesVisible = false;
     private bool _isFleetsVisible = false;
+
+
 
     private void OnEnable()
     {
@@ -50,9 +63,20 @@ public class GameHUDController : MonoBehaviour
         _btnToggleRoutes = root.Q<Button>("BtnToggleRoutes");
         _btnToggleFleets = root.Q<Button>("BtnToggleFleets");
 
-        // --- Query Management Elements (New) ---
+        // --- Query Management Elements ---
         _btnManagement = root.Q<Button>("BtnManagement");
         _managementDropdown = root.Q<VisualElement>("ManagementDropdown");
+        
+        // Query Bus Stops Button
+        _btnBusStops = root.Q<Button>("BtnOpenBusStops");
+
+        // Query Bus Stops Panel + Elements
+        _busStopsPanel = root.Q<VisualElement>("BusStopsPanel");
+        _scrollWaiting = root.Q<ScrollView>("ScrollWaiting");
+        _scrollBoarded = root.Q<ScrollView>("ScrollBoarded");
+        _btnSortWaiting = root.Q<Button>("BtnSortWaiting");
+        _btnSortBoarded = root.Q<Button>("BtnSortBoarded");
+        SetupPanel(_busStopsPanel);
 
         // --- Bind Events ---
         if (_btnPause != null) _btnPause.clicked += () => SetMultiplier(0f);
@@ -64,8 +88,13 @@ public class GameHUDController : MonoBehaviour
         if (_btnToggleRoutes != null) _btnToggleRoutes.clicked += ToggleRoutes;
         if (_btnToggleFleets != null) _btnToggleFleets.clicked += ToggleFleets;
 
-        // Bind New Management Button
         if (_btnManagement != null) _btnManagement.clicked += ToggleManagementMenu;
+        if (_btnBusStops != null) _btnBusStops.clicked += () => OpenPanel(_busStopsPanel);
+        if (_btnSortWaiting != null)
+            _btnSortWaiting.clicked += () => ToggleSort(ref _sortWaitingAsc, _btnSortWaiting, _scrollWaiting);
+        
+        if (_btnSortBoarded != null) 
+            _btnSortBoarded.clicked += () => ToggleSort(ref _sortBoardedAsc, _btnSortBoarded, _scrollBoarded);
     }
 
     private void Update()
@@ -87,20 +116,14 @@ public class GameHUDController : MonoBehaviour
     private void ToggleInspectionMenu()
     {
         _isInspectionOpen = !_isInspectionOpen;
-        
-        // Close other menus if open
         if (_isInspectionOpen) CloseManagementMenu();
-
         UpdateMenuState(_btnInspection, _inspectionDropdown, _isInspectionOpen);
     }
 
     private void ToggleManagementMenu()
     {
         _isManagementOpen = !_isManagementOpen;
-
-        // Close other menus if open
         if (_isManagementOpen) CloseInspectionMenu();
-
         UpdateMenuState(_btnManagement, _managementDropdown, _isManagementOpen);
     }
 
@@ -118,11 +141,7 @@ public class GameHUDController : MonoBehaviour
 
     private void UpdateMenuState(Button btn, VisualElement panel, bool isOpen)
     {
-        if (panel != null)
-        {
-            panel.style.display = isOpen ? DisplayStyle.Flex : DisplayStyle.None;
-        }
-
+        if (panel != null) panel.style.display = isOpen ? DisplayStyle.Flex : DisplayStyle.None;
         if (btn != null)
         {
             if (isOpen) btn.AddToClassList(ActiveClassName);
@@ -130,7 +149,6 @@ public class GameHUDController : MonoBehaviour
         }
     }
 
-    // Refactored to be generic
     private void PositionDropdown(Button targetBtn, VisualElement targetPanel)
     {
         if (targetBtn == null || targetPanel == null) return;
@@ -144,17 +162,8 @@ public class GameHUDController : MonoBehaviour
         float finalLeft = btnRect.x;
         float finalTop = btnRect.y + btnRect.height + 5f; 
 
-        // Smart Check: Right Edge
-        if (finalLeft + panelWidth > screenWidth)
-        {
-            finalLeft = btnRect.x + btnRect.width - panelWidth;
-        }
-
-        // Smart Check: Bottom Edge
-        if (finalTop + panelHeight > screenHeight)
-        {
-            finalTop = btnRect.y - panelHeight - 5f;
-        }
+        if (finalLeft + panelWidth > screenWidth) finalLeft = btnRect.x + btnRect.width - panelWidth;
+        if (finalTop + panelHeight > screenHeight) finalTop = btnRect.y - panelHeight - 5f;
 
         targetPanel.style.left = finalLeft;
         targetPanel.style.top = finalTop;
@@ -199,5 +208,134 @@ public class GameHUDController : MonoBehaviour
         else if (Mathf.Approximately(currentMultiplier, 1f)) _btn1x.AddToClassList(SelectedClassName);
         else if (Mathf.Approximately(currentMultiplier, 3f)) _btn3x.AddToClassList(SelectedClassName);
         else if (Mathf.Approximately(currentMultiplier, 10f)) _btn10x.AddToClassList(SelectedClassName);
+    }
+
+    // --- Panel Logic ---
+
+    private void SetupPanel(VisualElement panel)
+    {
+        if (panel == null) return;
+
+        // Setup Close Button
+        var btnClose = panel.Q<Button>(className: "close-btn");
+        if (btnClose != null)
+        {
+            btnClose.clicked += () => panel.style.display = DisplayStyle.None;
+        }
+
+        // Setup Dragging
+        var header = panel.Q<VisualElement>(className: "panel-header");
+        if (header != null)
+        {
+            new PanelDragger(panel, header);
+        }
+    }
+
+    private void OpenPanel(VisualElement panel)
+    {
+        if (panel == null) return;
+        panel.style.display = DisplayStyle.Flex;
+        panel.BringToFront();
+        CloseManagementMenu();
+    }
+
+    private void ToggleSort(ref bool isAscending, Button btn, ScrollView scroll)
+    {
+        isAscending = !isAscending;
+
+        // 1. Visual Update
+        if (isAscending)
+        {
+            btn.RemoveFromClassList("icon-sort-desc");
+            btn.AddToClassList("icon-sort-asc");
+        }
+        else
+        {
+            btn.RemoveFromClassList("icon-sort-asc");
+            btn.AddToClassList("icon-sort-desc");
+        }
+
+        // 2. Sorting Logic
+        if (scroll != null)
+        {
+            SortList(scroll, isAscending);
+        }
+    }
+    private void SortList(ScrollView scroll, bool ascending)
+    {
+        // Get all "list-item" children
+        // contentContainer is the internal element of ScrollView that holds the items
+        var items = scroll.contentContainer.Children().ToList();
+
+        items.Sort((a, b) => 
+        {
+            // Find the count labels inside the items
+            var labelA = a.Q<Label>(className: "item-count");
+            var labelB = b.Q<Label>(className: "item-count");
+
+            int valA = ParseCount(labelA?.text);
+            int valB = ParseCount(labelB?.text);
+
+            return ascending ? valA.CompareTo(valB) : valB.CompareTo(valA);
+        });
+
+        // Clear and Re-add in new order
+        scroll.contentContainer.Clear();
+        foreach (var item in items)
+        {
+            scroll.contentContainer.Add(item);
+        }
+    }
+
+    private int ParseCount(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 0;
+        
+        // Remove commas (e.g. "1,200" -> "1200") to parse correctly
+        string cleanText = text.Replace(",", "").Trim();
+        
+        if (int.TryParse(cleanText, out int result))
+        {
+            return result;
+        }
+        return 0;
+    }
+}
+
+// --- Panel Dragger Class ---
+public class PanelDragger
+{
+    private readonly VisualElement _target;
+    private readonly VisualElement _handle;
+    private bool _isDragging;
+    private Vector2 _startMousePosition;
+    private Vector2 _startElementPosition;
+
+    public PanelDragger(VisualElement target, VisualElement handle)
+    {
+        _target = target;
+        _handle = handle;
+
+        _handle.RegisterCallback<PointerDownEvent>(evt => {
+            if (evt.button != 0) return;
+            _isDragging = true;
+            _handle.CapturePointer(evt.pointerId);
+            _startMousePosition = evt.position;
+            _startElementPosition = new Vector2(_target.resolvedStyle.left, _target.resolvedStyle.top);
+            evt.StopPropagation();
+        });
+
+        _handle.RegisterCallback<PointerMoveEvent>(evt => {
+            if (!_isDragging || !_handle.HasPointerCapture(evt.pointerId)) return;
+            Vector2 diff = (Vector2)evt.position - _startMousePosition;
+            _target.style.left = _startElementPosition.x + diff.x;
+            _target.style.top = _startElementPosition.y + diff.y;
+        });
+
+        _handle.RegisterCallback<PointerUpEvent>(evt => {
+            if (!_isDragging) return;
+            _isDragging = false;
+            _handle.ReleasePointer(evt.pointerId);
+        });
     }
 }

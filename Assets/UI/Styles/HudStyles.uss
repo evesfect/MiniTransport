@@ -5,6 +5,7 @@
     --color-btn-hover: rgba(119, 119, 119, 0.9);
     --color-btn-pressed: rgba(153, 153, 153, 0.9);
     --color-selected-green: rgba(111, 179, 114, 0.29);
+    --color-highlight: rgb(255, 255, 255);
     --text-color-white: rgb(255, 255, 255);
     --border-radius: 4px;
 }
@@ -163,4 +164,282 @@
 .menu-item.active {
     background-color: var(--color-selected-green);
     color: white;
+}
+
+.floating-panel {
+    position: absolute;
+    min-width: 250px;
+    min-height: 150px;
+    background-color: var(--color-panel-bg);
+    border-radius: var(--border-radius);
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.panel-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    height: 18px;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-top-left-radius: var(--border-radius);
+    border-top-right-radius: var(--border-radius);
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+    padding-left: 8px;
+    padding-right: 4px;
+}
+
+.panel-title {
+    color: var(--text-color-white);
+    -unity-font-style: bold;
+    font-size: 11px;
+    margin-top: -7px;
+}
+
+.panel-content {
+    flex-grow: 1;
+    padding: 0;
+}
+
+.icon-close {
+    background-image: url("project://database/Assets/UI/Sprites/close.png?fileID=2800000&guid=9a60d040eb6317c42b842b66bd06876c&type=3#close");
+}
+
+.icon-sort-desc {
+    background-image: url("project://database/Assets/UI/Sprites/icon-sort-descend.png?fileID=2800000&guid=b4dcd59f84ed1e445ab05de4db24ee82&type=3#icon-sort-descend");
+}
+
+.icon-sort-asc {
+    background-image: url("project://database/Assets/UI/Sprites/icon-sort-ascend.png?fileID=2800000&guid=f1fddd97aea524043a95ecc39f0b5645&type=3#icon-sort-ascend");
+}
+
+.icon-eye {
+    background-image: url("project://database/Assets/UI/Sprites/pin.png?fileID=2800000&guid=ce1650a4e778695428fac36be3a01e76&type=3#pin");
+}
+
+.close-btn {
+    /* 1. Dimensions */
+    width: 16px;
+    height: 16px;
+    
+    /* 2. FLEXBOX FIX: Prevent the header from stretching or growing this button */
+    flex-shrink: 0;
+    flex-grow: 0;
+    align-self: center; /* Ensure it stays centered vertically in the header */
+
+    /* 3. RESET PADDING: Removes the "chunky" area around the icon */
+    padding: 0;
+    margin: 0;
+    border-width: 0;
+    
+    /* 4. Visuals */
+    background-color: transparent;
+    -unity-background-scale-mode: scale-to-fit;
+    background-position: center;
+    
+    /* Default Tint */
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0.6);
+    
+    /* Initialize Scale for transition */
+    scale: 1 1;
+    
+    transition-property: -unity-background-image-tint-color, scale;
+    transition-duration: 0.1s;
+}
+
+.close-btn:hover {
+    background-color: transparent;
+    -unity-background-image-tint-color: var(--color-highlight);
+    scale: 1.1 1.1;
+}
+
+.close-btn:active {
+    -unity-background-image-tint-color: rgb(200, 50, 50);
+}
+
+.sort-btn {
+    width: 16px;
+    height: 16px;
+    background-color: transparent;
+    border-width: 0;
+    -unity-background-scale-mode: scale-and-crop;
+    background-position: center;
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0.6);
+    transition-property: -unity-background-image-tint-color;
+    transition-duration: 0.1s;
+    background-size: 14px 14px;
+}
+
+.sort-btn:hover {
+    background-color: transparent;
+    -unity-background-image-tint-color: var(--color-highlight);
+}
+
+.sort-btn:active {
+    -unity-background-image-tint-color: var(--color-selected-green);
+}
+
+.data-column {
+    flex-grow: 1;
+    width: 50%;
+    flex-direction: column;
+}
+
+.column-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 0 8px;
+    height: 32px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.header-text {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-left;
+}
+
+.data-scroll {
+    flex-grow: 1;
+    padding: 4px;
+}
+
+.list-item {
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 8px;
+    height: 28px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(255, 255, 255, 0.03);
+}
+
+.list-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.item-name {
+    color: var(--text-color-white);
+    font-size: 13px;
+    -unity-text-align: middle-left;
+    flex-grow: 1;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 8px;
+}
+
+.item-eye {
+    /* Dimensions & Layout Lock */
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0; /* Prevent shrinking */
+    
+    margin-right: 8px;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding: 0;
+    
+    background-color: transparent;
+    border-width: 0;
+    
+    -unity-background-scale-mode: scale-to-fit;
+    background-position: center;
+    
+    
+    -unity-background-image-tint-color: rgba(255, 255, 255, 0.4);
+
+    
+    scale: 1 1;
+
+    opacity: 0; 
+    
+    transition-property: opacity, -unity-background-image-tint-color, scale;
+    transition-duration: 0.1s;
+}
+
+/* Parent Hover: Reveal Eye */
+.list-item:hover .item-eye {
+    opacity: 1;
+}
+
+.list-item:hover .item-eye {
+    opacity: 1;
+}
+
+.item-eye:hover {
+    /* 3. FULL BRIGHTNESS on hover */
+    -unity-background-image-tint-color: var(--color-highlight);
+    opacity: 1; /* Ensure it stays visible */
+    
+    /* 4. SCALE EFFECT: Visual feedback */
+    scale: 1.2 1.2;
+}
+
+.item-eye:active {
+    -unity-background-image-tint-color: rgb(200, 200, 200);
+    scale: 0.95 0.95;
+}
+
+.item-count {
+    color: var(--color-highlight);
+    font-size: 13px;
+    -unity-font-style: bold;
+    -unity-text-align: middle-right;
+    min-width: 30px;
+}
+
+.data-scroll .unity-scroller--vertical {
+    width: 6px;
+    background-color: transparent;
+    border-width: 0;
+    margin: 0;
+    padding: 0;
+    border-radius: 0;
+}
+
+.data-scroll .unity-scroller__low-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.data-scroll .unity-scroller__high-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.data-scroll .unity-base-slider--vertical {
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0;
+}
+
+.data-scroll .unity-base-slider__tracker {
+    background-color: transparent;
+    border-width: 0;
+    margin: 0;
+}
+
+.data-scroll .unity-base-slider__dragger {
+    width: 2px;
+    background-color: rgba(255, 255, 255, 0.5);
+    border-radius: 1px;
+    border-width: 0;
+    margin-left: 2px;
+    margin-right: 2px;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.data-scroll .unity-base-slider__dragger:hover {
+    background-color: white;
 }
