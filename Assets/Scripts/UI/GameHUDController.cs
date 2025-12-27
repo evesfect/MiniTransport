@@ -10,16 +10,23 @@ public class GameHUDController : MonoBehaviour
     private Label _timeLabel;
     private Button _btnPause, _btn1x, _btn3x, _btn10x;
 
-    // Inspection Elements
+    // Inspection Elements (Existing)
     private Button _btnInspection;
-    private VisualElement _dropdownPanel;
+    private VisualElement _inspectionDropdown; // Renamed from _dropdownPanel for clarity
     private Button _btnToggleRoutes;
     private Button _btnToggleFleets;
 
+    // Management Elements (New)
+    private Button _btnManagement;
+    private VisualElement _managementDropdown;
+    // Add references to new buttons inside the management dropdown here
+    // private Button _btnInventory; 
+
     private const string SelectedClassName = "selected";
-    private const string ActiveClassName = "active"; // For toggles
+    private const string ActiveClassName = "active"; 
 
     private bool _isInspectionOpen = false;
+    private bool _isManagementOpen = false; // New state
     private bool _isRoutesVisible = false;
     private bool _isFleetsVisible = false;
 
@@ -39,9 +46,13 @@ public class GameHUDController : MonoBehaviour
 
         // --- Query Inspection Elements ---
         _btnInspection = root.Q<Button>("BtnInspection");
-        _dropdownPanel = root.Q<VisualElement>("InspectionDropdown");
+        _inspectionDropdown = root.Q<VisualElement>("InspectionDropdown");
         _btnToggleRoutes = root.Q<Button>("BtnToggleRoutes");
         _btnToggleFleets = root.Q<Button>("BtnToggleFleets");
+
+        // --- Query Management Elements (New) ---
+        _btnManagement = root.Q<Button>("BtnManagement");
+        _managementDropdown = root.Q<VisualElement>("ManagementDropdown");
 
         // --- Bind Events ---
         if (_btnPause != null) _btnPause.clicked += () => SetMultiplier(0f);
@@ -52,6 +63,9 @@ public class GameHUDController : MonoBehaviour
         if (_btnInspection != null) _btnInspection.clicked += ToggleInspectionMenu;
         if (_btnToggleRoutes != null) _btnToggleRoutes.clicked += ToggleRoutes;
         if (_btnToggleFleets != null) _btnToggleFleets.clicked += ToggleFleets;
+
+        // Bind New Management Button
+        if (_btnManagement != null) _btnManagement.clicked += ToggleManagementMenu;
     }
 
     private void Update()
@@ -63,102 +77,114 @@ public class GameHUDController : MonoBehaviour
             UpdateSpeedButtons(SimulationTimeManager.Instance.TimeMultiplier);
         }
 
-        // If the menu is open, we force its position every frame (or you can do it only on toggle)
-        // Doing it every frame ensures it follows the button if the layout resizes dynamically.
-        if (_isInspectionOpen)
-        {
-            PositionDropdown();
-        }
+        // Position active dropdowns every frame
+        if (_isInspectionOpen) PositionDropdown(_btnInspection, _inspectionDropdown);
+        if (_isManagementOpen) PositionDropdown(_btnManagement, _managementDropdown);
     }
 
-    // --- Inspection Logic ---
+    // --- Menu Logic ---
 
     private void ToggleInspectionMenu()
     {
         _isInspectionOpen = !_isInspectionOpen;
         
-        if (_dropdownPanel != null)
-        {
-            _dropdownPanel.style.display = _isInspectionOpen ? DisplayStyle.Flex : DisplayStyle.None;
-            if (_isInspectionOpen) PositionDropdown();
-        }
+        // Close other menus if open
+        if (_isInspectionOpen) CloseManagementMenu();
 
-        // Toggle visual state of the main button
-        if (_isInspectionOpen) _btnInspection.AddToClassList(ActiveClassName);
-        else _btnInspection.RemoveFromClassList(ActiveClassName);
+        UpdateMenuState(_btnInspection, _inspectionDropdown, _isInspectionOpen);
     }
 
-    private void PositionDropdown()
+    private void ToggleManagementMenu()
     {
-        if (_btnInspection == null || _dropdownPanel == null) return;
+        _isManagementOpen = !_isManagementOpen;
 
-        // Get the button's position in screen space
-        Rect btnRect = _btnInspection.worldBound;
+        // Close other menus if open
+        if (_isManagementOpen) CloseInspectionMenu();
+
+        UpdateMenuState(_btnManagement, _managementDropdown, _isManagementOpen);
+    }
+
+    private void CloseInspectionMenu()
+    {
+        _isInspectionOpen = false;
+        UpdateMenuState(_btnInspection, _inspectionDropdown, false);
+    }
+
+    private void CloseManagementMenu()
+    {
+        _isManagementOpen = false;
+        UpdateMenuState(_btnManagement, _managementDropdown, false);
+    }
+
+    private void UpdateMenuState(Button btn, VisualElement panel, bool isOpen)
+    {
+        if (panel != null)
+        {
+            panel.style.display = isOpen ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        if (btn != null)
+        {
+            if (isOpen) btn.AddToClassList(ActiveClassName);
+            else btn.RemoveFromClassList(ActiveClassName);
+        }
+    }
+
+    // Refactored to be generic
+    private void PositionDropdown(Button targetBtn, VisualElement targetPanel)
+    {
+        if (targetBtn == null || targetPanel == null) return;
+
+        Rect btnRect = targetBtn.worldBound;
         float screenWidth = _doc.rootVisualElement.layout.width;
         float screenHeight = _doc.rootVisualElement.layout.height;
-        float panelWidth = _dropdownPanel.layout.width;
-        float panelHeight = _dropdownPanel.layout.height;
+        float panelWidth = targetPanel.layout.width;
+        float panelHeight = targetPanel.layout.height;
 
-        // Default: Top-Left of panel starts at Bottom-Left of button
         float finalLeft = btnRect.x;
-        float finalTop = btnRect.y + btnRect.height + 5f; // 5px gap
+        float finalTop = btnRect.y + btnRect.height + 5f; 
 
         // Smart Check: Right Edge
-        // If panel goes off screen right, align its right edge with button's right edge
         if (finalLeft + panelWidth > screenWidth)
         {
             finalLeft = btnRect.x + btnRect.width - panelWidth;
         }
 
         // Smart Check: Bottom Edge
-        // If panel goes off screen bottom, put it ABOVE the button
         if (finalTop + panelHeight > screenHeight)
         {
             finalTop = btnRect.y - panelHeight - 5f;
         }
 
-        // Apply
-        _dropdownPanel.style.left = finalLeft;
-        _dropdownPanel.style.top = finalTop;
+        targetPanel.style.left = finalLeft;
+        targetPanel.style.top = finalTop;
     }
+
+    // --- Inspection Actions ---
 
     private void ToggleRoutes()
     {
         _isRoutesVisible = !_isRoutesVisible;
+        if (_isRoutesVisible) _btnToggleRoutes.AddToClassList(ActiveClassName);
+        else _btnToggleRoutes.RemoveFromClassList(ActiveClassName);
 
-        // 1. Visual Toggle (Green highlight)
-        if (_isRoutesVisible) 
-            _btnToggleRoutes.AddToClassList(ActiveClassName);
-        else 
-            _btnToggleRoutes.RemoveFromClassList(ActiveClassName);
-
-        // 2. Logic Hook -> Call RouteVisualizer
         if (RouteVisualizer.Instance != null)
         {
-            if (_isRoutesVisible)
-            {
-                RouteVisualizer.Instance.ShowAll();
-            }
-            else
-            {
-                RouteVisualizer.Instance.HideAll();
-            }
+            if (_isRoutesVisible) RouteVisualizer.Instance.ShowAll();
+            else RouteVisualizer.Instance.HideAll();
         }
     }
 
     private void ToggleFleets()
     {
         _isFleetsVisible = !_isFleetsVisible;
-
-        if (_isFleetsVisible) 
-            _btnToggleFleets.AddToClassList("active"); // Turns Green
-        else 
-            _btnToggleFleets.RemoveFromClassList("active"); // Turns Transparent
-
+        if (_isFleetsVisible) _btnToggleFleets.AddToClassList(ActiveClassName);
+        else _btnToggleFleets.RemoveFromClassList(ActiveClassName);
+        
         Debug.Log($"Fleets Toggled: {_isFleetsVisible}");
     }
 
-    // --- Timer Logic (Existing) ---
+    // --- Timer Logic ---
     private void SetMultiplier(float mult) => SimulationTimeManager.Instance?.RequestTimeMultiplierRpc(mult);
 
     private void UpdateSpeedButtons(float currentMultiplier)
