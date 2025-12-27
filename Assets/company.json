@@ -1,0 +1,20 @@
+{
+    "CompanyName": "The comp",
+    "CurrentBalance": 200.0,
+    "History": [
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 2
+        },
+        {
+            "Amount": -500.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Weekly Staff Food/Tax (5 employees)",
+            "Timestamp": 2
+        }
+    ]
+}
