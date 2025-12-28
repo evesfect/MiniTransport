@@ -103,6 +103,9 @@ public class RecoveryVehicle : VehicleDriver
         if (busObj == null) { CancelMission("Target bus gameobject not found"); return; }
 
         BusDriver targetBus = busObj.GetComponent<BusDriver>();
+
+
+        
         if (targetBus == null || !targetBus.GetCurrentSegmentAndT(out RoadSegment segment, out float splineT, out bool isHeadingToB))
         {
             CancelMission($"Bus {busID} location data unavailable.");

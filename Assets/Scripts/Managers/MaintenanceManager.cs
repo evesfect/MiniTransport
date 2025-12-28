@@ -114,7 +114,11 @@ public class MaintenanceManager : NetworkBehaviour
 
     // --- JOB DISPATCHING ---
 
-    // Called whenever a new breakdown happens OR a depot reports it's free
+    public void OnBusStopped(string busID)
+    {
+        Debug.Log($"[Maintenance] Bus {busID} reported fully stopped. Attempting dispatch.");
+        TryDispatchJobs(); 
+    }
     public void TryDispatchJobs()
     {
         if (_breakdownList.Count == 0) return;
@@ -124,28 +128,24 @@ public class MaintenanceManager : NetworkBehaviour
         {
             string busID = _breakdownList[i];
 
-            // 1. Find which Depot owns this bus
-            var busData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID);
-            if (busData == null)
+            GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
+            if (busObj == null) { _breakdownList.RemoveAt(i); continue;}
+            
+            BusDriver driver = busObj.GetComponent<BusDriver>();
+            
+            if (driver != null && !driver.IsFullyStopped)
             {
-                _breakdownList.RemoveAt(i);
                 continue;
             }
 
+            var busData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID);
             DepotController assignedDepot = FindDepotByID(busData.AssignedDepotID);
 
-            // 2. Check if that Depot is ready
             if (assignedDepot != null && assignedDepot.IsRecoveryAvailable)
             {
                 Debug.Log($"[Maintenance] Dispatching Job for {busID} to {assignedDepot.depotID}");
-
-                // 3. Remove from queue
                 _breakdownList.RemoveAt(i);
-
-                // 4. Command the Depot to start
                 assignedDepot.DispatchRecoveryVehicle(busID);
-
-                
             }
         }
     }
