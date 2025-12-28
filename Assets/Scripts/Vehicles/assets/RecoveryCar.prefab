@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 3832552376961730603}
   - component: {fileID: -7073120170023398470}
   - component: {fileID: 4063487681358012395}
+  - component: {fileID: 2263427490345583347}
   m_Layer: 9
   m_Name: RecoveryCar
   m_TagString: Untagged
@@ -151,7 +152,56 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RecoveryVehicle
   ShowTopMostFoldoutHeaderGroup: 1
-  baseSpeed: 20
+  baseSpeed: 10
   clientSpeedBuffer: 1.1
   rotationSpeed: 10
+  debugMarkerSpawner: {fileID: 2263427490345583347}
   repairRatePerSecond: 10
+  refillDuration: 10
+  debugLogs: 1
+--- !u!114 &2263427490345583347
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4340470212796353822}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cb67e5ee71d520a4ead3f0626d8ab3a2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MarkerSpawner
+  prefab: {fileID: 8426733610517342259, guid: ce2fda6e801fbf84caf107f43a8163fd, type: 3}
+  raycastHeight: 400
+  layerMask:
+    serializedVersion: 2
+    m_Bits: 1024
+  rayOriginScatter: 10
+  dropDuration: 0.5
+  dropSpeedCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 3.214287
+      outSlope: 3.214287
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0.02222222
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
+  minPenetrationOffset: 25
+  maxPenetratitonOffset: 45
+  testTransformHolder: {fileID: 0}

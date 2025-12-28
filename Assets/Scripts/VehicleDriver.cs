@@ -114,4 +114,40 @@ public abstract class VehicleDriver : NetworkBehaviour
         list.Add(leg);
         lengthAccumulator += leg.Length;
     }
+    /// <summary>
+    /// Returns the specific RoadSegment and Spline-T value for the vehicle's current position.
+    /// </summary>
+    public bool GetCurrentSegmentAndT(out RoadSegment segment, out float tValue, out bool HeadingToB)
+    {
+        segment = null;
+        tValue = 0f;
+        HeadingToB = true;
+
+        if (m_ServerPathSegments == null || m_ServerPathSegments.Count == 0) return false;
+
+        float remainingDist = m_ServerDistanceTraveled;
+
+        foreach (var leg in m_ServerPathSegments)
+        {
+            // Is the vehicle inside this leg?
+            if (remainingDist <= leg.Length)
+            {
+                segment = leg.Segment;
+                
+                float pct = remainingDist / leg.Length; // calculate T
+                tValue = Mathf.Lerp(leg.StartT, leg.EndT, pct); // interpolate 0->1 or reverse
+                HeadingToB = (leg.StartT < leg.EndT);
+                return true;
+            }
+            
+            remainingDist -= leg.Length;
+        }
+
+        // Edge case: Vehicle is exactly at the end of the path
+        var lastLeg = m_ServerPathSegments.Last();
+        segment = lastLeg.Segment;
+        tValue = lastLeg.EndT;
+        HeadingToB = (lastLeg.StartT < lastLeg.EndT);
+        return true;
+    }
 }

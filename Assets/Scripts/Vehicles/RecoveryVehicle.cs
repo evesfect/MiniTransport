@@ -1,48 +1,58 @@
 using UnityEngine;
 using Unity.Netcode;
 using Unity.Collections;
+using UnityEngine.Splines;
 using System.Collections.Generic;
 using System.Linq;
+using Unity.VisualScripting;
 
-// 1. Define the Network State Struct
-public enum RecoveryState { Idle, MovingToTarget, ApproachingTarget, Repairing, ReturningToRoad, Returning }
+public enum RecoveryState { Idle, MovingToTarget, Repairing, Returning, Refilling }
 
 public struct RecoveryNetworkState : INetworkSerializable, System.IEquatable<RecoveryNetworkState>
 {
     public RecoveryState CurrentState;
-    public Vector3 StartPos;
-    public Vector3 TargetPos;
-    public float DepartureTime;     
-    public FixedString32Bytes TargetBusID;
     public FixedString32Bytes OwnerDepotID;
+    public FixedString32Bytes TargetBusID;
+    
+    public FixedString32Bytes TargetSegmentName;
+    public float TargetSplineT;       
+    public bool EnteringFromNodeA;    
+
+    public float DepartureTime;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
         serializer.SerializeValue(ref CurrentState);
-        serializer.SerializeValue(ref StartPos);
-        serializer.SerializeValue(ref TargetPos);
-        serializer.SerializeValue(ref DepartureTime);
-        serializer.SerializeValue(ref TargetBusID);
         serializer.SerializeValue(ref OwnerDepotID);
+        serializer.SerializeValue(ref TargetBusID);
+        serializer.SerializeValue(ref TargetSegmentName);
+        serializer.SerializeValue(ref TargetSplineT);
+        serializer.SerializeValue(ref EnteringFromNodeA);
+        serializer.SerializeValue(ref DepartureTime);
     }
 
     public bool Equals(RecoveryNetworkState other)
     {
         return CurrentState == other.CurrentState &&
-               StartPos == other.StartPos &&
-               TargetPos == other.TargetPos &&
-               DepartureTime == other.DepartureTime &&
+               OwnerDepotID == other.OwnerDepotID &&
                TargetBusID == other.TargetBusID &&
-               OwnerDepotID == other.OwnerDepotID;
+               TargetSegmentName == other.TargetSegmentName &&
+               TargetSplineT == other.TargetSplineT &&
+               EnteringFromNodeA == other.EnteringFromNodeA &&
+               DepartureTime == other.DepartureTime;
     }
 }
 
 public class RecoveryVehicle : VehicleDriver
 {
+    [Header("Debugging")]
+    public MarkerSpawner debugMarkerSpawner;
+
     [Header("Recovery Settings")]
     public float repairRatePerSecond = 10f;
+    public float refillDuration = 2.0f; 
+    public bool debugLogs = true;
 
-    // --- Network State ---
     private readonly NetworkVariable<RecoveryNetworkState> _netState = new NetworkVariable<RecoveryNetworkState>(
         new RecoveryNetworkState { CurrentState = RecoveryState.Idle },
         NetworkVariableReadPermission.Everyone,
@@ -52,19 +62,23 @@ public class RecoveryVehicle : VehicleDriver
     // --- Server-Side Data ---
     private DepotController _ownerDepot;
     private BusData _targetBusData;
-
-    // Server Ghost Simulation
+    private RoadSegment _targetSegmentCache; 
     private bool _serverIsMoving;
+    private float _currentRefillTimer;
 
-    private RoadNode _cachedTargetNode;
+    // Client-Side Data
+    private static Dictionary<string, DepotController> _clientDepotCache; 
+
+    // Teleport Debugging
+    private Vector3 _lastFramePos;
 
     public bool IsBusy => _netState.Value.CurrentState != RecoveryState.Idle;
 
     public override void OnNetworkSpawn()
     {
         _netState.OnValueChanged += OnStateChanged;
+        _lastFramePos = transform.position;
 
-        // Initial sync for clients joining late
         if (_netState.Value.CurrentState != RecoveryState.Idle)
         {
             OnStateChanged(default, _netState.Value);
@@ -81,62 +95,99 @@ public class RecoveryVehicle : VehicleDriver
     public void StartMission(string busID, DepotController depot)
     {
         if (!IsServer) return;
-
+        
         _ownerDepot = depot;
         _targetBusData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID);
-        GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
         
+        GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
+        if (busObj == null) { CancelMission("Target bus gameobject not found"); return; }
 
-        if (busObj == null || _targetBusData == null)
+        BusDriver targetBus = busObj.GetComponent<BusDriver>();
+        if (targetBus == null || !targetBus.GetCurrentSegmentAndT(out RoadSegment segment, out float splineT, out bool isHeadingToB))
         {
-            Debug.LogError($"[Recovery] Cannot find bus {busID}");
-            // Reset to idle if failed
-            _netState.Value = new RecoveryNetworkState { CurrentState = RecoveryState.Idle };
+            CancelMission($"Bus {busID} location data unavailable.");
             return;
         }
 
+        _targetSegmentCache = segment;
+
+        if (_ownerDepot.SpawnNode == null)
+        {
+            CancelMission($"Depot {depot.depotID} has no Spawn Node.");
+            return;
+        }
         RoadNode startNode = _ownerDepot.SpawnNode;
-        RoadNode endNode = GetClosestRoadNode(busObj.transform.position);
 
-        if (startNode == null || endNode == null)
+        List<RoadNode> nodePath = RoadPathfinder.FindPathToSegment(startNode, segment);
+        bool enteringFromA = true;
+        
+        if (nodePath != null && nodePath.Count > 0)
         {
-            Debug.LogError("[Recovery] Cannot find nodes for path.");
-            _netState.Value = new RecoveryNetworkState { CurrentState = RecoveryState.Idle };
-            return;
-        }
-
-        if (PlanServerPath(startNode, endNode))
-        {
-            _netState.Value = new RecoveryNetworkState
-            {
-                CurrentState = RecoveryState.MovingToTarget,
-                StartPos = transform.position,
-                TargetPos = busObj.transform.position, // Actual Bus Position
-                DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay,
-                TargetBusID = busID,
-                OwnerDepotID = depot.depotID
-            };
-
-            m_ServerDistanceTraveled = 0f;
-            _serverIsMoving = true;
-
+            RoadNode entryNode = nodePath.Last();
+            enteringFromA = (entryNode == segment.NodeA);
         }
         else
         {
-            // Fallback: Teleport
-            transform.position = busObj.transform.position;
-            _netState.Value = new RecoveryNetworkState { CurrentState = RecoveryState.Repairing, TargetBusID = busID, OwnerDepotID = depot.depotID };
+            if (startNode == segment.NodeA) enteringFromA = true;
+            else if (startNode == segment.NodeB) enteringFromA = false;
+            else
+            {
+                CancelMission("No path found to target segment.");
+                return;
+            }
         }
+
+        BuildServerPathToTarget(nodePath, segment, enteringFromA, splineT);
+
+        if (debugMarkerSpawner != null)
+        {
+            Vector3 exactWorldPos = segment.GetPointOnRoad(splineT, enteringFromA);
+            debugMarkerSpawner.SpawnMarkerAtHitLocation(exactWorldPos);
+            Debug.Log("Spawned Marker for Recovery Vehicle");
+        } else
+        {
+            Debug.Log("Marker is null!");
+        }
+
+        _netState.Value = new RecoveryNetworkState
+        {
+            CurrentState = RecoveryState.MovingToTarget,
+            OwnerDepotID = depot.depotID,
+            TargetBusID = busID,
+            TargetSegmentName = segment.name,
+            TargetSplineT = splineT,
+            EnteringFromNodeA = enteringFromA,
+            DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay
+        };
+
+        m_ServerDistanceTraveled = 0f; 
+        _serverIsMoving = true;
+        
+        if(debugLogs) Debug.Log($"[Recovery] Mission Started for {busID}. Path Length: {m_ServerCurrentLegLength:F1}m");
+    }
+
+    private void CancelMission(string reason)
+    {
+        Debug.LogWarning($"[Recovery] Mission Cancelled: {reason}");
+        _netState.Value = new RecoveryNetworkState { CurrentState = RecoveryState.Idle };
     }
 
     private void FinishMission()
     {
+        if(debugLogs) Debug.Log("[Recovery] Mission Complete. Now Idle and Ready.");
         _netState.Value = new RecoveryNetworkState { CurrentState = RecoveryState.Idle };
         if (_ownerDepot != null) _ownerDepot.OnRecoveryVehicleFinished();
     }
 
     private void Update()
     {
+        // Teleport Guard
+        if (Vector3.Distance(transform.position, _lastFramePos) > 10.0f && _lastFramePos != Vector3.zero)
+        {
+            if (debugLogs) Debug.LogWarning($"[Recovery] Teleport detected! Moved {Vector3.Distance(transform.position, _lastFramePos):F1}m. State: {_netState.Value.CurrentState}");
+        }
+        _lastFramePos = transform.position;
+
         if (IsServer) ServerUpdateLoop();
         if (IsClient) ClientUpdateLoop();
     }
@@ -144,38 +195,23 @@ public class RecoveryVehicle : VehicleDriver
     private void ServerUpdateLoop()
     {
         var state = _netState.Value;
+        if (state.CurrentState == RecoveryState.Idle) return;
+
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
 
-        // --- OFF-ROAD MOVEMENT HANDLERS ---
-        if (state.CurrentState == RecoveryState.ReturningToRoad)
-        {
-            // Gap: Broken Bus -> Road Node
-            MoveLinearlyToTarget(state.TargetPos, dt, () => {
-                // Arrived at Node, start Highway Return
-                RoadNode node = GetClosestRoadNode(transform.position);
-                ServerStartHighwayReturn(node);
-            });
-            return;
-        }
-
-        if (state.CurrentState == RecoveryState.ApproachingTarget)
-        {
-            // Gap: Road Node -> Broken Bus
-            MoveLinearlyToTarget(state.TargetPos, dt, () => {
-                // Arrived at Bus, start Repairing
-                var newState = state;
-                newState.CurrentState = RecoveryState.Repairing;
-                _netState.Value = newState;
-            });
-            return;
-        }
-
-        // --- ROAD MOVEMENT HANDLERS ---
         if (state.CurrentState == RecoveryState.MovingToTarget || state.CurrentState == RecoveryState.Returning)
         {
             if (_serverIsMoving)
             {
-                m_ServerDistanceTraveled += baseSpeed * dt;
+                float trafficModifier = 1.0f;
+                if (GridManager.Instance != null && m_ServerPathSegments.Count > 0)
+                {
+                    Vector3 serverPos = CalculatePoint(m_ServerDistanceTraveled, m_ServerPathSegments, out _);
+                    trafficModifier = GridManager.Instance.GetTrafficModifierAt(serverPos);
+                }
+
+                m_ServerDistanceTraveled += baseSpeed * trafficModifier * dt;
+                
                 if (m_ServerDistanceTraveled >= m_ServerCurrentLegLength)
                 {
                     _serverIsMoving = false;
@@ -187,25 +223,41 @@ public class RecoveryVehicle : VehicleDriver
         {
             ServerHandleRepair(dt);
         }
+        else if (state.CurrentState == RecoveryState.Refilling)
+        {
+            ServerHandleRefill(dt);
+        }
     }
 
     private void ServerOnDestinationReached(RecoveryNetworkState state)
     {
-        transform.position = state.TargetPos;
-
         if (state.CurrentState == RecoveryState.MovingToTarget)
         {
-            _netState.Value = new RecoveryNetworkState
-            {
-                CurrentState = RecoveryState.ApproachingTarget,
-                StartPos = transform.position,
-                TargetPos = state.TargetPos, // Bus Location
-                DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay,
-                TargetBusID = state.TargetBusID,
-                OwnerDepotID = state.OwnerDepotID
-            };
+            var newState = state;
+            newState.CurrentState = RecoveryState.Repairing;
+            _netState.Value = newState;
         }
         else if (state.CurrentState == RecoveryState.Returning)
+        {
+            if(debugLogs) Debug.Log("[Recovery] Returned to Depot. Starting Refill.");
+            _currentRefillTimer = refillDuration;
+            
+            var newState = state;
+            newState.CurrentState = RecoveryState.Refilling;
+            _netState.Value = newState;
+        }
+    }
+
+    private void ServerHandleRefill(float dt)
+    {
+        if (_ownerDepot != null)
+        {
+            transform.position = _ownerDepot.SpawnNode.transform.position;
+            transform.rotation = _ownerDepot.SpawnNode.transform.rotation;
+        }
+
+        _currentRefillTimer -= dt;
+        if (_currentRefillTimer <= 0)
         {
             FinishMission();
         }
@@ -213,74 +265,68 @@ public class RecoveryVehicle : VehicleDriver
 
     private void ServerHandleRepair(float dt)
     {
-        string busID = _netState.Value.TargetBusID.ToString();
-        if (_targetBusData == null) _targetBusData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID);
+        if (_targetBusData == null) 
+            _targetBusData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == _netState.Value.TargetBusID.ToString());
 
         float targetHealth = MaintenanceManager.Instance.operationalThreshold;
+        
         if (_targetBusData != null && _targetBusData.Durability < targetHealth)
         {
             float boost = repairRatePerSecond * dt;
-            FleetManager.Instance.UpdateBusDurability(busID, _targetBusData.Durability + boost);
+            FleetManager.Instance.UpdateBusDurability(_targetBusData.BusID, _targetBusData.Durability + boost);
         }
         else
         {
-            // Fix Completed
-            GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
+            GameObject busObj = FleetManager.Instance.GetActiveBus(_targetBusData.BusID);
             if (busObj != null) busObj.GetComponent<BusDriver>()?.SetBrokenDown(false);
-            ServerReturnHome();
+            ServerStartReturnTrip();
         }
     }
 
-    private void ServerReturnHome()
+    private void ServerStartReturnTrip()
     {
-        RoadNode startNode = GetClosestRoadNode(transform.position);
+        var state = _netState.Value;
+        if (_targetSegmentCache == null) 
+            _targetSegmentCache = FindSegmentByName(state.TargetSegmentName.ToString());
 
-        if (startNode != null)
-        {
-            // Enter "ReturningToRoad" state: Drive straight to the node
-            _netState.Value = new RecoveryNetworkState
-            {
-                CurrentState = RecoveryState.ReturningToRoad,
-                StartPos = transform.position,
-                TargetPos = startNode.transform.position,
-                DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay,
-                TargetBusID = "",
-                OwnerDepotID = _ownerDepot.depotID
-            };
+        if (_targetSegmentCache == null) { FinishMission(); return; }
 
-            m_ServerDistanceTraveled = 0f;
-            _serverIsMoving = true;
-        }
-        else
-        {
-            // Fallback if no node found nearby
-            FinishMission();
-        }
-    }
-
-    private void ServerStartHighwayReturn(RoadNode startNode)
-    {
+        bool wasHeadingToB = state.EnteringFromNodeA;
+        RoadNode exitNode = wasHeadingToB ? _targetSegmentCache.NodeB : _targetSegmentCache.NodeA;
         RoadNode homeNode = _ownerDepot.SpawnNode;
 
-        if (homeNode != null && PlanServerPath(startNode, homeNode))
-        {
-            _netState.Value = new RecoveryNetworkState
-            {
-                CurrentState = RecoveryState.Returning,
-                StartPos = startNode.transform.position,
-                TargetPos = homeNode.transform.position,
-                DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay,
-                TargetBusID = "",
-                OwnerDepotID = _ownerDepot.depotID
-            };
+        var nodePath = RoadPathfinder.FindPath(exitNode, homeNode);
+        
+        if (nodePath == null) 
+        { 
+            if(debugLogs) Debug.LogError("[Recovery] Cannot find return path!");
+            //if (homeNode != null) transform.position = homeNode.transform.position;
+            FinishMission(); 
+            return; 
+        }
 
-            m_ServerDistanceTraveled = 0f;
-            _serverIsMoving = true;
-        }
-        else
+        m_ServerPathSegments.Clear();
+        m_ServerCurrentLegLength = 0f;
+
+        float startT = state.TargetSplineT;
+        float endT = wasHeadingToB ? 1f : 0f;
+        
+        AddPathLeg(_targetSegmentCache, startT, endT, m_ServerPathSegments, ref m_ServerCurrentLegLength);
+        ConvertNodesToSegments(nodePath, m_ServerPathSegments, ref m_ServerCurrentLegLength);
+
+        _netState.Value = new RecoveryNetworkState
         {
-            FinishMission();
-        }
+            CurrentState = RecoveryState.Returning,
+            OwnerDepotID = state.OwnerDepotID,
+            TargetBusID = "", 
+            TargetSegmentName = state.TargetSegmentName,
+            TargetSplineT = state.TargetSplineT,
+            EnteringFromNodeA = state.EnteringFromNodeA,
+            DepartureTime = SimulationTimeManager.Instance.CurrentTimeOfDay
+        };
+
+        m_ServerDistanceTraveled = 0f;
+        _serverIsMoving = true;
     }
 
     // --- CLIENT LOGIC ---
@@ -293,50 +339,16 @@ public class RecoveryVehicle : VehicleDriver
             return;
         }
 
-        if (newState.CurrentState == RecoveryState.Repairing)
+        if (newState.CurrentState == RecoveryState.Repairing || newState.CurrentState == RecoveryState.Refilling)
         {
             m_ClientIsMoving = false;
-            // Snap to bus
-            GameObject bus = FleetManager.Instance.GetActiveBus(newState.TargetBusID.ToString());
-            if (bus != null) transform.position = bus.transform.position;
-            return;
-        }
-
-        if (newState.CurrentState == RecoveryState.ReturningToRoad || newState.CurrentState == RecoveryState.ApproachingTarget)
-        {
-            
-            m_ClientIsMoving = true;
             return;
         }
 
         if (newState.CurrentState == RecoveryState.MovingToTarget || newState.CurrentState == RecoveryState.Returning)
         {
-            RoadNode depotNode = GetDepotNode(newState.OwnerDepotID.ToString());
-
-
-            if (newState.CurrentState == RecoveryState.MovingToTarget)
-            {
-                // 1. Find the same Node the server used (Closest to TargetPos)
-                RoadNode busNode = GetClosestRoadNode(newState.TargetPos);
-
-                if (depotNode != null && busNode != null)
-                {
-                    // 2. Plan Path: Depot -> Closest Node
-                    PlanLocalPath(depotNode, busNode);
-                }
-            }
+            RebuildClientPath(newState);
             
-            else
-            {
-                // Driving from StartPos (The Node we drove to) -> Depot
-                RoadNode startNode = GetClosestRoadNode(newState.StartPos);
-                if (startNode != null && depotNode != null)
-                {
-                    PlanLocalPath(startNode, depotNode);
-                }
-            }
-
-            // Sync Time
             float timeMult = SimulationTimeManager.Instance.TimeMultiplier > 0 ? SimulationTimeManager.Instance.TimeMultiplier : 1f;
             float gameHoursPassed = SimulationTimeManager.Instance.CurrentTimeOfDay - newState.DepartureTime;
             if (gameHoursPassed < 0) gameHoursPassed += 24f;
@@ -347,32 +359,59 @@ public class RecoveryVehicle : VehicleDriver
         }
     }
 
+    private void RebuildClientPath(RecoveryNetworkState state)
+    {
+        m_LocalPathSegments.Clear();
+        m_TotalLegLength = 0f;
+
+        DepotController depot = GetClientDepot(state.OwnerDepotID.ToString());
+        RoadSegment targetSegment = FindSegmentByName(state.TargetSegmentName.ToString());
+
+        if (depot == null || targetSegment == null) return;
+
+        if (state.CurrentState == RecoveryState.MovingToTarget)
+        {
+            RoadNode startNode = depot.SpawnNode;
+            
+            var nodePath = RoadPathfinder.FindPathToSegment(startNode, targetSegment);
+
+            ConvertNodesToSegments(nodePath, m_LocalPathSegments, ref m_TotalLegLength);
+            float startT = state.EnteringFromNodeA? 0f : 1f;
+            float endT = state.TargetSplineT;
+
+            AddPathLeg(targetSegment, startT, endT, m_LocalPathSegments, ref m_TotalLegLength);
+        }
+        else if (state.CurrentState == RecoveryState.Returning)
+        {
+            bool exitToNodeB = state.EnteringFromNodeA;
+            RoadNode exitNode = exitToNodeB ? targetSegment.NodeB : targetSegment.NodeA;
+            RoadNode endNode = depot.SpawnNode;
+
+            float startT = state.TargetSplineT;
+            float endT = exitToNodeB ? 1f : 0f;
+            AddPathLeg(targetSegment, startT, endT, m_LocalPathSegments, ref m_TotalLegLength);
+
+            var nodePath = RoadPathfinder.FindPath(exitNode, endNode);
+            ConvertNodesToSegments(nodePath, m_LocalPathSegments, ref m_TotalLegLength);
+        }
+    }
+
     private void ClientUpdateLoop()
     {
-        if (!m_ClientIsMoving) return;
+        // copied from bus driver
+       if (!m_ClientIsMoving || m_LocalPathSegments == null || m_LocalPathSegments.Count == 0) return;
+
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
 
-        // 1. Handle Off-Road States
-        var state = _netState.Value;
-        if (state.CurrentState == RecoveryState.ReturningToRoad || state.CurrentState == RecoveryState.ApproachingTarget)
+        float localTraffic = 1.0f;
+        if (GridManager.Instance != null)
         {
-            Vector3 target = state.TargetPos;
-
-            transform.position = Vector3.MoveTowards(transform.position, target, baseSpeed * clientSpeedBuffer * dt);
-
-            Vector3 dir = target - transform.position;
-            if (dir.sqrMagnitude > 0.01f)
-            {
-                Quaternion targetRot = Quaternion.LookRotation(dir);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * rotationSpeed);
-            }
-            return;
+            localTraffic = GridManager.Instance.GetTrafficModifierAt(transform.position);
         }
 
-        // 2. Handle Road States
-        if (m_LocalPathSegments.Count == 0) return;
+        float step = baseSpeed * localTraffic * clientSpeedBuffer * dt;
 
-        m_ClientDistanceTraveled += baseSpeed * clientSpeedBuffer * dt;
+        m_ClientDistanceTraveled += step;
 
         if (m_ClientDistanceTraveled >= m_TotalLegLength)
         {
@@ -385,44 +424,20 @@ public class RecoveryVehicle : VehicleDriver
 
     // --- HELPERS ---
 
-    private bool PlanServerPath(RoadNode startNode, RoadNode endNode)
+    
+    
+    private void BuildServerPathToTarget(List<RoadNode> nodes, RoadSegment finalSeg, bool enterFromA, float targetT)
     {
         m_ServerPathSegments.Clear();
         m_ServerCurrentLegLength = 0f;
-        var nodePath = RoadPathfinder.FindPath(startNode, endNode);
-        if (nodePath == null || nodePath.Count < 2) return false;
-        ConvertNodesToSegments(nodePath, m_ServerPathSegments, ref m_ServerCurrentLegLength);
-        return m_ServerPathSegments.Count > 0;
-    }
-
-    private void PlanLocalPath(RoadNode startNode, RoadNode endNode)
-    {
-        m_LocalPathSegments.Clear();
-        m_TotalLegLength = 0f;
-        var nodePath = RoadPathfinder.FindPath(startNode, endNode);
-        if (nodePath == null) return;
-        ConvertNodesToSegments(nodePath, m_LocalPathSegments, ref m_TotalLegLength);
-    }
-
-    private void MoveLinearlyToTarget(Vector3 target, float dt, System.Action onComplete)
-    {
-        float dist = Vector3.Distance(transform.position, target);
-        float step = baseSpeed * dt;
-
-        if (step >= dist)
-        {
-            transform.position = target;
-            onComplete?.Invoke();
-        }
-        else
-        {
-            transform.position = Vector3.MoveTowards(transform.position, target, step);
-            transform.LookAt(target);
-        }
+        ConvertNodesToSegments(nodes, m_ServerPathSegments, ref m_ServerCurrentLegLength);
+        float startT = enterFromA ? 0f : 1f;
+        AddPathLeg(finalSeg, startT, targetT, m_ServerPathSegments, ref m_ServerCurrentLegLength);
     }
 
     private void ConvertNodesToSegments(List<RoadNode> nodes, List<PathLeg> pathList, ref float totalLen)
     {
+        if (nodes == null || nodes.Count < 2) return;
         for (int i = 0; i < nodes.Count - 1; i++)
         {
             RoadNode nA = nodes[i];
@@ -440,30 +455,20 @@ public class RecoveryVehicle : VehicleDriver
         }
     }
 
-    private RoadNode GetDepotNode(string depotID)
+    private RoadSegment FindSegmentByName(string name)
     {
-        // Use FindObjectsByType instead of the obsolete FindObjectsOfType
+        var segments = FindObjectsByType<RoadSegment>(FindObjectsSortMode.None);
+        return segments.FirstOrDefault(s => s.name == name);
+    }
+
+    private DepotController GetClientDepot(string id)
+    {
+        if (_clientDepotCache == null) _clientDepotCache = new Dictionary<string, DepotController>();
+        if (_clientDepotCache.TryGetValue(id, out var cached)) return cached;
         var depots = FindObjectsByType<DepotController>(FindObjectsSortMode.None);
-        var depot = depots.FirstOrDefault(d => d.depotID == depotID);
-        return depot != null ? depot.SpawnNode : null;
+        var found = depots.FirstOrDefault(d => d.depotID == id);
+        if (found != null) _clientDepotCache[id] = found;
+        return found;
     }
 
-    //Expensive Method(Consider using the grid)
-    private RoadNode GetClosestRoadNode(Vector3 pos)
-    {
-        Collider[] hits = Physics.OverlapSphere(pos, 50f);
-        RoadNode bestNode = null;
-        float closestDist = float.MaxValue;
-
-        foreach (var hit in hits)
-        {
-            var node = hit.GetComponent<RoadNode>();
-            if (node != null)
-            {
-                float d = Vector3.Distance(pos, node.transform.position);
-                if (d < closestDist) { closestDist = d; bestNode = node; }
-            }
-        }
-        return bestNode;
-    }
 }

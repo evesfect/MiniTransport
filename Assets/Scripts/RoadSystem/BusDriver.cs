@@ -7,6 +7,9 @@ using System.IO;
 
 public class BusDriver : VehicleDriver
 {
+    [Header("Debug")]
+    public MarkerSpawner debugMarkerSpawner;
+
     // Properties baseSpeed, clientSpeedBuffer, rotationSpeed are in Base Class
 
     [Header("Network State")]
@@ -319,4 +322,26 @@ public class BusDriver : VehicleDriver
             AddPathLeg(endSeg, entryT, to.splineT, targetList, ref totalLength);
         }
     }
+
+    [ContextMenu("Debug Server Position")]
+public void DebugShowServerPosition()
+{
+    // This only works on the Server instance
+    if (!IsServer && !IsHost) 
+    {
+        Debug.LogWarning("Cannot debug Server Position from a Client instance.");
+        return;
+    }
+
+    if (GetCurrentSegmentAndT(out RoadSegment seg, out float t, out bool headingToB))
+    {
+        if (debugMarkerSpawner != null)
+        {
+            // Calculate the exact world position based on SERVER data
+            Vector3 serverPos = seg.GetPointOnRoad(t, headingToB);
+            debugMarkerSpawner.SpawnMarkerAtHitLocation(serverPos);
+            Debug.Log($"[Bus Server Debug] Dist: {m_ServerDistanceTraveled:F1}, Seg: {seg.name}, T: {t:F2}");
+        }
+    }
+}
 }
