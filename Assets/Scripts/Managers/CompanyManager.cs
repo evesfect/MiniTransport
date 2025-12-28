@@ -79,7 +79,7 @@ public class CompanyManager : NetworkBehaviour
         // Logic: If it's a new week, yell at everyone to send their bills
         int day = SimulationTimeManager.Instance.CurrentDay;
 
-        if (day > 0 && day % 2 == 0)
+        if (day > 0 && day % 7 == 0)
         {
             Debug.Log("[Company] Weekly Expenses Requested.");
             OnWeeklyExpensesRequested?.Invoke();

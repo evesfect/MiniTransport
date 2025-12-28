@@ -1,16 +1,23 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 200.0,
+    "CurrentBalance": 95746.6953125,
     "History": [
         {
-            "Amount": -300.0,
+            "Amount": -442.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: dfdfd",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -633.0,
             "Type": 1,
             "Category": 7,
-            "Description": "Weekly Payroll (1 staff)",
+            "Description": "Weekly Payroll (2 staff)",
             "Timestamp": 2
         },
         {
-            "Amount": -50.0,
+            "Amount": -100.0,
             "Type": 1,
             "Category": 8,
             "Description": "Staff Upkeep/Benefits",
@@ -21,6 +28,41 @@
             "Type": 1,
             "Category": 9,
             "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 2
+        },
+        {
+            "Amount": -390.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 885",
+            "Timestamp": 2
+        },
+        {
+            "Amount": -755.7664794921875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Training Course for Applicant 885",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -805.7664794921875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Training Course for Applicant 885",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -312.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 229",
+            "Timestamp": 2
+        },
+        {
+            "Amount": -364.7732238769531,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Training Course for Applicant 229",
             "Timestamp": 2
         }
     ]

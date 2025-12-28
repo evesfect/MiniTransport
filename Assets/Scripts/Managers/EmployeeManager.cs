@@ -181,6 +181,22 @@ public class EmployeeManager : NetworkBehaviour
         else RequestTrainRpc(employeeID);
     }
 
+    /// <summary>
+    /// Assigns a Mechanic to a specific Depot ID.
+    /// </summary>
+    public void AssignMechanicToDepot(string employeeID, string depotID)
+    {
+        if (IsServer)
+        {
+            AssignMechanicInternal(employeeID, depotID);
+        }
+        else
+        {
+            // If client, request server to do it
+            RequestDepotAssignmentRpc(employeeID, depotID);
+        }
+    }
+
     // --- Helpers ---
 
     public float GetTrainingCost(string employeeID)
@@ -207,7 +223,7 @@ public class EmployeeManager : NetworkBehaviour
 
         // 1. Pay Hiring Fee
         bool success = CompanyManager.Instance.TryExecuteActionableTransaction(
-            hiringFee,
+            cost,
             TransactionCategory.General,
             $"Hiring Fee: {candidate.FullName}"
         );
@@ -223,6 +239,25 @@ public class EmployeeManager : NetworkBehaviour
             OnEmployeeHired?.Invoke(candidate.EmployeeID);
             Debug.Log($"[HR] Hired {candidate.FullName}");
         }
+    }
+
+    private void AssignMechanicInternal(string employeeID, string depotID)
+    {
+        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
+        if (emp == null) return;
+
+        if (emp.Role != EmployeeRole.Mechanic)
+        {
+            Debug.LogWarning($"[Employee] Cannot assign {emp.Role} to a Depot. Only Mechanics allowed.");
+            return;
+        }
+
+        emp.AssignedDepotID = depotID;
+
+        // Save and Sync
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
+        Debug.Log($"[Employee] Assigned {emp.FullName} to Depot: {depotID}");
     }
 
     private void FireInternal(string id)
@@ -282,6 +317,12 @@ public class EmployeeManager : NetworkBehaviour
 
     [Rpc(SendTo.Server)]
     private void RequestTrainRpc(string id) { TrainInternal(id); }
+
+    [Rpc(SendTo.Server)]
+    private void RequestDepotAssignmentRpc(string employeeID, string depotID)
+    {
+        AssignMechanicInternal(employeeID, depotID);
+    }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncEmployeesRpc(string json, RpcParams rpcParams = default)

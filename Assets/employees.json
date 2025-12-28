@@ -1,0 +1,51 @@
+{
+    "Employees": [
+        {
+            "EmployeeID": "4552",
+            "FullName": "Employee 4552",
+            "Role": 1,
+            "SkillLevel": 30.0,
+            "WeeklySalary": 300.0,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_Main"
+        },
+        {
+            "EmployeeID": "99f27f21",
+            "FullName": "Applicant 885",
+            "Role": 0,
+            "SkillLevel": 55.5766487121582,
+            "WeeklySalary": 311.1532897949219,
+            "AssignedBusID": "",
+            "AssignedDepotID": ""
+        },
+        {
+            "EmployeeID": "29e04b36",
+            "FullName": "Applicant 229",
+            "Role": 1,
+            "SkillLevel": 11.477323532104493,
+            "WeeklySalary": 222.95465087890626,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_North"
+        }
+    ],
+    "Candidates": [
+        {
+            "EmployeeID": "af637262",
+            "FullName": "Applicant 572",
+            "Role": 1,
+            "SkillLevel": 10.750593185424805,
+            "WeeklySalary": 221.50119018554688,
+            "AssignedBusID": "",
+            "AssignedDepotID": ""
+        },
+        {
+            "EmployeeID": "612f0889",
+            "FullName": "Applicant 816",
+            "Role": 0,
+            "SkillLevel": 9.595304489135743,
+            "WeeklySalary": 219.19061279296876,
+            "AssignedBusID": "",
+            "AssignedDepotID": ""
+        }
+    ]
+}

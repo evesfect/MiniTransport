@@ -25,6 +25,7 @@ public class EmployeeData
 
     [Header("Assignment")]
     public string AssignedBusID;
+    public string AssignedDepotID;
 }
 
 [Serializable]
