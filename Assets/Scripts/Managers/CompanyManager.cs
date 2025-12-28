@@ -18,13 +18,6 @@ public class CompanyManager : NetworkBehaviour
     [Tooltip("The maximum debt allowed")]
     public float bankruptcyThreshold;
 
-    [Header("Recurring Costs (Passive)")]
-    [Tooltip("Weekly tax/insurance cost per bus in the fleet.")]
-    public float weeklyCostPerBus;
-
-    [Tooltip("Weekly food/tax cost per employee (placeholder).")]
-    public float weeklyCostPerEmployee;
-
     // --- State Data ---
     [Header("Runtime State")]
     [SerializeField] private CompanyData _companyData;
@@ -32,6 +25,7 @@ public class CompanyManager : NetworkBehaviour
     // --- Events ---
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
+    public event Action OnWeeklyExpensesRequested;
 
     // --- Persistence ---
 #if UNITY_EDITOR
@@ -54,10 +48,10 @@ public class CompanyManager : NetworkBehaviour
             LoadCompanyData();
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
 
-            // Subscribe to Time System for Passive Costs
             if (SimulationTimeManager.Instance != null)
             {
-                SimulationTimeManager.Instance.OnDayChanged += CheckWeeklyExpenses;
+                SimulationTimeManager.Instance.OnDayChanged += CheckDateForBills;
+
             }
         }
         else
@@ -71,60 +65,48 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer && NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            
             if (SimulationTimeManager.Instance != null)
-            {
-                SimulationTimeManager.Instance.OnDayChanged -= CheckWeeklyExpenses;
-            }
+                SimulationTimeManager.Instance.OnDayChanged -= CheckDateForBills;
+
         }
     }
 
-    // --- Passive Logic (Server Only) ---
+    // --- Trigger ---
 
-    private void CheckWeeklyExpenses()
+    private void CheckDateForBills()
     {
-        
+        // Logic: If it's a new week, yell at everyone to send their bills
         int day = SimulationTimeManager.Instance.CurrentDay;
 
         if (day > 0 && day % 2 == 0)
         {
-            ProcessWeeklyCosts();
+            Debug.Log("[Company] Weekly Expenses Requested.");
+            OnWeeklyExpensesRequested?.Invoke();
         }
     }
 
-    private void ProcessWeeklyCosts()
+
+    //Used by other managers to send their recurring costs
+    public void ProcessPassiveExpense(float amount, TransactionCategory category, string description)
     {
-        float totalBusCost = 0f;
-        float totalEmpCost = 0f;
+        if (amount <= 0) return; // Expense must be positive number (we negate internally)
 
-       
-        if (FleetManager.Instance != null)
+        if (IsServer)
         {
-            int busCount = FleetManager.Instance.allBuses.Count;
-            totalBusCost = busCount * weeklyCostPerBus;
+            ProcessTransaction(-amount, TransactionType.Passive, category, description);
         }
-
-        // Calculate Employee Costs 
-        //Placeholder for now
-        int employeeCount = 5;
-        totalEmpCost = employeeCount * weeklyCostPerEmployee;
-
-        // Process the Passive Transactions
-        if (totalBusCost > 0)
+        else
         {
-            ProcessTransaction(-totalBusCost, TransactionType.Passive, TransactionCategory.Tax,
-                $"Weekly Fleet Tax ({FleetManager.Instance.allBuses.Count} buses)");
-        }
-
-        if (totalEmpCost > 0)
-        {
-            ProcessTransaction(-totalEmpCost, TransactionType.Passive, TransactionCategory.StaffUpkeep,
-                $"Weekly Staff Food/Tax ({employeeCount} employees)");
+            RequestTransactionRpc(-amount, TransactionType.Passive, category, description);
         }
     }
-
-    // --- Actionable Logic (Public API) ---
 
     
+
+    /// <summary>
+    /// Used by Player for buying items. Checks Bankruptcy threshold.
+    /// </summary>
     public bool TryExecuteActionableTransaction(float amount, TransactionCategory category, string itemDescription)
     {
 
@@ -152,6 +134,9 @@ public class CompanyManager : NetworkBehaviour
         }
     }
 
+    /// <summary>
+    /// Used for Income (Tickets, Grants).
+    /// </summary>
     public void AddIncome(float amount, TransactionCategory category, string description)
     {
         if (amount <= 0) return;
@@ -208,8 +193,10 @@ public class CompanyManager : NetworkBehaviour
     [Rpc(SendTo.Server)]
     private void RequestTransactionRpc(float amount, TransactionType type, TransactionCategory category, string desc)
     {
-        // Server validation
-        if (amount < 0 && _companyData.CurrentBalance < Mathf.Abs(amount)) return;
+        if (type == TransactionType.Actionable && amount < 0)
+        {
+            if (_companyData.CurrentBalance + amount < bankruptcyThreshold) return;
+        }
         ProcessTransaction(amount, type, category, desc);
     }
 

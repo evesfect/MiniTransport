@@ -11,7 +11,10 @@ public class FleetManager : NetworkBehaviour
 
     [Header("Master Fleet Data")]
     public List<BusData> allBuses = new List<BusData>();
-    
+
+    [Header("Financial Settings")]
+    public float weeklyCostPerBus = 150f;
+
     // Runtime Lookup: Maps BusID -> Spawned GameObject
     private Dictionary<string, GameObject> _activeBusInstances = new Dictionary<string, GameObject>();
 
@@ -30,12 +33,18 @@ public class FleetManager : NetworkBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+
     public override void OnNetworkSpawn()
     {
         if (IsServer)
         {
             LoadFleet();
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+
+            if (CompanyManager.Instance != null)
+            {
+                CompanyManager.Instance.OnWeeklyExpensesRequested += SubmitFleetExpenses;
+            }
         }
         else
         {
@@ -48,7 +57,25 @@ public class FleetManager : NetworkBehaviour
         if (IsServer && NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+
+            if (CompanyManager.Instance != null)
+                CompanyManager.Instance.OnWeeklyExpensesRequested -= SubmitFleetExpenses;
         }
+    }
+
+    private void SubmitFleetExpenses()
+    {
+        if (allBuses.Count == 0) return;
+
+        float totalTax = allBuses.Count * weeklyCostPerBus;
+
+        Debug.Log($"[FleetManager] Submitting weekly tax: {totalTax}");
+
+        CompanyManager.Instance.ProcessPassiveExpense(
+            totalTax,
+            TransactionCategory.Tax,
+            $"Weekly Fleet Tax ({allBuses.Count} buses)"
+        );
     }
 
     private void OnClientConnected(ulong clientId)
