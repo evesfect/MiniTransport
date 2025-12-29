@@ -265,6 +265,11 @@ public class BusDriver : VehicleDriver
                 return;
             }
 
+            bool isNewLeg = (oldState.PreviousStopID != newState.PreviousStopID) ||
+                        (oldState.TargetStopID != newState.TargetStopID) ||
+                        (oldState.DepartureTime != newState.DepartureTime);
+            if (!isNewLeg) return;
+
             BuildPathSegments(from, to, m_LocalPathSegments, out m_TotalLegLength);
             
             float currentGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
