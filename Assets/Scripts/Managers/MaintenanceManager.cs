@@ -20,6 +20,8 @@ public class MaintenanceManager : NetworkBehaviour
     public float repairRatePerHour = 10f;
 
     private List<string> _breakdownList = new List<string>();
+    private Queue<string> _breakdownQueue = new Queue<string>();
+    private HashSet<string> _breakdownSet = new HashSet<string>();
 
    
     private void Awake()
@@ -103,9 +105,10 @@ public class MaintenanceManager : NetworkBehaviour
                 driver.SetBrokenDown(true);
                 Debug.Log($"[Maintenance] Bus {busData.BusID} Broken Down. Adding to Queue.");
 
-                if (!_breakdownList.Contains(busData.BusID))
+                if (!_breakdownSet.Contains(busData.BusID))
                 {
-                    _breakdownList.Add(busData.BusID);
+                    _breakdownQueue.Enqueue(busData.BusID);
+                    _breakdownSet.Add(busData.BusID);
                     TryDispatchJobs();
                 }
             }
@@ -121,20 +124,23 @@ public class MaintenanceManager : NetworkBehaviour
     }
     public void TryDispatchJobs()
     {
-        if (_breakdownList.Count == 0) return;
+        if (_breakdownQueue.Count == 0) return;
 
-        // Iterate backwards so we can remove items safely
-        for (int i = _breakdownList.Count - 1; i >= 0; i--)
+        List<string> requeue = new List<string>();
+
+        while (_breakdownQueue.Count > 0)
         {
-            string busID = _breakdownList[i];
+            string busID = _breakdownQueue.Dequeue();
+            _breakdownSet.Remove(busID);
 
             GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
-            if (busObj == null) { _breakdownList.RemoveAt(i); continue;}
+            if (busObj == null) { continue;}
             
             BusDriver driver = busObj.GetComponent<BusDriver>();
             
             if (driver != null && !driver.IsFullyStopped)
             {
+                requeue.Add(busID);
                 continue;
             }
 
@@ -144,9 +150,16 @@ public class MaintenanceManager : NetworkBehaviour
             if (assignedDepot != null && assignedDepot.IsRecoveryAvailable)
             {
                 Debug.Log($"[Maintenance] Dispatching Job for {busID} to {assignedDepot.depotID}");
-                _breakdownList.RemoveAt(i);
                 assignedDepot.DispatchRecoveryVehicle(busID);
+            } else
+            {
+                requeue.Add(busID);
             }
+        }
+        foreach (string busID in requeue)
+        {
+            _breakdownQueue.Enqueue(busID);
+            _breakdownSet.Add(busID);
         }
     }
 
