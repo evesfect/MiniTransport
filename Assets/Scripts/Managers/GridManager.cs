@@ -1,10 +1,6 @@
 using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
-using System.Linq;
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 [DefaultExecutionOrder(-50)]
 public class GridManager : NetworkBehaviour
@@ -14,14 +10,16 @@ public class GridManager : NetworkBehaviour
     [Header("Configuration")]
     [SerializeField] private Terrain _targetTerrain;
 
+    [Header("Map Presets")]
+    [SerializeField] private List<GridMapPreset> _availablePresets = new List<GridMapPreset>();
+    [Tooltip("If true, the first preset in the list is loaded on start.")]
+    [SerializeField] private bool _loadDefaultPresetOnStart = false;
+
     [Header("Resolution")]
     [Min(1)] public int resolutionX = 20;
     [Min(1)] public int resolutionZ = 20;
 
-    [Header("Simulation Timing")]
-    [Tooltip("How often (in Game Minutes) the simulation calculates changes.")]
-    public float simulationStepMinutes = 15f; 
-
+    [Header("Network Config")]
     [Tooltip("How far in the future (Game Hours) to schedule the update on clients.")]
     public float scheduleLookaheadHours = 0.5f; 
 
@@ -31,32 +29,13 @@ public class GridManager : NetworkBehaviour
     public Color gridColor = new Color(0, 1, 0, 0.3f);
     public float gizmoHeight = 0.5f;
 
-    // Data State
     private TileData[] _gridData;
     private Vector2 _cellSize;
     private Vector3 _gridOrigin;
     
-    // Update Buffer (Used by Client AND Host)
     private List<PendingGridUpdate> _pendingUpdates = new List<PendingGridUpdate>();
-
-    // Bus stop lookup table
     private Dictionary<int, List<BusStop>> _tileStops = new Dictionary<int, List<BusStop>>();
 
-    // Server State
-    private float _lastSimGameTime;
-
-    // --- NEW: Scheduled Updates (Server Side Waiting List) ---
-    private struct ScheduledServerUpdate
-    {
-        public int TileIndex;
-        public TileData Data;
-        public TileUpdateFlags Mask;
-        public float TargetTimeOfDay; // e.g., 7.0f or 18.0f
-    }
-    private List<ScheduledServerUpdate> _serverScheduledUpdates = new List<ScheduledServerUpdate>();
-    private float _prevFrameTime;
-
-    // Public Accessors
     public int TotalTiles => resolutionX * resolutionZ;
     public Vector3 Origin => _gridOrigin;
     public Vector2 CellSize => _cellSize;
@@ -71,10 +50,10 @@ public class GridManager : NetworkBehaviour
             return;
         }
         Instance = this;
-        InitializeGrid();
+        InitializeGridStructure();
     }
 
-    private void InitializeGrid()
+    private void InitializeGridStructure()
     {
         if (_targetTerrain == null) _targetTerrain = Terrain.activeTerrain;
         if (_targetTerrain == null)
@@ -99,8 +78,10 @@ public class GridManager : NetworkBehaviour
             _gridData[i] = new TileData
             {
                 Traffic = 0,
-                Population = 50,
-                Demand = 20,
+                Population = 100,
+                Jobs = 50,
+                InDemand = 0,
+                OutDemand = 0,
                 ResidentialRatio = 100,
                 EcoClass = EconomicClass.Medium
             };
@@ -112,8 +93,11 @@ public class GridManager : NetworkBehaviour
         if (IsServer)
         {
             Debug.Log($"Grid: Initialized as Server/Host. Total Tiles: {TotalTiles}");
-            _lastSimGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-            _prevFrameTime = _lastSimGameTime; // Initialize prev time
+            
+            if (_loadDefaultPresetOnStart && _availablePresets.Count > 0)
+            {
+                LoadPreset(0);
+            }
         }
         else
         {
@@ -123,57 +107,61 @@ public class GridManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer) 
+        // Both Client and Server (Host/Dedicated) process the update buffer
+        // to ensure the simulation state changes at the exact same 'Visual Time'.
+        if (IsClient || IsServer) 
         {
-            ProcessServerScheduledUpdates();
-            ServerSimulationLoop();
-        }
-        
-        // IMPORTANT: ClientUpdateLoop runs on both Client AND Host/Server
-        // This ensures the Host waits for the simulation clock just like clients.
-        if (IsClient || IsServer) ClientUpdateLoop();
-    }
-
-    #region Server Logic
-
-    private void ServerSimulationLoop()
-    {
-        if (SimulationTimeManager.Instance == null) return;
-
-        float currentGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-        
-        float timeDelta = currentGameTime - _lastSimGameTime;
-        if (timeDelta < 0) timeDelta += 24f; // Wrapped around midnight
-
-        float minutesPassed = timeDelta * 60f;
-
-        if (minutesPassed >= simulationStepMinutes)
-        {
-            _lastSimGameTime = currentGameTime;
-            PerformSimulationStep();
+            ClientUpdateLoop();
         }
     }
 
-    private void PerformSimulationStep()
+    #region Preset Loading
+
+    public void LoadPreset(int presetIndex)
     {
-        // Future simulation logic will go here.
-        // It should call ScheduleTileUpdate(...) when it decides to change a tile.
+        if (!IsServer) return;
+        if (presetIndex < 0 || presetIndex >= _availablePresets.Count)
+        {
+            Debug.LogError($"Grid: Invalid Preset Index {presetIndex}");
+            return;
+        }
+
+        Debug.Log($"Grid: Server loading preset {presetIndex}...");
+        
+        ApplyPresetLocal(presetIndex);
+        LoadPresetClientRpc(presetIndex);
     }
 
-    /// <summary>
-    /// Schedules an update to apply ASAP (Current Time + Lookahead).
-    /// </summary>
+    [Rpc(SendTo.ClientsAndHost)]
+    private void LoadPresetClientRpc(int presetIndex)
+    {
+        if (IsServer && !IsHost) return; 
+        if (IsHost && IsServer) return;  
+        
+        if (!IsServer)
+        {
+            ApplyPresetLocal(presetIndex);
+        }
+    }
+
+    private void ApplyPresetLocal(int presetIndex)
+    {
+        var preset = _availablePresets[presetIndex];
+        GridInitializer.ApplyPreset(_gridData, preset, resolutionX, resolutionZ);
+        Debug.Log($"Grid: Loaded Preset '{preset.name}'");
+    }
+
+    #endregion
+
+    #region Data Access & Updates
+
     public void ScheduleTileUpdate(int tileIndex, TileData newData, TileUpdateFlags mask)
     {
         if (!IsServer) return;
 
-        // We let the RPC/Buffer handle it so the Host waits for the correct time.
-
-        // 1. Calculate Schedule Time
         float executionTime = SimulationTimeManager.Instance.CurrentTimeOfDay + scheduleLookaheadHours;
         if (executionTime >= 24f) executionTime -= 24f;
 
-        // 2. Prepare Packet
         TileUpdatePacket packet = new TileUpdatePacket
         {
             TileIndex = tileIndex,
@@ -181,78 +169,92 @@ public class GridManager : NetworkBehaviour
             Mask = mask
         };
 
-        // 3. Send Network Packet (Sends to Clients AND Host)
         ScheduleGridUpdateClientRpc(executionTime, packet);
-    }
 
-    /// <summary>
-    /// Schedules an update to apply exactly at a specific Time of Day (e.g. 18.0f).
-    /// The Server will wait until the correct moment (TargetTime - Lookahead) to broadcast this.
-    /// </summary>
-    public void ScheduleTileUpdateAtGameTime(int tileIndex, TileData newData, TileUpdateFlags mask, float targetTimeOfDay)
-    {
-        if (!IsServer) return;
-
-        // Add to the waiting list. The server loop will pick it up when it's time.
-        _serverScheduledUpdates.Add(new ScheduledServerUpdate
+        // If this is a Dedicated Server (not a Host), the RPC won't loop back
+        // must schedule it manually so the server state stays in sync with clients.
+        if (!IsHost)
         {
-            TileIndex = tileIndex,
-            Data = newData,
-            Mask = mask,
-            TargetTimeOfDay = targetTimeOfDay
-        });
-    }
-
-    private void ProcessServerScheduledUpdates()
-    {
-        if (SimulationTimeManager.Instance == null) return;
-        
-        float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
-        float lookahead = scheduleLookaheadHours;
-
-        // Iterate backwards so we can remove items efficiently
-        for (int i = _serverScheduledUpdates.Count - 1; i >= 0; i--)
-        {
-            ScheduledServerUpdate update = _serverScheduledUpdates[i];
-            
-            // Calculate when we need to pull the trigger (send the RPC)
-            // Trigger Time = Target Time - Lookahead
-            // e.g. Target 18:00, Lookahead 0.5 -> Trigger at 17:30
-            float triggerTime = update.TargetTimeOfDay - lookahead;
-            if (triggerTime < 0) triggerTime += 24f;
-
-            // Check if we crossed the trigger time in this frame
-            if (WasTimeCrossed(_prevFrameTime, currentTime, triggerTime))
+            _pendingUpdates.Add(new PendingGridUpdate
             {
-                // Execute the standard update (which adds the lookahead back, landing exactly on TargetTime)
-                ScheduleTileUpdate(update.TileIndex, update.Data, update.Mask);
-                _serverScheduledUpdates.RemoveAt(i);
-            }
+                ExecutionTime = executionTime,
+                Packet = packet
+            });
+            _pendingUpdates.Sort((a, b) => a.ExecutionTime.CompareTo(b.ExecutionTime));
         }
-
-        _prevFrameTime = currentTime;
     }
 
-    private bool WasTimeCrossed(float prev, float curr, float target)
+    [Rpc(SendTo.ClientsAndHost)]
+    private void ScheduleGridUpdateClientRpc(float executionGameTime, TileUpdatePacket packet)
     {
-        if (prev < curr) // Normal time flow
+        _pendingUpdates.Add(new PendingGridUpdate
         {
-            return prev < target && target <= curr;
-        }
-        else // Day wrap (e.g. 23.9 -> 0.1)
+            ExecutionTime = executionGameTime,
+            Packet = packet
+        });
+
+        _pendingUpdates.Sort((a, b) => a.ExecutionTime.CompareTo(b.ExecutionTime));
+    }
+
+    private void ClientUpdateLoop()
+    {
+        if (_pendingUpdates.Count == 0) return;
+
+        float visualTime = SimulationTimeManager.Instance.VisualTime;
+        
+        while(_pendingUpdates.Count > 0)
         {
-            return target > prev || target <= curr;
+            var nextUpdate = _pendingUpdates[0];
+            bool isTime = visualTime >= nextUpdate.ExecutionTime;
+            
+            if (visualTime < 1f && nextUpdate.ExecutionTime > 23f) isTime = true;
+            if (visualTime > 23f && nextUpdate.ExecutionTime < 1f) isTime = false;
+
+            if (isTime) 
+            {
+                 ApplyUpdate(nextUpdate.Packet);
+                _pendingUpdates.RemoveAt(0);
+            }
+            else break;
         }
     }
+
+    private void ApplyUpdate(TileUpdatePacket packet)
+    {
+        if (packet.TileIndex < 0 || packet.TileIndex >= _gridData.Length) return;
+
+        TileData current = _gridData[packet.TileIndex];
+
+        if ((packet.Mask & TileUpdateFlags.Traffic) != 0) current.Traffic = packet.Data.Traffic;
+        if ((packet.Mask & TileUpdateFlags.Population) != 0) current.Population = packet.Data.Population;
+        if ((packet.Mask & TileUpdateFlags.Jobs) != 0) current.Jobs = packet.Data.Jobs;
+        if ((packet.Mask & TileUpdateFlags.Ratios) != 0) 
+        {
+            current.ResidentialRatio = packet.Data.ResidentialRatio;
+            current.CommercialRatio = packet.Data.CommercialRatio;
+            current.IndustrialRatio = packet.Data.IndustrialRatio;
+        }
+        if ((packet.Mask & TileUpdateFlags.Jobs) != 0) current.Jobs = packet.Data.Jobs;
+
+        if ((packet.Mask & TileUpdateFlags.DemandValues) != 0) 
+        {
+            current.OutDemand = packet.Data.OutDemand;
+            current.InDemand = packet.Data.InDemand;
+        }
+        if ((packet.Mask & TileUpdateFlags.Economy) != 0) current.EcoClass = packet.Data.EcoClass;
+
+        _gridData[packet.TileIndex] = current;
+    }
+
+    #endregion
+
+    #region Network Sync
 
     [Rpc(SendTo.Server)]
     private void RequestGridStateServerRpc(RpcParams rpcParams = default)
     {
         SendFullStateClientRpc(_gridData, RpcTarget.Single(rpcParams.Receive.SenderClientId, RpcTargetUse.Temp));
     }
-    #endregion
-
-    #region Client and Host Logic
 
     [Rpc(SendTo.SpecifiedInParams)]
     private void SendFullStateClientRpc(TileData[] fullState, RpcParams rpcParams = default)
@@ -267,116 +269,34 @@ public class GridManager : NetworkBehaviour
         Debug.Log("Grid [Client]: Received Initial Full State from Server.");
     }
 
-    [Rpc(SendTo.ClientsAndHost)]
-    private void ScheduleGridUpdateClientRpc(float executionGameTime, TileUpdatePacket packet)
-    {
-        // Both Clients and Host execute this.
-        _pendingUpdates.Add(new PendingGridUpdate
-        {
-            ExecutionTime = executionGameTime,
-            Packet = packet
-        });
-
-        _pendingUpdates.Sort((a, b) => a.ExecutionTime.CompareTo(b.ExecutionTime));
-    }
-
-    private void ClientUpdateLoop()
-    {
-        if (_pendingUpdates.Count == 0) return;
-
-        // On Host, VisualTime == NetTimeOfDay. On Client, it is Interpolated.
-        float visualTime = SimulationTimeManager.Instance.VisualTime;
-        
-        while(_pendingUpdates.Count > 0)
-        {
-            var nextUpdate = _pendingUpdates[0];
-
-            bool isTime = visualTime >= nextUpdate.ExecutionTime;
-            
-            // Handle day wrap (Packet is for 23.9, we are at 0.1 -> we missed it, apply now)
-            if (visualTime < 1f && nextUpdate.ExecutionTime > 23f) isTime = true;
-            
-            // Prevent premature firing on day wrap (Packet is for 0.1, we are at 23.9 -> wait)
-            if (visualTime > 23f && nextUpdate.ExecutionTime < 1f) isTime = false;
-
-            if (isTime) 
-            {
-                 ApplyUpdate(nextUpdate.Packet);
-                _pendingUpdates.RemoveAt(0);
-            }
-            else
-            {
-                break;
-            }
-        }
-    }
-
-    private void ApplyUpdate(TileUpdatePacket packet)
-    {
-        if (packet.TileIndex < 0 || packet.TileIndex >= _gridData.Length) return;
-
-        TileData current = _gridData[packet.TileIndex];
-
-        if ((packet.Mask & TileUpdateFlags.Traffic) != 0) current.Traffic = packet.Data.Traffic;
-        if ((packet.Mask & TileUpdateFlags.Population) != 0) current.Population = packet.Data.Population;
-        if ((packet.Mask & TileUpdateFlags.Demand) != 0) current.Demand = packet.Data.Demand;
-        if ((packet.Mask & TileUpdateFlags.Ratios) != 0) 
-        {
-            current.ResidentialRatio = packet.Data.ResidentialRatio;
-            current.CommercialRatio = packet.Data.CommercialRatio;
-            current.IndustrialRatio = packet.Data.IndustrialRatio;
-        }
-        if ((packet.Mask & TileUpdateFlags.Economy) != 0) current.EcoClass = packet.Data.EcoClass;
-
-        _gridData[packet.TileIndex] = current;
-    }
     #endregion
-    #region bus stops
+
+    #region Helpers & Gizmos
 
     public void RegisterStop(BusStop stop)
     {
         if (stop == null) return;
-
-        // Find which tile this stop belongs to
         if (WorldToGrid(stop.transform.position, out int x, out int y))
         {
             int index = GetIndex(x, y);
-
-            if (!_tileStops.ContainsKey(index))
-            {
-                _tileStops[index] = new List<BusStop>();
-            }
-
-            if (!_tileStops[index].Contains(stop))
-            {
-                _tileStops[index].Add(stop);
-                // Debug.Log($"Grid: Registered Stop '{stop.name}' to Tile {x},{y} (Index {index})");
-            }
-        }
-        else
-        {
-            Debug.LogWarning($"Grid: Stop '{stop.name}' is outside the grid bounds!");
+            if (!_tileStops.ContainsKey(index)) _tileStops[index] = new List<BusStop>();
+            if (!_tileStops[index].Contains(stop)) _tileStops[index].Add(stop);
         }
     }
 
     public List<BusStop> GetStopsInTile(int index)
     {
-        if (_tileStops.TryGetValue(index, out List<BusStop> stops))
-        {
-            return stops;
-        }
+        if (_tileStops.TryGetValue(index, out List<BusStop> stops)) return stops;
         return null;
     }
-
-    #endregion
-
-    #region Helpers and Gizmos
 
     public TileData GetTileData(int x, int y)
     {
         if (x < 0 || x >= resolutionX || y < 0 || y >= resolutionZ) return default;
         return _gridData[GetIndex(x, y)];
     }
+
+    public TileData GetTileData(int index) => _gridData[index];
 
     public int GetIndex(int x, int y) => (y * resolutionX) + x;
 
@@ -412,14 +332,6 @@ public class GridManager : NetworkBehaviour
             return Mathf.Lerp(1.0f, 0.2f, traffic / 100f);
         }
         return 1.0f;
-    }
-
-    public void SetTileData(int index, TileData newData)
-    {
-        if (index >= 0 && index < _gridData.Length)
-        {
-            _gridData[index] = newData;
-        }
     }
     
 #if UNITY_EDITOR
@@ -478,18 +390,10 @@ public class GridManager : NetworkBehaviour
                 int y = i / resolutionX;
                 Vector3 pos = GridToWorld(x,y);
                 
-                string label = $"T:{_gridData[i].Traffic}\nP:{_gridData[i].Population}\nD:{_gridData[i].Demand}";
-                Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
-
-                if (_gridData[i].Traffic > 0)
-                {
-                    Gizmos.color = new Color(1f, 0f, 0f, 0.4f); 
-                    float h = (_gridData[i].Traffic / 100f) * 20f; 
-                    Gizmos.DrawCube(pos + Vector3.up * (h/2), new Vector3(_cellSize.x * 0.8f, h, _cellSize.y * 0.8f));
-                    
-                    Gizmos.color = Color.red;
-                    Gizmos.DrawWireCube(pos + Vector3.up * (h/2), new Vector3(_cellSize.x * 0.8f, h, _cellSize.y * 0.8f));
-                }
+                string label = $"Pop:{_gridData[i].Population}\nJob:{_gridData[i].Jobs}\nIn:{_gridData[i].InDemand} Out:{_gridData[i].OutDemand}";
+#if UNITY_EDITOR
+                UnityEditor.Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
+#endif
             }
         }
     }

@@ -1,7 +1,6 @@
 using Unity.Netcode;
 using UnityEngine;
 
-// Enums for later logic
 public enum EconomicClass : byte
 {
     Low = 0,
@@ -15,7 +14,9 @@ public struct TileData : INetworkSerializable
 {
     public byte Traffic;           // 0-100
     public ushort Population;      // 0-65535
-    public byte Demand;            // 0-100
+    public ushort Jobs;
+    public byte InDemand;            // 0-255
+    public byte OutDemand; // 0-255
     
     // Ratios (Sums to 100)
     public byte ResidentialRatio;
@@ -28,7 +29,9 @@ public struct TileData : INetworkSerializable
     {
         serializer.SerializeValue(ref Traffic);
         serializer.SerializeValue(ref Population);
-        serializer.SerializeValue(ref Demand);
+        serializer.SerializeValue(ref Jobs);
+        serializer.SerializeValue(ref OutDemand);
+        serializer.SerializeValue(ref InDemand);
         serializer.SerializeValue(ref ResidentialRatio);
         serializer.SerializeValue(ref CommercialRatio);
         serializer.SerializeValue(ref IndustrialRatio);
@@ -43,9 +46,10 @@ public enum TileUpdateFlags : byte
     None = 0,
     Traffic = 1 << 0,
     Population = 1 << 1,
-    Demand = 1 << 2,
+    Jobs = 1 << 2, 
     Ratios = 1 << 3,
     Economy = 1 << 4,
+    DemandValues = 1 << 5,
     All = 255
 }
 
@@ -64,7 +68,13 @@ public struct TileUpdatePacket : INetworkSerializable
 
         if ((Mask & TileUpdateFlags.Traffic) != 0) serializer.SerializeValue(ref Data.Traffic);
         if ((Mask & TileUpdateFlags.Population) != 0) serializer.SerializeValue(ref Data.Population);
-        if ((Mask & TileUpdateFlags.Demand) != 0) serializer.SerializeValue(ref Data.Demand);
+        if ((Mask & TileUpdateFlags.Jobs) != 0) serializer.SerializeValue(ref Data.Jobs);
+        
+        if ((Mask & TileUpdateFlags.DemandValues) != 0) 
+        {
+            serializer.SerializeValue(ref Data.OutDemand);
+            serializer.SerializeValue(ref Data.InDemand);
+        }
         
         if ((Mask & TileUpdateFlags.Ratios) != 0)
         {
