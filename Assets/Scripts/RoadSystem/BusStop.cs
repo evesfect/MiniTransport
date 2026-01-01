@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.Splines;
 using Unity.Mathematics;
+using UnityEngine.Rendering;
+using System;
+using System.Collections;
 
 public class BusStop : MonoBehaviour
 {
@@ -13,6 +16,27 @@ public class BusStop : MonoBehaviour
     [Tooltip("Position on the spline (0.0 to 1.0).")]
     [Range(0f, 1f)] 
     public float splineT;
+
+    private void Start()
+    {
+        if (GridManager.Instance != null)
+        {
+            GridManager.Instance.RegisterStop(this);
+        }
+        else
+        {
+            StartCoroutine(RegisterWithGridDeferred());
+        }
+    }
+
+    private IEnumerator RegisterWithGridDeferred()
+    {
+        while (GridManager.Instance == null)
+        {
+            yield return null;
+        }
+        GridManager.Instance.RegisterStop(this);
+    }
 
     private void OnDrawGizmos()
     {

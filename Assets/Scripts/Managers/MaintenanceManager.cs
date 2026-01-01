@@ -1,6 +1,8 @@
-using UnityEngine;
+using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
+using Unity.VisualScripting.FullSerializer;
+using UnityEngine;
 
 [DefaultExecutionOrder(-45)] // Run after TimeManager/FleetManager, before Depot
 public class MaintenanceManager : NetworkBehaviour
@@ -17,6 +19,11 @@ public class MaintenanceManager : NetworkBehaviour
     [Tooltip("Durability gained per in-game hour while in depot")]
     public float repairRatePerHour = 10f;
 
+    private List<string> _breakdownList = new List<string>();
+    private Queue<string> _breakdownQueue = new Queue<string>();
+    private HashSet<string> _breakdownSet = new HashSet<string>();
+
+   
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -62,7 +69,7 @@ public class MaintenanceManager : NetworkBehaviour
                 // Check Breakdown
                 if (newDurability < breakdownThreshold)
                 {
-                    TriggerBreakdown(busData.BusID);
+                    TriggerBreakdown(busData);
                     Debug.Log($"Breakdown triggered for BUSID: {busData.BusID}");
                 }
             }
@@ -76,29 +83,96 @@ public class MaintenanceManager : NetworkBehaviour
         // 1. Repair Inactive Buses (In Depot)
         foreach (var busData in FleetManager.Instance.allBuses)
         {
-            if (!FleetManager.Instance.IsBusActive(busData.BusID))
+            if (!FleetManager.Instance.IsBusActive(busData.BusID) && busData.Durability < 100f)
             {
-                if (busData.Durability < 100f)
-                {
-                    float newDurability = busData.Durability + repairRatePerHour;
-                    FleetManager.Instance.UpdateBusDurability(busData.BusID, newDurability);
-                    Debug.Log($"BusID: {busData.BusID}, Durability: {newDurability}");
-                }
+                             
+                float newDurability = busData.Durability + repairRatePerHour;
+                FleetManager.Instance.UpdateBusDurability(busData.BusID, newDurability);
+                Debug.Log($"BusID: {busData.BusID}, Durability: {newDurability}");
+                
             }
         }
     }
 
-    private void TriggerBreakdown(string busID)
+    private void TriggerBreakdown(BusData busData)
     {
-        GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
+        GameObject busObj = FleetManager.Instance.GetActiveBus(busData.BusID);
         if (busObj != null)
         {
             BusDriver driver = busObj.GetComponent<BusDriver>();
             if (driver != null)
             {
                 driver.SetBrokenDown(true);
-                Debug.Log($"[Maintenance] Bus {busID} has broken down!");
+                Debug.Log($"[Maintenance] Bus {busData.BusID} Broken Down. Adding to Queue.");
+
+                if (!_breakdownSet.Contains(busData.BusID))
+                {
+                    _breakdownQueue.Enqueue(busData.BusID);
+                    _breakdownSet.Add(busData.BusID);
+                    TryDispatchJobs();
+                }
             }
         }
     }
+
+    // --- JOB DISPATCHING ---
+
+    public void OnBusStopped(string busID)
+    {
+        Debug.Log($"[Maintenance] Bus {busID} reported fully stopped. Attempting dispatch.");
+        TryDispatchJobs(); 
+    }
+    public void TryDispatchJobs()
+    {
+        if (_breakdownQueue.Count == 0) return;
+
+        List<string> requeue = new List<string>();
+
+        while (_breakdownQueue.Count > 0)
+        {
+            string busID = _breakdownQueue.Dequeue();
+            _breakdownSet.Remove(busID);
+
+            GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
+            if (busObj == null) { continue;}
+            
+            BusDriver driver = busObj.GetComponent<BusDriver>();
+            
+            if (driver != null && !driver.IsFullyStopped)
+            {
+                requeue.Add(busID);
+                continue;
+            }
+
+            var busData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID);
+            DepotController assignedDepot = FindDepotByID(busData.AssignedDepotID);
+
+            if (assignedDepot != null && assignedDepot.IsRecoveryAvailable)
+            {
+                Debug.Log($"[Maintenance] Dispatching Job for {busID} to {assignedDepot.depotID}");
+                assignedDepot.DispatchRecoveryVehicle(busID);
+            } else
+            {
+                requeue.Add(busID);
+            }
+        }
+        foreach (string busID in requeue)
+        {
+            _breakdownQueue.Enqueue(busID);
+            _breakdownSet.Add(busID);
+        }
+    }
+
+    public void OnDepotFree(string depotID)
+    {
+        TryDispatchJobs();
+    }
+
+    private DepotController FindDepotByID(string depotID)
+    {
+        
+        var depots = FindObjectsByType<DepotController>(FindObjectsSortMode.None);
+        return depots.FirstOrDefault(d => d.depotID == depotID);
+    }
+
 }
