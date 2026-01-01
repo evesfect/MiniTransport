@@ -1,6 +1,7 @@
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UIElements;
+using System.Collections;
 
 public class GameHUDController : MonoBehaviour
 {
@@ -32,6 +33,10 @@ public class GameHUDController : MonoBehaviour
 
     private bool _sortWaitingAsc = false;
     private bool _sortBoardedAsc = false;
+
+    private VisualElement _fleetPanel;
+    private ScrollView _fleetListContainer;
+    private Coroutine _refreshCoroutine;
 
     private const string SelectedClassName = "selected";
     private const string ActiveClassName = "active"; 
@@ -78,6 +83,10 @@ public class GameHUDController : MonoBehaviour
         _btnSortBoarded = root.Q<Button>("BtnSortBoarded");
         SetupPanel(_busStopsPanel);
 
+        // --- Query Fleet Panel ---
+        _fleetPanel = root.Q<VisualElement>("FleetListPanel");
+        _fleetListContainer = root.Q<ScrollView>("FleetListContainer");
+
         // --- Bind Events ---
         if (_btnPause != null) _btnPause.clicked += () => SetMultiplier(0f);
         if (_btn1x != null) _btn1x.clicked += () => SetMultiplier(1f);
@@ -87,7 +96,6 @@ public class GameHUDController : MonoBehaviour
         if (_btnInspection != null) _btnInspection.clicked += ToggleInspectionMenu;
         if (_btnToggleRoutes != null) _btnToggleRoutes.clicked += ToggleRoutes;
         if (_btnToggleFleets != null) _btnToggleFleets.clicked += ToggleFleets;
-
         if (_btnManagement != null) _btnManagement.clicked += ToggleManagementMenu;
         if (_btnBusStops != null) _btnBusStops.clicked += () => OpenPanel(_busStopsPanel);
         if (_btnSortWaiting != null)
@@ -95,6 +103,11 @@ public class GameHUDController : MonoBehaviour
         
         if (_btnSortBoarded != null) 
             _btnSortBoarded.clicked += () => ToggleSort(ref _sortBoardedAsc, _btnSortBoarded, _scrollBoarded);
+    }
+
+    private void OnDisable()
+    {
+        if (_refreshCoroutine != null) StopCoroutine(_refreshCoroutine);
     }
 
     private void Update()
@@ -187,10 +200,100 @@ public class GameHUDController : MonoBehaviour
     private void ToggleFleets()
     {
         _isFleetsVisible = !_isFleetsVisible;
-        if (_isFleetsVisible) _btnToggleFleets.AddToClassList(ActiveClassName);
-        else _btnToggleFleets.RemoveFromClassList(ActiveClassName);
-        
-        Debug.Log($"Fleets Toggled: {_isFleetsVisible}");
+
+        // Visual Toggle on Button
+        if (_isFleetsVisible)
+            _btnToggleFleets.AddToClassList(ActiveClassName);
+        else
+            _btnToggleFleets.RemoveFromClassList(ActiveClassName);
+
+        // Show/Hide Panel
+        if (_fleetPanel != null)
+        {
+            _fleetPanel.style.display = _isFleetsVisible ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        // Start/Stop Auto-Refresh
+        if (_isFleetsVisible)
+        {
+            RefreshFleetList(); // Initial Update
+            if (_refreshCoroutine == null) _refreshCoroutine = StartCoroutine(AutoRefreshFleetUI());
+        }
+        else
+        {
+            if (_refreshCoroutine != null)
+            {
+                StopCoroutine(_refreshCoroutine);
+                _refreshCoroutine = null;
+            }
+        }
+    }
+
+    private IEnumerator AutoRefreshFleetUI()
+    {
+        while (_isFleetsVisible)
+        {
+            yield return new WaitForSeconds(1.0f); // Refresh every second
+            RefreshFleetList();
+        }
+    }
+
+    private void RefreshFleetList()
+    {
+        if (_fleetListContainer == null || FleetManager.Instance == null) return;
+
+        _fleetListContainer.Clear();
+
+        foreach (var busData in FleetManager.Instance.allBuses)
+        {
+            // Create Row
+            VisualElement row = new VisualElement();
+            row.AddToClassList("fleet-row");
+
+            // Columns
+            Label lblId = new Label(busData.BusID);
+            lblId.AddToClassList("fleet-col-id");
+
+            Label lblStatus = new Label();
+            lblStatus.AddToClassList("fleet-col-status");
+
+            Label lblHealth = new Label($"{busData.Durability:F0}%");
+            lblHealth.AddToClassList("fleet-col-health");
+
+            // Determine Runtime State
+            string statusText = "Depot";
+            string statusClass = "status-idle";
+
+            // Check if bus is spawned
+            GameObject activeBus = FleetManager.Instance.GetActiveBus(busData.BusID);
+            if (activeBus != null)
+            {
+                var driver = activeBus.GetComponent<BusDriver>();
+                if (driver != null)
+                {
+                    if (driver.IsBroken)
+                    {
+                        statusText = "BROKEN";
+                        statusClass = "status-broken";
+                    }
+                    else
+                    {
+                        statusText = "In Service";
+                        statusClass = "status-ok";
+                    }
+                }
+            }
+
+            lblStatus.text = statusText;
+            lblStatus.AddToClassList(statusClass);
+
+            // Assemble
+            row.Add(lblId);
+            row.Add(lblStatus);
+            row.Add(lblHealth);
+
+            _fleetListContainer.Add(row);
+        }
     }
 
     // --- Timer Logic ---

@@ -10,6 +10,24 @@ public class DepotController : NetworkBehaviour
     [Header("Fleet Configuration")]
     public GameObject busPrefab;
 
+    [Header("Recovery Configuration")]
+    public GameObject recoveryVehiclePrefab;
+  
+    [Header("Recovery Spawn Point")]
+    public RoadNode SpawnNode;
+
+    private RecoveryVehicle _activeRecoveryVehicle;
+
+    public bool IsRecoveryAvailable
+    {
+        get
+        {
+            // If we haven't spawned one, we are available. 
+            // If we have, check if it's busy.
+            return _activeRecoveryVehicle == null || !_activeRecoveryVehicle.IsBusy;
+        }
+    }
+
     public override void OnNetworkSpawn()
     {
         if (IsServer && SimulationTimeManager.Instance != null)
@@ -23,6 +41,38 @@ public class DepotController : NetworkBehaviour
         if (IsServer && SimulationTimeManager.Instance != null)
         {
             SimulationTimeManager.Instance.OnMinuteChanged -= CheckSchedules;
+        }
+    }
+
+    public void DispatchRecoveryVehicle(string busID)
+    {
+        if (!IsServer) return;
+        if (SpawnNode == null)
+        {
+            Debug.LogError($"[Depot {depotID}] Cannot dispatch recovery: No SpawnNode assigned!");
+            return;
+        }
+
+        // 1. Spawn if doesn't exist
+        if (_activeRecoveryVehicle == null)
+        {
+            GameObject go = Instantiate(recoveryVehiclePrefab.gameObject, SpawnNode.transform.position, SpawnNode.transform.rotation);
+            var netObj = go.GetComponent<NetworkObject>();
+            if (netObj != null) netObj.Spawn();
+            _activeRecoveryVehicle = go.GetComponent<RecoveryVehicle>();
+        }
+
+        // 2. Start Mission
+        _activeRecoveryVehicle.StartMission(busID, this);
+    }
+
+    // Called by RecoveryVehicle when it returns
+    public void OnRecoveryVehicleFinished()
+    {
+        // Tell the Manager we are ready for the next job
+        if (MaintenanceManager.Instance != null)
+        {
+            MaintenanceManager.Instance.OnDepotFree(this.depotID);
         }
     }
 
@@ -49,7 +99,24 @@ public class DepotController : NetworkBehaviour
             }
             else if (!shouldBeActive && isCurrentlyActive)
             {
-                ReturnBusToDepot(busData.BusID);
+                bool canReturn = true;
+
+                GameObject busObj = FleetManager.Instance.GetActiveBus(busData.BusID);
+                if (busObj != null)
+                {
+                    BusDriver driver = busObj.GetComponent<BusDriver>();
+                    // If driver is missing or Broken, DO NOT despawn
+                    if (driver != null && driver.IsBroken)
+                    {
+                        canReturn = false;
+                        // Debug.Log($"[Depot] Keeping Bus {busData.BusID} active despite schedule end because it is BROKEN.");
+                    }
+                }
+
+                if (canReturn)
+                {
+                    ReturnBusToDepot(busData.BusID);
+                }
             }
         }
     }
