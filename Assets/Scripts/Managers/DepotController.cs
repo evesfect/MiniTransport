@@ -44,7 +44,10 @@ public class DepotController : NetworkBehaviour
             {
                 if (busData.Durability > threshold)
                 {
-                    SpawnBus(busData);
+                    if (EmployeeManager.Instance != null && EmployeeManager.Instance.HasAssignedDriver(busData.BusID))
+                    {
+                        SpawnBus(busData);
+                    }
                 }
             }
             else if (!shouldBeActive && isCurrentlyActive)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
+using System;
 
 [DefaultExecutionOrder(-50)]
 public class FleetManager : NetworkBehaviour
@@ -14,6 +15,8 @@ public class FleetManager : NetworkBehaviour
 
     [Header("Financial Settings")]
     public float weeklyCostPerBus = 150f;
+
+    public event Action OnFleetUpdated;
 
     // Runtime Lookup: Maps BusID -> Spawned GameObject
     private Dictionary<string, GameObject> _activeBusInstances = new Dictionary<string, GameObject>();
@@ -45,7 +48,10 @@ public class FleetManager : NetworkBehaviour
             {
                 CompanyManager.Instance.OnWeeklyExpensesRequested += SubmitFleetExpenses;
             }
+
+            OnFleetUpdated?.Invoke();
         }
+
         else
         {
             allBuses.Clear();
@@ -175,6 +181,7 @@ public class FleetManager : NetworkBehaviour
             SaveFleet();
             string json = SerializeFleet();
             SyncFleetRpc(json);
+            OnFleetUpdated?.Invoke();
         }
     }
 

@@ -1,9 +1,10 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
-using System;
+using Unity.VisualScripting;
+using UnityEngine;
 
 
 [DefaultExecutionOrder(-50)]
@@ -64,6 +65,11 @@ public class EmployeeManager : NetworkBehaviour
                 CompanyManager.Instance.OnWeeklyExpensesRequested += RefreshCandidates;
             }
 
+            if (FleetManager.Instance != null)
+            {
+                FleetManager.Instance.OnFleetUpdated += AutoAssignDrivers;
+            }
+
             // Initial Population if empty
             if (candidates.Count == 0) RefreshCandidates();
         }
@@ -90,6 +96,59 @@ public class EmployeeManager : NetworkBehaviour
     }
 
     // --- Passive Logic: Payroll & Candidates (Triggered by Company Signal) ---
+
+    private void AutoAssignDrivers()
+    {
+        if (!IsServer || FleetManager.Instance == null) return;
+
+        var buses = FleetManager.Instance.allBuses;
+        var drivers = allEmployees.Where(e => e.Role == EmployeeRole.Driver).ToList();
+        bool changed = false;
+
+        // 1. Cleanup: Unassign drivers if their bus no longer exists
+        foreach (var driver in drivers)
+        {
+            if (!string.IsNullOrEmpty(driver.AssignedBusID))
+            {
+                if (!buses.Any(b => b.BusID == driver.AssignedBusID))
+                {
+                    driver.AssignedBusID = ""; // Bus was deleted, driver is now free
+                    changed = true;
+                }
+            }
+        }
+
+        // 2. Assignment: Find buses without drivers and assign free drivers
+        foreach (var bus in buses)
+        {
+            // Is this bus already covered by someone?
+            bool hasDriver = drivers.Any(d => d.AssignedBusID == bus.BusID);
+
+            if (!hasDriver)
+            {
+                // Find a driver who is NOT assigned
+                var freeDriver = drivers.FirstOrDefault(d => string.IsNullOrEmpty(d.AssignedBusID));
+
+                if (freeDriver != null)
+                {
+                    freeDriver.AssignedBusID = bus.BusID;
+                    changed = true;
+                    Debug.Log($"[Auto-Assign] Driver {freeDriver.FullName} assigned to {bus.BusID}");
+                }
+                else
+                {
+                    // No free drivers available
+                    Debug.Log($"[Auto-Assign] Bus {bus.BusID} waiting for a driver...");
+                }
+            }
+        }
+
+        if (changed)
+        {
+            SaveEmployees();
+            SyncEmployeesRpc(SerializeEmployees());
+        }
+    }
 
     private void SubmitPayroll()
     {
@@ -197,6 +256,20 @@ public class EmployeeManager : NetworkBehaviour
         }
     }
 
+    //Assigns a Driver to a Bus
+    public void AssignDriverToBus(string employeeID, string busID)
+    {
+        if (IsServer) AssignDriverInternal(employeeID, busID);
+        else RequestDriverAssignmentRpc(employeeID, busID);
+    }
+
+    // [NEW] Checks if a bus has a driver
+    public bool HasAssignedDriver(string busID)
+    {
+        // Look for any employee who is a Driver AND is assigned to this busID
+        return allEmployees.Any(e => e.Role == EmployeeRole.Driver && e.AssignedBusID == busID);
+    }
+
     // --- Helpers ---
 
     public float GetTrainingCost(string employeeID)
@@ -238,6 +311,8 @@ public class EmployeeManager : NetworkBehaviour
             SyncEmployeesRpc(SerializeEmployees());
             OnEmployeeHired?.Invoke(candidate.EmployeeID);
             Debug.Log($"[HR] Hired {candidate.FullName}");
+
+            AutoAssignDrivers();
         }
     }
 
@@ -260,6 +335,19 @@ public class EmployeeManager : NetworkBehaviour
         Debug.Log($"[Employee] Assigned {emp.FullName} to Depot: {depotID}");
     }
 
+    private void AssignDriverInternal(string employeeID, string busID)
+    {
+        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
+        if (emp == null || emp.Role != EmployeeRole.Driver) return;
+
+       
+        emp.AssignedBusID = busID;
+
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
+        Debug.Log($"[Employee] Driver {emp.FullName} assigned to Bus {busID}");
+    }
+
     private void FireInternal(string id)
     {
         EmployeeData toRemove = allEmployees.FirstOrDefault(e => e.EmployeeID == id);
@@ -270,6 +358,8 @@ public class EmployeeManager : NetworkBehaviour
             SyncEmployeesRpc(SerializeEmployees());
             OnEmployeeFired?.Invoke(id);
             Debug.Log($"[HR] Fired {toRemove.FullName}");
+
+            AutoAssignDrivers();
         }
     }
 
@@ -322,6 +412,12 @@ public class EmployeeManager : NetworkBehaviour
     private void RequestDepotAssignmentRpc(string employeeID, string depotID)
     {
         AssignMechanicInternal(employeeID, depotID);
+    }
+
+    [Rpc(SendTo.Server)] 
+    private void RequestDriverAssignmentRpc(string eId, string bId) 
+    { 
+        AssignDriverInternal(eId, bId); 
     }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
