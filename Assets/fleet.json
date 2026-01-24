@@ -9,29 +9,29 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 99.84002685546875
+            "Durability": 100
         },
         {
             "BusID": "02",
-            "AssignedDepotID": "Depot_North",
+            "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
                 "StartTime": 6.200000286102295,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 99.86002349853516
+            "Durability": 100
         },
         {
             "BusID": "03",
-            "AssignedDepotID": "Depot_North",
+            "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
                 "StartTime": 6.200000286102295,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 99.86002349853516
+            "Durability": 100
         }
     ]
 }
