@@ -1,0 +1,102 @@
+<ui:UXML xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" noNamespaceSchemaLocation="../../../UIElementsSchema/UIElements.xsd" editor-extension-mode="False">
+    <Style src="project://database/Assets/UI/Styles/HudStyles.uss" />
+    
+    <ui:VisualElement name="Root" style="flex-grow: 1; justify-content: space-between; picking-mode: Ignore;">
+        
+        <ui:VisualElement name="TopContainer" style="flex-direction: row; align-items: center; justify-content: flex-start; padding: 8px; picking-mode: Ignore;">
+            <ui:Button name="BtnInspection" tooltip="Inspection Mode" class="inspection-btn" />
+            <ui:Button name="BtnManagement" tooltip="Management Panels" class="management-btn" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="CenterContainer" style="flex-grow: 1; flex-direction: row; justify-content: space-between; picking-mode: Ignore;">
+            <ui:VisualElement name="LeftSidebar" style="picking-mode: Ignore;" />
+            <ui:VisualElement name="RightSidebar" style="picking-mode: Ignore;" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="BottomContainer" style="flex-direction: row; justify-content: flex-end; align-items: flex-end; padding: 8px; picking-mode: Ignore;">
+            <ui:VisualElement name="TimerWidget" class="stat-box" style="width: 370px;">
+                <ui:VisualElement name="Icon" class="icon-time" style="flex-grow: 1;" />
+                <ui:Label text="Day 1" name="DateLabel" class="hud-text" style="width: 50px;" />
+                <ui:Label text="06:00" name="TimeLabel" class="hud-text spacer-right" style="width: 50px;" />
+                <ui:Button name="BtnPause" class="speed-btn btn-pause" />
+                <ui:Button text="1x" name="Btn1x" class="speed-btn" />
+                <ui:Button text="3x" name="Btn3x" class="speed-btn" />
+                <ui:Button text="10x" name="Btn10x" class="speed-btn" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="InspectionDropdown" class="dropdown-panel">
+            <ui:ScrollView mode="Vertical">
+                <ui:Button text="Routes" name="BtnToggleRoutes" class="menu-item" />
+                <ui:Button text="Fleet" name="BtnToggleFleets" class="menu-item" />
+            </ui:ScrollView>
+        </ui:VisualElement> 
+
+        <ui:VisualElement name="ManagementDropdown" class="dropdown-panel">
+            <ui:ScrollView mode="Vertical">
+                <ui:Button text="Bus Stops" name="BtnOpenBusStops" class="menu-item" />
+                <ui:Button text="Inventory" name="BtnOpenInventory" class="menu-item" />
+                <ui:Button text="Depot" name="BtnOpenDepot" class="menu-item" />
+            </ui:ScrollView>
+        </ui:VisualElement>
+
+        <ui:VisualElement name="FleetListPanel" class="fleet-panel" style="display: none;">
+            <ui:Label text="Fleet Overview" class="panel-header" />
+            <ui:VisualElement class="fleet-row header-row">
+                <ui:Label text="ID" class="fleet-col-id header-text" />
+                <ui:Label text="Status" class="fleet-col-status header-text" />
+                <ui:Label text="Health" class="fleet-col-health header-text" />
+            </ui:VisualElement>
+            <ui:ScrollView name="FleetListContainer" mode="Vertical" style="flex-grow: 1;" />
+        </ui:VisualElement>
+
+        <ui:VisualElement name="BusStopsPanel" class="floating-panel" style="display: none; left: 300px; top: 200px; width: 520px; height: 350px;">
+            <ui:VisualElement class="panel-header">
+                <ui:Label text="Bus Stops" class="panel-title" />
+                <ui:Button name="BtnClosePanel" class="close-btn icon-close" />
+            </ui:VisualElement>
+            
+            <ui:VisualElement class="panel-content" style="flex-direction: row;">
+                <ui:VisualElement class="data-column">
+                    <ui:VisualElement class="column-header">
+                        <ui:Label text="Waiting" class="header-text" />
+                        <ui:Button name="BtnSortWaiting" class="sort-btn icon-sort-desc" />
+                    </ui:VisualElement>
+                    <ui:ScrollView name="ScrollWaiting" class="data-scroll">
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Central Station" class="item-name" />
+                            <ui:Label text="142" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Central Station" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="142" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="University" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="12" class="item-count" />
+                        </ui:VisualElement>
+                        <ui:VisualElement class="list-item">
+                            <ui:Label text="Industrial Zone" class="item-name" />
+                            <ui:Button class="item-eye icon-eye" />
+                            <ui:Label text="120" class="item-count" />
+                        </ui:VisualElement>
+                        
+                    </ui:ScrollView>
+                </ui:VisualElement>
+
+                <ui:VisualElement style="width: 1px; background-color: rgba(255, 255, 255, 0.1);" />
+
+                <ui:VisualElement class="data-column">
+                    <ui:VisualElement class="column-header">
+                        <ui:Label text="Onboarded (today)" class="header-text" />
+                        <ui:Button name="BtnSortBoarded" class="sort-btn icon-sort-desc" />
+                    </ui:VisualElement>
+                    <ui:ScrollView name="ScrollBoarded" class="data-scroll" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+        
+    </ui:VisualElement>
+</ui:UXML>

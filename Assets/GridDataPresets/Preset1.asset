@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0385f895f17374542863a9371ca7b817, type: 3}
+  m_Name: Preset1
+  m_EditorClassIdentifier: Assembly-CSharp::GridMapPreset
+  Layers:
+  - Texture: {fileID: 2800000, guid: 13e1164d635a9614fb83954810873a85, type: 3}
+    LinearMappings:
+    - Enabled: 1
+      TargetField: 3
+      SourceChannel: 0
+      MinValue: 0
+      MaxValue: 100
+    - Enabled: 1
+      TargetField: 4
+      SourceChannel: 1
+      MinValue: 0
+      MaxValue: 100
+    - Enabled: 1
+      TargetField: 2
+      SourceChannel: 2
+      MinValue: 0
+      MaxValue: 100
+    DistributionMappings: []
+  - Texture: {fileID: 2800000, guid: f51b5f35dd6a96946a86fa2830ebb818, type: 3}
+    LinearMappings:
+    - Enabled: 1
+      TargetField: 0
+      SourceChannel: 0
+      MinValue: 0
+      MaxValue: 100
+    - Enabled: 1
+      TargetField: 5
+      SourceChannel: 2
+      MinValue: 0
+      MaxValue: 2
+    DistributionMappings:
+    - Enabled: 1
+      TargetField: 0
+      SourceChannel: 1
+      TotalAmount: 65000
