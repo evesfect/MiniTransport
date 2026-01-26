@@ -7,6 +7,9 @@ using System.IO;
 
 public class BusDriver : VehicleDriver
 {
+    [Header("Debug")]
+    public MarkerSpawner debugMarkerSpawner;
+
     // Properties baseSpeed, clientSpeedBuffer, rotationSpeed are in Base Class
 
     [Header("Network State")]
@@ -18,6 +21,14 @@ public class BusDriver : VehicleDriver
 
     // Breakdown logic
     public bool IsBroken => _netState.Value.IsBrokenDown;
+    public string PreviousStopID => _netState.Value.PreviousStopID.ToString();
+    public string TargetStopID => _netState.Value.TargetStopID.ToString();
+    public float GetBreakdownDist() => _netState.Value.BreakdownStopDistance;
+    public bool IsFullyStopped => IsBroken && (m_ServerDistanceTraveled >= _netState.Value.BreakdownStopDistance);
+    private bool _hasNotifiedStop = false;
+    private float _breakdownBuffer = 2.0f;
+
+    public float RemainingPathDistance => Mathf.Max(0f, m_ServerCurrentLegLength - m_ServerDistanceTraveled);
 
     // Server Side Data ()
     private BusData _serverEntry;
@@ -86,8 +97,24 @@ public class BusDriver : VehicleDriver
     private void ServerUpdateLoop()
     {
         // Check Service/Broken status
-        if (!_netState.Value.IsInService || _netState.Value.IsBrokenDown) return;
+        if (!_netState.Value.IsInService) return;
+        if (_netState.Value.IsBrokenDown)
+        {
+            if (m_ServerDistanceTraveled >= _netState.Value.BreakdownStopDistance)
+            {
+                m_ServerDistanceTraveled = _netState.Value.BreakdownStopDistance;
 
+                if (!_hasNotifiedStop)
+                {
+                    _hasNotifiedStop = true;
+                    if (MaintenanceManager.Instance != null)
+                    {
+                        MaintenanceManager.Instance.OnBusStopped(_serverEntry.BusID);
+                    }
+                }
+                return; // Bus is fully stopped at breakdown dist
+            }
+        }
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
 
         if (_serverIsWaiting)
@@ -114,7 +141,13 @@ public class BusDriver : VehicleDriver
             float step = baseSpeed * trafficModifier * dt;
             m_ServerDistanceTraveled += step;
 
-            // Checks base class leg length
+            // Cap movement if breaking down
+            if (_netState.Value.IsBrokenDown && m_ServerDistanceTraveled >= _netState.Value.BreakdownStopDistance)
+            {
+                m_ServerDistanceTraveled = _netState.Value.BreakdownStopDistance;
+            }
+
+            // normal stop arrival
             if (m_ServerDistanceTraveled >= m_ServerCurrentLegLength)
             {
                 ServerArriveAtStop();
@@ -127,7 +160,24 @@ public class BusDriver : VehicleDriver
     {
         if (!IsServer) return;
         var state = _netState.Value;
-        state.IsBrokenDown = isBroken;
+        
+        if (isBroken && !state.IsBrokenDown)
+        {
+            float bufferDistance = baseSpeed * _breakdownBuffer;
+            float targetDist = m_ServerDistanceTraveled + bufferDistance;
+
+            if (targetDist > m_ServerCurrentLegLength) targetDist = m_ServerCurrentLegLength;
+        
+            state.BreakdownStopDistance = targetDist;
+            state.IsBrokenDown = true;
+            _hasNotifiedStop = false;
+        }
+        else if (!isBroken)
+        {
+            state.BreakdownStopDistance = 0f;
+            state.IsBrokenDown = false;
+            _hasNotifiedStop = false;
+        }
         _netState.Value = state;
     }
 
@@ -215,6 +265,11 @@ public class BusDriver : VehicleDriver
                 return;
             }
 
+            bool isNewLeg = (oldState.PreviousStopID != newState.PreviousStopID) ||
+                        (oldState.TargetStopID != newState.TargetStopID) ||
+                        (oldState.DepartureTime != newState.DepartureTime);
+            if (!isNewLeg) return;
+
             BuildPathSegments(from, to, m_LocalPathSegments, out m_TotalLegLength);
             
             float currentGameTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
@@ -232,7 +287,18 @@ public class BusDriver : VehicleDriver
     private void ClientUpdateLoop()
     {
         // Check Broken status
-        if (!m_ClientIsMoving || m_LocalPathSegments == null || m_LocalPathSegments.Count == 0 || _netState.Value.IsBrokenDown) return;
+        if (!m_ClientIsMoving || m_LocalPathSegments == null || m_LocalPathSegments.Count == 0) return;
+
+        if (_netState.Value.IsBrokenDown)
+        {
+            if (m_ClientDistanceTraveled >= _netState.Value.BreakdownStopDistance)
+            {
+                // Snap to exact stopping point to align visually with Server/Recovery Vehicle
+                m_ClientDistanceTraveled = _netState.Value.BreakdownStopDistance;
+                UpdateTransformOnSpline(m_ClientDistanceTraveled, m_LocalPathSegments);
+                return; // Stop moving
+            }
+        }
 
         float dt = Time.deltaTime * SimulationTimeManager.Instance.TimeMultiplier;
 
@@ -247,6 +313,14 @@ public class BusDriver : VehicleDriver
         
         m_ClientDistanceTraveled += step;
 
+        if (_netState.Value.IsBrokenDown && m_ClientDistanceTraveled >= _netState.Value.BreakdownStopDistance)
+        {
+            m_ClientDistanceTraveled = _netState.Value.BreakdownStopDistance;
+            // keep clamping until breakdown is cleared
+        }
+
+
+        // normal leg completion
         if (m_ClientDistanceTraveled >= m_TotalLegLength)
         {
             m_ClientDistanceTraveled = m_TotalLegLength;
@@ -315,4 +389,26 @@ public class BusDriver : VehicleDriver
             AddPathLeg(endSeg, entryT, to.splineT, targetList, ref totalLength);
         }
     }
+
+    [ContextMenu("Debug Server Position")]
+public void DebugShowServerPosition()
+{
+    // This only works on the Server instance
+    if (!IsServer && !IsHost) 
+    {
+        Debug.LogWarning("Cannot debug Server Position from a Client instance.");
+        return;
+    }
+
+    if (GetCurrentSegmentAndT(out RoadSegment seg, out float t, out bool headingToB))
+    {
+        if (debugMarkerSpawner != null)
+        {
+            // Calculate the exact world position based on SERVER data
+            Vector3 serverPos = seg.GetPointOnRoad(t, headingToB);
+            debugMarkerSpawner.SpawnMarkerAtHitLocation(serverPos);
+            Debug.Log($"[Bus Server Debug] Dist: {m_ServerDistanceTraveled:F1}, Seg: {seg.name}, T: {t:F2}");
+        }
+    }
+}
 }

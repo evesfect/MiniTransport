@@ -78,7 +78,6 @@ public static class RoadPathfinder
 
     // <summary>
     /// Finds a path from a specific starting node to EITHER end of the target segment.
-    /// This is the "Run Once" method you requested.
     /// </summary>
     public static List<RoadNode> FindPathToSegment(RoadNode startNode, RoadSegment targetSegment)
     {
