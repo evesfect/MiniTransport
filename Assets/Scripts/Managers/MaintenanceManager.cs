@@ -14,7 +14,7 @@ public class MaintenanceManager : NetworkBehaviour
     public float breakdownThreshold = 5f;    // Durability where bus stops (Y)
     
     [Tooltip("Durability lost per in-game minute while driving")]
-    public float decayRatePerMinute = 0.2f;  
+    public float decayRatePerMinute = 0.5f;  
 
     [Tooltip("Durability gained per in-game hour while in depot")]
     public float repairPerSkillPoint = 0.2f;

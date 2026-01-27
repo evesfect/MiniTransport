@@ -11,6 +11,7 @@ public class FleetDebugger : MonoBehaviour
     private string _busID = "";
     private string _depotID = "";
     private BusSchedule _schedule = new BusSchedule();
+    private string _capacityStr = "30";
 
     private Vector2 _scroll;
 
@@ -118,6 +119,7 @@ public class FleetDebugger : MonoBehaviour
         string scheduleJson = JsonUtility.ToJson(_schedule, true);
         scheduleJson = GUILayout.TextArea(scheduleJson, GUILayout.Height(80));
         JsonUtility.FromJsonOverwrite(scheduleJson, _schedule);
+        _capacityStr = DrawField("Capacity", _capacityStr);
 
         GUILayout.Space(5);
 
@@ -125,7 +127,11 @@ public class FleetDebugger : MonoBehaviour
 
         if (GUILayout.Button("Create"))
         {
-            FleetManager.Instance.CreateBusClient(_busID, _depotID, _schedule);
+            ushort cap = 30;
+            ushort.TryParse(_capacityStr, out cap);
+
+            // UPDATED CALL: Pass capacity to the new signature
+            FleetManager.Instance.CreateBusClient(_busID, _depotID, _schedule, cap);
         }
 
         if (GUILayout.Button("Update"))
@@ -137,6 +143,11 @@ public class FleetDebugger : MonoBehaviour
             {
                 entry.AssignedDepotID = _depotID;
                 entry.Schedule = _schedule;
+
+                if (ushort.TryParse(_capacityStr, out ushort newCap))
+                {
+                    entry.Capacity = newCap;
+                }
                 FleetManager.Instance.UpdateBusClient(entry);
             }
         }
@@ -169,6 +180,7 @@ public class FleetDebugger : MonoBehaviour
         _busID = bus.BusID;
         _depotID = bus.AssignedDepotID;
         _schedule = bus.Schedule;
+        _capacityStr = bus.Capacity.ToString();
     }
 
     #endregion

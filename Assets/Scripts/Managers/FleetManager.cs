@@ -1,9 +1,10 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
-using System;
+using UnityEngine;
+using static UnityEditor.Experimental.GraphView.Port;
 
 [DefaultExecutionOrder(-50)]
 public class FleetManager : NetworkBehaviour
@@ -241,13 +242,14 @@ public class FleetManager : NetworkBehaviour
         return allBuses.Where(b => b.AssignedDepotID == depotID).ToList();
     }
 
-    public void CreateBusClient(string busID, string depotID, BusSchedule schedule)
+    public void CreateBusClient(string busID, string depotID, BusSchedule schedule, ushort capacity)
     {
         BusData newBus = new BusData
         {
             BusID = busID,
             AssignedDepotID = depotID,
-            Schedule = schedule
+            Schedule = schedule,
+            Capacity = capacity
         };
         RequestFleetOperationRpc(JsonUtility.ToJson(newBus), FleetOperation.Add);
     }

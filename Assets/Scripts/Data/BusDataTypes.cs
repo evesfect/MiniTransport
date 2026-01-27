@@ -19,6 +19,7 @@ public class BusData
     public string AssignedDepotID;
     public BusSchedule Schedule;
     public float Durability = 100f;
+    public ushort Capacity = 30;
 }
 
 public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState>
@@ -31,6 +32,7 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
     public bool IsInService;
     public bool IsBrokenDown;
     public float BreakdownStopDistance;
+    public ushort PassengerCount;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
@@ -42,6 +44,7 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
         serializer.SerializeValue(ref IsInService);
         serializer.SerializeValue(ref IsBrokenDown);
         serializer.SerializeValue(ref BreakdownStopDistance);
+        serializer.SerializeValue(ref PassengerCount);
     }
 
     public bool Equals(BusNetworkState other)
@@ -53,6 +56,7 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
                IsReverseDirection == other.IsReverseDirection &&
                IsInService == other.IsInService &&
                IsBrokenDown == other.IsBrokenDown &&
-               Mathf.Approximately(BreakdownStopDistance, other.BreakdownStopDistance);
+               Mathf.Approximately(BreakdownStopDistance, other.BreakdownStopDistance) &&
+               PassengerCount == other.PassengerCount;
     }
 }

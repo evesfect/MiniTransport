@@ -19,6 +19,9 @@ public class BusDriver : VehicleDriver
         NetworkVariableWritePermission.Server
     );
 
+    //Passenger Logic
+    private List<WaitingPassengerGroup> _passengersOnBoard = new List<WaitingPassengerGroup>();
+
     // Breakdown logic
     public bool IsBroken => _netState.Value.IsBrokenDown;
     public string PreviousStopID => _netState.Value.PreviousStopID.ToString();
@@ -237,6 +240,12 @@ public class BusDriver : VehicleDriver
     private void ServerArriveAtStop()
     {
         _serverIsWaiting = true;
+
+        BusStop currentStop = TransportManager.Instance.GetStop(_serverRoute.StopIDs[_serverRouteIndex]);
+        if (currentStop != null)
+        {
+            ServerHandlePassengers(currentStop);
+        }
         // Wait time from Schedule
         float minutesToWait = _serverEntry.Schedule.TurnaroundWait; 
         _serverWaitTimer = minutesToWait / 60f; 
@@ -245,6 +254,159 @@ public class BusDriver : VehicleDriver
     private void DespawnBus()
     {
         if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry.BusID);
+    }
+
+    //Passenger Pickup Logic
+    private void ServerHandlePassengers(BusStop currentStop)
+    {
+        if (GridManager.Instance == null) return;
+
+        // 1. Determine which Tile we are currently at
+        int currentTileIndex = -1;
+        if (GridManager.Instance.WorldToGrid(currentStop.transform.position, out int x, out int y))
+        {
+            currentTileIndex = GridManager.Instance.GetIndex(x, y);
+        }
+
+        if (currentTileIndex == -1) return;
+
+        // 2. DROP OFF (First Out)
+        // We iterate backwards to safely remove items
+        int droppedCount = 0;
+        for (int i = _passengersOnBoard.Count - 1; i >= 0; i--)
+        {
+            if (_passengersOnBoard[i].DestinationTileIndex == currentTileIndex)
+            {
+                droppedCount += _passengersOnBoard[i].PassengerCount;
+                _passengersOnBoard.RemoveAt(i);
+            }
+        }
+
+        
+        if (droppedCount > 0)
+        {
+            Debug.Log($"Bus {_serverEntry.BusID} dropped {droppedCount} passengers.");
+        }
+
+        // 3. PICK UP (Filter & Load)
+
+        // Check our specific Capacity from BusData
+        int myCapacity = _serverEntry != null ? _serverEntry.Capacity : 30;
+        int currentLoad = GetTotalPassengerCount();
+
+        // If full, skip pickup
+        if (currentLoad >= myCapacity) return;
+
+        // Get passengers waiting at this physical stop
+        var waitingGroups = PassengerManager.Instance.GetPassengersAtStop(currentStop.stopID);
+        if (waitingGroups == null || waitingGroups.Count == 0) return;
+
+        // Pre-calculate where this bus is going next to filter passengers
+        HashSet<int> reachableTiles = GetReachableTiles();
+
+        // Create a copy to iterate safely
+        var groupsCopy = new List<WaitingPassengerGroup>(waitingGroups);
+
+        foreach (var group in groupsCopy)
+        {
+            // Double check capacity inside the loop
+            if (currentLoad >= myCapacity) break;
+
+            // Does this bus go to their destination?
+            if (reachableTiles.Contains(group.DestinationTileIndex))
+            {
+                // Calculate how many we can fit
+                int space = myCapacity - currentLoad;
+                ushort countToTake = (ushort)Mathf.Min(space, group.PassengerCount);
+
+                if (countToTake > 0)
+                {
+                    // Add to internal Bus storage
+                    AddToBusStorage(group.DestinationTileIndex, countToTake);
+
+                    // Remove from the Stop (PassengerManager handles the sync)
+                    PassengerManager.Instance.RemovePassengers(currentStop.stopID, group.DestinationTileIndex, countToTake);
+
+                    currentLoad += countToTake;
+                }
+            }
+        }
+    }
+
+    // Helper: Simulate the route forward to find all reachable tiles from current position
+    private HashSet<int> GetReachableTiles()
+    {
+        HashSet<int> reachableTiles = new HashSet<int>();
+
+        if (_serverRoute == null || _serverRoute.StopIDs.Count == 0) return reachableTiles;
+
+        // Start simulation from current state
+        int simIndex = _serverRouteIndex;
+        bool simDirection = _netState.Value.IsReverseDirection;
+        int stopsToCheck = _serverRoute.StopIDs.Count * 2; // Limit lookahead to prevent infinite loops (e.g. 1 full round trip)
+
+        for (int i = 0; i < stopsToCheck; i++)
+        {
+            // --- SIMULATE MOVEMENT LOGIC (Copied from ServerStartNextLeg) ---
+            int nextIndex = simIndex + (simDirection ? -1 : 1);
+
+            if (nextIndex >= _serverRoute.StopIDs.Count || nextIndex < 0)
+            {
+                if (_serverRoute.StopIDs.First() == _serverRoute.StopIDs.Last())
+                {
+                    // Circular Logic: Jump to 1 or Count-2 to maintain loop
+                    nextIndex = (nextIndex >= _serverRoute.StopIDs.Count) ? 1 : _serverRoute.StopIDs.Count - 2;
+                }
+                else
+                {
+                    // Ping-Pong Logic: Flip direction
+                    simDirection = !simDirection;
+                    nextIndex = simIndex + (simDirection ? -1 : 1);
+                }
+            }
+
+            // Update simulation index
+            simIndex = nextIndex;
+
+            // --- GET TILE FOR THIS STOP ---
+            string stopID = _serverRoute.StopIDs[simIndex];
+            BusStop stop = TransportManager.Instance.GetStop(stopID);
+
+            if (stop != null)
+            {
+                // Assuming GridManager has the helper we discussed
+                if (GridManager.Instance.WorldToGrid(stop.transform.position, out int x, out int y))
+                {
+                    int tileIndex = GridManager.Instance.GetIndex(x, y);
+                    reachableTiles.Add(tileIndex);
+                }
+            }
+        }
+
+        return reachableTiles;
+    }
+
+    private void AddToBusStorage(int destIndex, ushort count)
+    {
+        for (int i = 0; i < _passengersOnBoard.Count; i++)
+        {
+            if (_passengersOnBoard[i].DestinationTileIndex == destIndex)
+            {
+                var g = _passengersOnBoard[i];
+                g.PassengerCount += count;
+                _passengersOnBoard[i] = g;
+                return;
+            }
+        }
+        // New group
+        _passengersOnBoard.Add(new WaitingPassengerGroup { DestinationTileIndex = destIndex, PassengerCount = count });
+    }
+
+    private int GetTotalPassengerCount()
+    {
+        int total = 0;
+        foreach (var g in _passengersOnBoard) total += g.PassengerCount;
+        return total;
     }
 
     // Client Logic (Visuals)
