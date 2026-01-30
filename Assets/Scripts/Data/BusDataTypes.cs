@@ -19,7 +19,7 @@ public class BusData
     public string AssignedDepotID;
     public BusSchedule Schedule;
     public float Durability = 100f;
-    public ushort Capacity = 30;
+    public ushort Capacity;
 }
 
 public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState>

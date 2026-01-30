@@ -22,7 +22,20 @@ public class BusDriver : VehicleDriver
     //Passenger Logic
     private List<WaitingPassengerGroup> _passengersOnBoard = new List<WaitingPassengerGroup>();
 
+
     // Breakdown logic
+
+    public int PassengerCount => _netState.Value.PassengerCount;
+
+    private bool IsShiftActive
+    {
+        get
+        {
+            if (_serverEntry == null || _serverEntry.Schedule == null) return false;
+            float now = SimulationTimeManager.Instance.CurrentTimeOfDay;
+            return now >= _serverEntry.Schedule.StartTime && now < _serverEntry.Schedule.EndTime;
+        }
+    }
     public bool IsBroken => _netState.Value.IsBrokenDown;
     public string PreviousStopID => _netState.Value.PreviousStopID.ToString();
     public string TargetStopID => _netState.Value.TargetStopID.ToString();
@@ -186,6 +199,19 @@ public class BusDriver : VehicleDriver
 
     private void ServerStartNextLeg()
     {
+        
+
+        // Schedule Check
+        if (!IsShiftActive)
+        {
+            if (_passengersOnBoard.Count == 0)
+            {
+                DespawnBus();
+                return;
+            }
+            
+        }
+
         var state = _netState.Value;
         int nextIndex = _serverRouteIndex + (state.IsReverseDirection ? -1 : 1);
 
@@ -200,13 +226,6 @@ public class BusDriver : VehicleDriver
                 state.IsReverseDirection = !state.IsReverseDirection;
                 nextIndex = _serverRouteIndex + (state.IsReverseDirection ? -1 : 1);
             }
-        }
-
-        // Schedule Check
-        if (_serverEntry.Schedule.EndTime < SimulationTimeManager.Instance.CurrentTimeOfDay)
-        {
-            DespawnBus();
-            return;
         }
 
         string fromID = _serverRoute.StopIDs[_serverRouteIndex];
@@ -297,40 +316,45 @@ public class BusDriver : VehicleDriver
         }
 
         // 3. PICK UP (Boarding)
-        int myCapacity = _serverEntry.Capacity; // Unique capacity from BusData
-        int currentLoad = GetTotalPassengerCount();
 
-        var waitingGroups = PassengerManager.Instance.GetPassengersAtStop(currentStop.stopID);
-        if (waitingGroups != null && currentLoad < myCapacity)
+        if (IsShiftActive)
         {
-            HashSet<int> reachableTiles = GetReachableTiles(); // Using the predicted route logic
-            var groupsCopy = new List<WaitingPassengerGroup>(waitingGroups);
+            int myCapacity = _serverEntry.Capacity; // Unique capacity from BusData
+            int currentLoad = GetTotalPassengerCount();
 
-            foreach (var group in groupsCopy)
+            var waitingGroups = PassengerManager.Instance.GetPassengersAtStop(currentStop.stopID);
+            if (waitingGroups != null && currentLoad < myCapacity)
             {
-                if (currentLoad >= myCapacity) break;
+                HashSet<int> reachableTiles = GetReachableTiles(); // Using the predicted route logic
+                var groupsCopy = new List<WaitingPassengerGroup>(waitingGroups);
 
-                if (reachableTiles.Contains(group.DestinationTileIndex))
+                foreach (var group in groupsCopy)
                 {
-                    int space = myCapacity - currentLoad;
-                    ushort countToTake = (ushort)Mathf.Min(space, group.PassengerCount);
+                    if (currentLoad >= myCapacity) break;
 
-                    if (countToTake > 0)
+                    if (reachableTiles.Contains(group.DestinationTileIndex))
                     {
-                        // Add to bus storage and remove from the physical stop
-                        AddToBusStorage(group.DestinationTileIndex, countToTake);
-                        PassengerManager.Instance.RemovePassengers(currentStop.stopID, group.DestinationTileIndex, countToTake);
+                        int space = myCapacity - currentLoad;
+                        ushort countToTake = (ushort)Mathf.Min(space, group.PassengerCount);
 
-                        currentLoad += countToTake;
-                        totalInteractions += countToTake;
+                        if (countToTake > 0)
+                        {
+                            // Add to bus storage and remove from the physical stop
+                            AddToBusStorage(group.DestinationTileIndex, countToTake);
+                            PassengerManager.Instance.RemovePassengers(currentStop.stopID, group.DestinationTileIndex, countToTake);
+
+                            currentLoad += countToTake;
+                            totalInteractions += countToTake;
+                        }
                     }
                 }
             }
         }
+        
 
         // Update Network State for Client UI
         var state = _netState.Value;
-        state.PassengerCount = (ushort)currentLoad;
+        state.PassengerCount = (ushort)GetTotalPassengerCount();
         _netState.Value = state;
 
         return totalInteractions;

@@ -109,10 +109,15 @@ public class DepotController : NetworkBehaviour
                 {
                     BusDriver driver = busObj.GetComponent<BusDriver>();
                     // If driver is missing or Broken, DO NOT despawn
-                    if (driver != null && driver.IsBroken)
+                    if (driver != null && driver.IsBroken )
                     {
                         canReturn = false;
                         // Debug.Log($"[Depot] Keeping Bus {busData.BusID} active despite schedule end because it is BROKEN.");
+                    }
+
+                    if(driver != null && driver.PassengerCount > 0) 
+                    {
+                        canReturn = false;
                     }
                 }
 

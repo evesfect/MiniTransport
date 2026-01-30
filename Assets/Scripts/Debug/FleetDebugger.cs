@@ -4,7 +4,7 @@ using System.Linq;
 public class FleetDebugger : MonoBehaviour
 {
     // --- UI State ---
-    private Rect _windowRect = new Rect(360, 20, 360, 650);
+    private Rect _windowRect = new Rect(360, 20, 420, 650);
     private bool _isCollapsed = true;
 
     // Editing state
@@ -69,6 +69,13 @@ public class FleetDebugger : MonoBehaviour
     {
         GUILayout.Label("Active Fleet (Global)", GUI.skin.box);
 
+        GUILayout.BeginHorizontal();
+        GUILayout.Label("Bus ID", GUILayout.Width(120));
+        GUILayout.Label("Depot", GUILayout.Width(70));
+        GUILayout.Label("Pax", GUILayout.Width(40)); // Passengers
+        GUILayout.Label("Status", GUILayout.Width(80));
+        GUILayout.EndHorizontal();
+
         _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(250));
 
         if (FleetManager.Instance.allBuses.Count == 0)
@@ -83,7 +90,22 @@ public class FleetDebugger : MonoBehaviour
 
                 // Determine state via FleetManager lookup instead of cached enum
                 bool isActive = FleetManager.Instance.IsBusActive(bus.BusID);
-                
+
+                string passengerText = "-";
+                if (isActive)
+                {
+                    GameObject busObj = FleetManager.Instance.GetActiveBus(bus.BusID);
+                    if (busObj != null)
+                    {
+                        BusDriver driver = busObj.GetComponent<BusDriver>();
+                        if (driver != null)
+                        {
+                            // Reads the property we added to BusDriver.cs
+                            passengerText = driver.PassengerCount.ToString();
+                        }
+                    }
+                }
+
                 Color prev = GUI.color;
                 GUI.color = isActive ? Color.green : Color.cyan;
 
@@ -92,7 +114,10 @@ public class FleetDebugger : MonoBehaviour
                     LoadBus(bus);
                 }
 
-                GUILayout.Label(bus.AssignedDepotID, GUILayout.Width(80));
+                GUILayout.Label(bus.AssignedDepotID, GUILayout.Width(70));
+
+                GUILayout.Label(passengerText, GUILayout.Width(40));
+
                 GUILayout.Label(isActive ? "Active" : "Depot", GUILayout.Width(80));
 
                 GUI.color = prev;
