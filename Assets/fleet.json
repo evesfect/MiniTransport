@@ -9,7 +9,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 33.55202865600586,
+            "Durability": 46.99201583862305,
             "Capacity": 50
         },
         {
@@ -21,7 +21,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 34.227230072021487,
+            "Durability": 47.72721862792969,
             "Capacity": 50
         },
         {
@@ -33,7 +33,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 24.07113265991211,
+            "Durability": 38.05113220214844,
             "Capacity": 50
         }
     ]
