@@ -240,15 +240,28 @@ public class BusDriver : VehicleDriver
     private void ServerArriveAtStop()
     {
         _serverIsWaiting = true;
+        int passengersMoved = 0;
 
         BusStop currentStop = TransportManager.Instance.GetStop(_serverRoute.StopIDs[_serverRouteIndex]);
         if (currentStop != null)
         {
-            ServerHandlePassengers(currentStop);
+            // This now returns the total number of people boarding/leaving
+            passengersMoved = ServerHandlePassengers(currentStop);
         }
-        // Wait time from Schedule
-        float minutesToWait = _serverEntry.Schedule.TurnaroundWait; 
-        _serverWaitTimer = minutesToWait / 60f; 
+
+        // DYNAMIC WAIT CALCULATION
+        // Formula: Minimum base time + (interactions * time per person)
+        float dynamicWaitMinutes = baseWaitTime + (passengersMoved * timePerPassenger);
+
+        // If it's a major terminus, ensure we respect the scheduled turnaround
+        bool isTerminus = _serverRouteIndex == 0 || _serverRouteIndex == _serverRoute.StopIDs.Count - 1;
+        if (isTerminus && _serverEntry.Schedule.TurnaroundWait > dynamicWaitMinutes)
+        {
+            dynamicWaitMinutes = _serverEntry.Schedule.TurnaroundWait;
+        }
+
+        // Convert game minutes to real-world countdown seconds for the update loop
+        _serverWaitTimer = dynamicWaitMinutes / 60f;
     }
 
     private void DespawnBus()
@@ -257,80 +270,70 @@ public class BusDriver : VehicleDriver
     }
 
     //Passenger Pickup Logic
-    private void ServerHandlePassengers(BusStop currentStop)
+    // Inside BusDriver.cs
+
+    [Header("Simulation Settings")]
+    public float baseWaitTime = 2.0f; // Minimum minutes to wait
+    public float timePerPassenger = 0.2f; // Minutes added per passenger boarding/alighting
+
+    private int ServerHandlePassengers(BusStop currentStop)
     {
-        if (GridManager.Instance == null) return;
+        int totalInteractions = 0;
+        if (GridManager.Instance == null) return 0;
 
-        // 1. Determine which Tile we are currently at
-        int currentTileIndex = -1;
-        if (GridManager.Instance.WorldToGrid(currentStop.transform.position, out int x, out int y))
-        {
-            currentTileIndex = GridManager.Instance.GetIndex(x, y);
-        }
+        // 1. Get current Tile Index
+        if (!GridManager.Instance.WorldToGrid(currentStop.transform.position, out int x, out int y)) return 0;
+        int currentTileIndex = GridManager.Instance.GetIndex(x, y);
 
-        if (currentTileIndex == -1) return;
-
-        // 2. DROP OFF (First Out)
-        // We iterate backwards to safely remove items
-        int droppedCount = 0;
+        // 2. DROP OFF (Alighting)
+        // Passengers get off first. Each one adds to the timer.
         for (int i = _passengersOnBoard.Count - 1; i >= 0; i--)
         {
             if (_passengersOnBoard[i].DestinationTileIndex == currentTileIndex)
             {
-                droppedCount += _passengersOnBoard[i].PassengerCount;
+                totalInteractions += _passengersOnBoard[i].PassengerCount;
                 _passengersOnBoard.RemoveAt(i);
             }
         }
 
-        
-        if (droppedCount > 0)
-        {
-            Debug.Log($"Bus {_serverEntry.BusID} dropped {droppedCount} passengers.");
-        }
-
-        // 3. PICK UP (Filter & Load)
-
-        // Check our specific Capacity from BusData
-        int myCapacity = _serverEntry != null ? _serverEntry.Capacity : 30;
+        // 3. PICK UP (Boarding)
+        int myCapacity = _serverEntry.Capacity; // Unique capacity from BusData
         int currentLoad = GetTotalPassengerCount();
 
-        // If full, skip pickup
-        if (currentLoad >= myCapacity) return;
-
-        // Get passengers waiting at this physical stop
         var waitingGroups = PassengerManager.Instance.GetPassengersAtStop(currentStop.stopID);
-        if (waitingGroups == null || waitingGroups.Count == 0) return;
-
-        // Pre-calculate where this bus is going next to filter passengers
-        HashSet<int> reachableTiles = GetReachableTiles();
-
-        // Create a copy to iterate safely
-        var groupsCopy = new List<WaitingPassengerGroup>(waitingGroups);
-
-        foreach (var group in groupsCopy)
+        if (waitingGroups != null && currentLoad < myCapacity)
         {
-            // Double check capacity inside the loop
-            if (currentLoad >= myCapacity) break;
+            HashSet<int> reachableTiles = GetReachableTiles(); // Using the predicted route logic
+            var groupsCopy = new List<WaitingPassengerGroup>(waitingGroups);
 
-            // Does this bus go to their destination?
-            if (reachableTiles.Contains(group.DestinationTileIndex))
+            foreach (var group in groupsCopy)
             {
-                // Calculate how many we can fit
-                int space = myCapacity - currentLoad;
-                ushort countToTake = (ushort)Mathf.Min(space, group.PassengerCount);
+                if (currentLoad >= myCapacity) break;
 
-                if (countToTake > 0)
+                if (reachableTiles.Contains(group.DestinationTileIndex))
                 {
-                    // Add to internal Bus storage
-                    AddToBusStorage(group.DestinationTileIndex, countToTake);
+                    int space = myCapacity - currentLoad;
+                    ushort countToTake = (ushort)Mathf.Min(space, group.PassengerCount);
 
-                    // Remove from the Stop (PassengerManager handles the sync)
-                    PassengerManager.Instance.RemovePassengers(currentStop.stopID, group.DestinationTileIndex, countToTake);
+                    if (countToTake > 0)
+                    {
+                        // Add to bus storage and remove from the physical stop
+                        AddToBusStorage(group.DestinationTileIndex, countToTake);
+                        PassengerManager.Instance.RemovePassengers(currentStop.stopID, group.DestinationTileIndex, countToTake);
 
-                    currentLoad += countToTake;
+                        currentLoad += countToTake;
+                        totalInteractions += countToTake;
+                    }
                 }
             }
         }
+
+        // Update Network State for Client UI
+        var state = _netState.Value;
+        state.PassengerCount = (ushort)currentLoad;
+        _netState.Value = state;
+
+        return totalInteractions;
     }
 
     // Helper: Simulate the route forward to find all reachable tiles from current position
