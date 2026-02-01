@@ -462,4 +462,10 @@ public class EmployeeManager : NetworkBehaviour
             }
         }
     }
+
+    public EmployeeData GetDriverForBus(string busID)
+    {
+        // Search all employees for one assigned to this bus
+        return allEmployees.FirstOrDefault(e => e.AssignedBusID == busID);
+    }
 }

@@ -44,6 +44,8 @@ public class BusDriver : VehicleDriver
     private bool _hasNotifiedStop = false;
     private float _breakdownBuffer = 2.0f;
 
+    private float _currentDriverSkillMultiplier = 1.0f;
+
     public float RemainingPathDistance => Mathf.Max(0f, m_ServerCurrentLegLength - m_ServerDistanceTraveled);
 
     // Server Side Data ()
@@ -102,6 +104,18 @@ public class BusDriver : VehicleDriver
             IsInService = true
         };
         _netState.Value = initState;
+
+        if (EmployeeManager.Instance != null)
+        {
+            
+            var driver = EmployeeManager.Instance.GetDriverForBus(entry.BusID);
+            if (driver != null)
+            {
+                // Convert Skill (e.g., 1-5) to a Multiplier (e.g., 0.8 to 1.2)
+                // Skill 1 = 0.8x (Bad), Skill 3 = 1.0x (Normal), Skill 5 = 1.2x (Great)
+                _currentDriverSkillMultiplier = 0.7f + (driver.SkillLevel * 0.1f);
+            }
+        }
     }
 
     private void Update()
@@ -306,6 +320,7 @@ public class BusDriver : VehicleDriver
 
         // 2. DROP OFF (Alighting)
         // Passengers get off first. Each one adds to the timer.
+        
         for (int i = _passengersOnBoard.Count - 1; i >= 0; i--)
         {
             if (_passengersOnBoard[i].DestinationTileIndex == currentTileIndex)
@@ -313,6 +328,17 @@ public class BusDriver : VehicleDriver
                 totalInteractions += _passengersOnBoard[i].PassengerCount;
                 _passengersOnBoard.RemoveAt(i);
             }
+        }
+
+        if (totalInteractions > 0 && CompanyManager.Instance != null)
+        {
+            float baseReward = totalInteractions * CompanyManager.Instance.baseRewardPerPassenger;
+
+            // Apply Driver Skill
+            // Better drivers make passengers happier
+            float finalReward = baseReward * _currentDriverSkillMultiplier;
+
+            CompanyManager.Instance.ModifySatisfaction(finalReward);
         }
 
         // 3. PICK UP (Boarding)

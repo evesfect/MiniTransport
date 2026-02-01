@@ -15,6 +15,13 @@ public class CompanyManager : NetworkBehaviour
     public string defaultCompanyName;
     public float startingBalance;
 
+    [Header("Reputation System")]
+    public float GlobalSatisfaction = 80f;
+    public const float MaxSatisfaction = 100f;
+
+    public float satisfactionPenaltyPertimeout = 2.0f; // -2% if someone leaves angry
+    public float baseRewardPerPassenger = 0.5f; // +0.5% per happy passenger
+
     [Tooltip("The maximum debt allowed")]
     public float bankruptcyThreshold;
 
@@ -26,6 +33,7 @@ public class CompanyManager : NetworkBehaviour
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
     public event Action OnWeeklyExpensesRequested;
+    public event Action<float> OnSatisfactionChanged;
 
     // --- Persistence ---
 #if UNITY_EDITOR
@@ -178,6 +186,15 @@ public class CompanyManager : NetworkBehaviour
         // Auto-Save on Server
         if (IsServer) SaveCompanyData();
     }
+
+    // Reputation System
+    public void ModifySatisfaction(float amount)
+    {
+        GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
+        Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
+    }
+
 
     // --- Networking ---
 
