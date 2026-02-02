@@ -1,0 +1,35 @@
+{
+    "AllVendors": [
+        {
+            "VendorID": "V_APEX",
+            "Name": "Apex Engineering",
+            "Description": "Premium parts, premium prices. Never late.",
+            "ReliabilityScore": 100.0,
+            "LoyaltyLevel": 4,
+            "CurrentXP": 10.0,
+            "PriceMultiplier": 1.3000001907348633,
+            "Specialty": 1
+        },
+        {
+            "VendorID": "V_BUDGET",
+            "Name": "Budget Bus Bits",
+            "Description": "We get it there... eventually. Great prices.",
+            "ReliabilityScore": 58.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 20.0,
+            "PriceMultiplier": 0.699999988079071,
+            "Specialty": 3
+        },
+        {
+            "VendorID": "V_STD",
+            "Name": "Standard Spares Inc.",
+            "Description": "The market standard. Reliable enough.",
+            "ReliabilityScore": 79.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 10.0,
+            "PriceMultiplier": 1.0,
+            "Specialty": 2
+        }
+    ],
+    "ActiveDeals": []
+}
