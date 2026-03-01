@@ -2,49 +2,63 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum BusPartCategory
-{
-    None,
-    Engine,     // Engine blocks, pistons
-    Tires,      // Wheels, axels
-    Chassis,    // Body, frame, doors
-    Electronics // Sensors, dashboard
-}
+public enum BusPartCategory { None, Engine, Tires, Chassis, Electronics }
+public enum VendorQuality { Low, Mid, High }
 
 [Serializable]
 public class VendorData
 {
     public string VendorID;
     public string Name;
-    public string Description;
+    public BusPartCategory Category; 
+    public VendorQuality QualityTier;
 
-    // --- Stats ---
-    [Range(0, 100)]
-    public float ReliabilityScore; // 0 = Always late, 100 = Always on time
-    
-    [Range(0, 5)]
-    public int LoyaltyLevel;       // Higher level = Better prices/reliability
-    public float CurrentXP;        // XP to next loyalty level
-
-    [Tooltip("Base price multiplier. 1.0 = Standard, 0.8 = Cheap")]
+    [Range(0, 100)] public float ReliabilityScore; 
+    public float DeliverySpeedMultiplier;          
     public float PriceMultiplier; 
+    
+    public float MinDurability;
+    public float MaxDurability;
 
-    // --- Specialties ---
-    // Vendors might be better at specific things (Visual flair only for now, or logic later)
-    public BusPartCategory Specialty; 
+    public int LoyaltyLevel;       
+    public float CurrentXP;        
 }
 
 [Serializable]
 public class ActiveDeal
 {
-    public BusPartCategory Category; // E.g., This is our "Engine" provider
-    public string VendorID;          // Who is the provider?
-    public string StartDate;         // For tracking duration
+    public BusPartCategory Category;
+    public string VendorID;          
+    public int StartDay; 
+}
+
+[Serializable]
+public class ActiveOrder
+{
+    public string OrderID;
+    public string VendorID;
+    public string ItemID;        // e.g. "Tire3"
+    public BusPartCategory Category;
+    
+    public float ExpectedArrivalHour; // The initial fast timer
+    public float ActualArrivalHour;   // The final timer (equals Expected if not delayed)
+    
+    public bool IsDelayed;
+    public float DurabilityRoll;      
+}
+
+[Serializable]
+public class ItemCounter
+{
+    public string BaseName;
+    public int Count;
 }
 
 [Serializable]
 public class VendorContainer
 {
-    public List<VendorData> AllVendors;
+    public List<VendorData> AvailableVendors;
     public List<ActiveDeal> ActiveDeals;
+    public List<ActiveOrder> ActiveOrders;
+    public List<ItemCounter> LifetimeItemCounts; // Remembers IDs to increment
 }

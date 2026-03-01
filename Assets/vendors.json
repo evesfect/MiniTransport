@@ -1,35 +1,148 @@
 {
-    "AllVendors": [
+    "AvailableVendors": [
         {
-            "VendorID": "V_APEX",
-            "Name": "Apex Engineering",
-            "Description": "Premium parts, premium prices. Never late.",
-            "ReliabilityScore": 100.0,
-            "LoyaltyLevel": 4,
-            "CurrentXP": 10.0,
-            "PriceMultiplier": 1.3000001907348633,
-            "Specialty": 1
+            "VendorID": "d5a5a32b",
+            "Name": "Prime Logistics",
+            "Category": 2,
+            "QualityTier": 1,
+            "ReliabilityScore": 84.22114562988281,
+            "DeliverySpeedMultiplier": 0.8675300478935242,
+            "PriceMultiplier": 0.9893115758895874,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
         },
         {
-            "VendorID": "V_BUDGET",
-            "Name": "Budget Bus Bits",
-            "Description": "We get it there... eventually. Great prices.",
-            "ReliabilityScore": 58.0,
+            "VendorID": "6f3fb4f2",
+            "Name": "Global Motors",
+            "Category": 2,
+            "QualityTier": 2,
+            "ReliabilityScore": 90.57393646240235,
+            "DeliverySpeedMultiplier": 0.6264622211456299,
+            "PriceMultiplier": 1.671962022781372,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
             "LoyaltyLevel": 0,
-            "CurrentXP": 20.0,
-            "PriceMultiplier": 0.699999988079071,
-            "Specialty": 3
+            "CurrentXP": 0.0
         },
         {
-            "VendorID": "V_STD",
-            "Name": "Standard Spares Inc.",
-            "Description": "The market standard. Reliable enough.",
-            "ReliabilityScore": 79.0,
+            "VendorID": "e1301447",
+            "Name": "Budget Tech",
+            "Category": 3,
+            "QualityTier": 0,
+            "ReliabilityScore": 58.195430755615237,
+            "DeliverySpeedMultiplier": 1.7492928504943848,
+            "PriceMultiplier": 0.6045981645584106,
+            "MinDurability": 30.0,
+            "MaxDurability": 60.0,
             "LoyaltyLevel": 0,
-            "CurrentXP": 10.0,
-            "PriceMultiplier": 1.0,
-            "Specialty": 2
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "2a5ebc65",
+            "Name": "Global Tech",
+            "Category": 3,
+            "QualityTier": 1,
+            "ReliabilityScore": 83.10688781738281,
+            "DeliverySpeedMultiplier": 0.8873095512390137,
+            "PriceMultiplier": 1.064586877822876,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "bd570359",
+            "Name": "Budget Tech",
+            "Category": 3,
+            "QualityTier": 2,
+            "ReliabilityScore": 94.65508270263672,
+            "DeliverySpeedMultiplier": 0.6798570156097412,
+            "PriceMultiplier": 1.777591347694397,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "4eaa06bb",
+            "Name": "Metro Parts",
+            "Category": 4,
+            "QualityTier": 0,
+            "ReliabilityScore": 56.31868362426758,
+            "DeliverySpeedMultiplier": 1.3609579801559449,
+            "PriceMultiplier": 0.7942979335784912,
+            "MinDurability": 30.0,
+            "MaxDurability": 60.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "751ff427",
+            "Name": "Metro Supplies",
+            "Category": 4,
+            "QualityTier": 1,
+            "ReliabilityScore": 79.44766235351563,
+            "DeliverySpeedMultiplier": 0.8453307747840881,
+            "PriceMultiplier": 1.073782205581665,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "151f4c45",
+            "Name": "Rapid Tech",
+            "Category": 4,
+            "QualityTier": 2,
+            "ReliabilityScore": 90.63880157470703,
+            "DeliverySpeedMultiplier": 0.6607037782669067,
+            "PriceMultiplier": 1.7861902713775635,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
         }
     ],
-    "ActiveDeals": []
+    "ActiveDeals": [],
+    "ActiveOrders": [],
+    "LifetimeItemCounts": [
+        {
+            "BaseName": "Piston",
+            "Count": 5
+        },
+        {
+            "BaseName": "EngineBlock",
+            "Count": 4
+        },
+        {
+            "BaseName": "BusFrame",
+            "Count": 2
+        },
+        {
+            "BaseName": "DoorAssembly",
+            "Count": 1
+        },
+        {
+            "BaseName": "Dashboard",
+            "Count": 2
+        },
+        {
+            "BaseName": "WiringHarness",
+            "Count": 1
+        },
+        {
+            "BaseName": "StandardTire",
+            "Count": 5
+        },
+        {
+            "BaseName": "WinterTire",
+            "Count": 6
+        },
+        {
+            "BaseName": "HeavyDutyTire",
+            "Count": 11
+        }
+    ]
 }

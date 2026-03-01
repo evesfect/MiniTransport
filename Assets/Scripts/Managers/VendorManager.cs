@@ -5,29 +5,48 @@ using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
 
-[DefaultExecutionOrder(-49)] // Initialize just after EmployeeManager
+public struct VendorItemStats
+{
+    public float Reliability;
+    public float SpeedMultiplier;
+    public float PriceMultiplier;
+    public float Durability; // Added specific durability
+}
+
+[DefaultExecutionOrder(-49)] 
 public class VendorManager : NetworkBehaviour
 {
     public static VendorManager Instance { get; private set; }
 
     [Header("Database")]
-    public List<VendorData> allVendors = new List<VendorData>();
+    public List<VendorData> availableVendors = new List<VendorData>();
     public List<ActiveDeal> activeDeals = new List<ActiveDeal>();
+    public List<ActiveOrder> activeOrders = new List<ActiveOrder>();
+    public List<ItemCounter> lifetimeItemCounts = new List<ItemCounter>();
 
     [Header("Settings")]
     public float contractCancellationFine = 500f;
-    public float xpPerTimelyDelivery = 10f;
-    public float xpPenaltyLateDelivery = -15f;
+    public float xpPerDelivery = 10f;
     public float maxLoyaltyLevel = 5;
+    public float baseDeliveryHours = 12f; 
 
-    // Events for UI
     public event Action OnVendorDataUpdated;
+
+    public static readonly Dictionary<BusPartCategory, string[]> CategoryParts = new Dictionary<BusPartCategory, string[]>
+    {
+        { BusPartCategory.Engine, new string[] { "EngineBlock", "Piston", "Alternator" } },
+        { BusPartCategory.Tires, new string[] { "StandardTire", "WinterTire", "HeavyDutyTire" } },
+        { BusPartCategory.Chassis, new string[] { "BusFrame", "Axle", "DoorAssembly" } },
+        { BusPartCategory.Electronics, new string[] { "Dashboard", "SensorArray", "WiringHarness" } }
+    };
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "vendors.json");
 #else
     private string SavePath => Path.Combine(Application.persistentDataPath, "vendors.json");
 #endif
+
+    private float CurrentAbsoluteHour => SimulationTimeManager.Instance.CurrentDay * 24f + SimulationTimeManager.Instance.CurrentTimeOfDay;
 
     private void Awake()
     {
@@ -41,200 +60,244 @@ public class VendorManager : NetworkBehaviour
         if (IsServer)
         {
             LoadVendors();
-            
-            // If first time run, generate default vendors
-            if (allVendors.Count == 0) GenerateDefaultVendors();
+            if (availableVendors.Count == 0) GenerateWeeklyVendors();
             
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-        }
-        else
-        {
-            allVendors.Clear();
-            activeDeals.Clear();
+            SimulationTimeManager.Instance.OnHourChanged += ProcessActiveOrders;
+            if (CompanyManager.Instance != null) CompanyManager.Instance.OnWeeklyExpensesRequested += GenerateWeeklyVendors;
         }
     }
 
     public override void OnNetworkDespawn()
     {
-        if (IsServer)
+        if (IsServer && NetworkManager.Singleton != null)
         {
-            if (NetworkManager.Singleton != null)
-                NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            if (SimulationTimeManager.Instance != null)
+                SimulationTimeManager.Instance.OnHourChanged -= ProcessActiveOrders;
+            if (CompanyManager.Instance != null)
+                CompanyManager.Instance.OnWeeklyExpensesRequested -= GenerateWeeklyVendors;
         }
     }
 
-    // --- Core Logic: Deals ---
+    private void OnClientConnected(ulong clientId)
+    {
+        if (IsServer)
+        {
+            SyncVendorsRpc(SerializeVendors(), RpcTarget.Single(clientId, RpcTargetUse.Temp));
+        }
+    }
 
-    /// <summary>
-    /// Signs a deal with a vendor for a specific category. 
-    /// If a deal already exists, it cancels it (applying a fine).
-    /// </summary>
+    public VendorItemStats GetItemStats(string vendorID, string baseItemName)
+    {
+        var vendor = availableVendors.FirstOrDefault(v => v.VendorID == vendorID);
+        if (vendor == null) return new VendorItemStats();
+
+        int seed = vendorID.GetHashCode() ^ baseItemName.GetHashCode();
+        System.Random rand = new System.Random(seed);
+
+        float RandomRange(float min, float max) => min + (float)rand.NextDouble() * (max - min);
+
+        return new VendorItemStats {
+            Reliability = Mathf.Clamp(vendor.ReliabilityScore + RandomRange(-15f, 15f), 0f, 100f),
+            SpeedMultiplier = Mathf.Max(0.1f, vendor.DeliverySpeedMultiplier + RandomRange(-0.3f, 0.3f)),
+            PriceMultiplier = Mathf.Max(0.1f, vendor.PriceMultiplier + RandomRange(-0.3f, 0.3f)),
+            Durability = Mathf.Clamp(RandomRange(vendor.MinDurability, vendor.MaxDurability), 0f, 100f)
+        };
+    }
+
+    private void ProcessActiveOrders()
+    {
+        if (!IsServer || activeOrders.Count == 0) return;
+
+        List<ActiveOrder> completed = new List<ActiveOrder>();
+
+        foreach (var order in activeOrders)
+        {
+            if (CurrentAbsoluteHour >= order.ActualArrivalHour)
+            {
+                InventoryManager.Instance.AddPartWithDurability(order.ItemID, order.DurabilityRoll);
+                
+                if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} arrived LATE from {order.VendorID}.");
+                else Debug.Log($"[Vendor] {order.ItemID} arrived ON TIME from {order.VendorID}.");
+                
+                var vendor = availableVendors.FirstOrDefault(v => v.VendorID == order.VendorID);
+                if (vendor != null)
+                {
+                    vendor.CurrentXP += xpPerDelivery;
+                    if (vendor.CurrentXP >= 100f && vendor.LoyaltyLevel < maxLoyaltyLevel)
+                    {
+                        vendor.LoyaltyLevel++;
+                        vendor.CurrentXP = 0;
+                        vendor.PriceMultiplier = Mathf.Max(0.5f, vendor.PriceMultiplier - 0.05f);
+                    }
+                }
+                completed.Add(order);
+            }
+        }
+
+        if (completed.Count > 0)
+        {
+            foreach (var c in completed) activeOrders.Remove(c);
+            SaveVendors();
+            SyncVendorsRpc(SerializeVendors());
+        }
+    }
+
+    private void GenerateWeeklyVendors()
+    {
+        List<VendorData> newMarket = new List<VendorData>();
+
+        foreach (var deal in activeDeals)
+        {
+            var existing = availableVendors.FirstOrDefault(v => v.VendorID == deal.VendorID);
+            if (existing != null) newMarket.Add(existing);
+        }
+
+        string[] prefixes = { "Apex", "Global", "Budget", "Rapid", "Prime", "Metro" };
+        string[] suffixes = { "Parts", "Motors", "Logistics", "Supplies", "Tech" };
+
+        foreach (BusPartCategory cat in Enum.GetValues(typeof(BusPartCategory)))
+        {
+            if (cat == BusPartCategory.None) continue;
+            newMarket.Add(GenerateRandomVendor(cat, VendorQuality.Low, prefixes, suffixes));
+            newMarket.Add(GenerateRandomVendor(cat, VendorQuality.Mid, prefixes, suffixes));
+            newMarket.Add(GenerateRandomVendor(cat, VendorQuality.High, prefixes, suffixes));
+        }
+
+        availableVendors = newMarket;
+        SaveVendors();
+        SyncVendorsRpc(SerializeVendors());
+    }
+
+    private VendorData GenerateRandomVendor(BusPartCategory cat, VendorQuality q, string[] pre, string[] suf)
+    {
+        VendorData v = new VendorData { 
+            VendorID = Guid.NewGuid().ToString().Substring(0, 8),
+            Category = cat,
+            QualityTier = q,
+            Name = $"{pre[UnityEngine.Random.Range(0, pre.Length)]} {suf[UnityEngine.Random.Range(0, suf.Length)]}"
+        };
+
+        switch (q)
+        {
+            case VendorQuality.Low:
+                v.ReliabilityScore = UnityEngine.Random.Range(40f, 65f);
+                v.DeliverySpeedMultiplier = UnityEngine.Random.Range(1.2f, 1.8f); 
+                v.PriceMultiplier = UnityEngine.Random.Range(0.5f, 0.8f);
+                v.MinDurability = 30f; v.MaxDurability = 60f;
+                break;
+            case VendorQuality.Mid:
+                v.ReliabilityScore = UnityEngine.Random.Range(70f, 85f);
+                v.DeliverySpeedMultiplier = UnityEngine.Random.Range(0.8f, 1.2f);
+                v.PriceMultiplier = UnityEngine.Random.Range(0.9f, 1.1f);
+                v.MinDurability = 60f; v.MaxDurability = 85f;
+                break;
+            case VendorQuality.High:
+                v.ReliabilityScore = UnityEngine.Random.Range(90f, 100f);
+                v.DeliverySpeedMultiplier = UnityEngine.Random.Range(0.5f, 0.8f); 
+                v.PriceMultiplier = UnityEngine.Random.Range(1.3f, 1.8f);
+                v.MinDurability = 85f; v.MaxDurability = 100f;
+                break;
+        }
+        return v;
+    }
+
     public void SignDeal(string vendorID, BusPartCategory category)
     {
         if (IsServer) SignDealInternal(vendorID, category);
         else RequestSignDealRpc(vendorID, category);
     }
 
-    public void CancelDeal(BusPartCategory category)
+    public void CancelDeal(string vendorID)
     {
-        if (IsServer) CancelDealInternal(category);
-        else RequestCancelDealRpc(category);
+        if (IsServer) CancelDealInternal(vendorID);
+        else RequestCancelDealRpc(vendorID);
     }
 
-    /// <summary>
-    /// Called when the player buys a part. Calculates if the delivery is successful/timely.
-    /// </summary>
-    /// <returns>True if delivery is "Timely", False if "Delayed"</returns>
-    public bool ProcessOrder(BusPartCategory category)
+    public void PlaceOrder(string vendorID, string baseItemName)
     {
-        // Find who supplies this category
-        var deal = activeDeals.FirstOrDefault(d => d.Category == category);
-        if (deal == null) 
-        {
-            Debug.LogWarning("No vendor assigned for " + category);
-            return true; // Default to success if no vendor, or block purchase (Design choice)
-        }
-
-        var vendor = allVendors.FirstOrDefault(v => v.VendorID == deal.VendorID);
-        if (vendor == null) return true;
-
-        // Logic: Random check against reliability
-        // If Reliability is 80, there is a 20% chance of delay.
-        float roll = UnityEngine.Random.Range(0f, 100f);
-        bool isTimely = roll <= vendor.ReliabilityScore;
-
-        if (IsServer)
-        {
-            UpdateVendorReputation(vendor, isTimely);
-        }
-        else
-        {
-            RequestReputationUpdateRpc(vendor.VendorID, isTimely);
-        }
-
-        return isTimely;
-    }
-
-    // --- Internal Logic (Server) ---
-
-    private void GenerateDefaultVendors()
-    {
-        // 1. Apex Parts (Expensive, Reliable)
-        allVendors.Add(new VendorData {
-            VendorID = "V_APEX", Name = "Apex Engineering", 
-            Description = "Premium parts, premium prices. Never late.",
-            ReliabilityScore = 95f, PriceMultiplier = 1.5f, Specialty = BusPartCategory.Engine
-        });
-
-        // 2. Budget Bits (Cheap, Unreliable)
-        allVendors.Add(new VendorData {
-            VendorID = "V_BUDGET", Name = "Budget Bus Bits", 
-            Description = "We get it there... eventually. Great prices.",
-            ReliabilityScore = 60f, PriceMultiplier = 0.7f, Specialty = BusPartCategory.Chassis
-        });
-
-        // 3. Standard Spares (Balanced)
-        allVendors.Add(new VendorData {
-            VendorID = "V_STD", Name = "Standard Spares Inc.", 
-            Description = "The market standard. Reliable enough.",
-            ReliabilityScore = 80f, PriceMultiplier = 1.0f, Specialty = BusPartCategory.Tires
-        });
-
-        SaveVendors();
+        if (IsServer) PlaceOrderInternal(vendorID, baseItemName);
+        else RequestPlaceOrderRpc(vendorID, baseItemName);
     }
 
     private void SignDealInternal(string vendorID, BusPartCategory category)
     {
-        // 1. Check for existing deal
-        var existingDeal = activeDeals.FirstOrDefault(d => d.Category == category);
-        if (existingDeal != null)
-        {
-            // If we are already with this vendor, do nothing
-            if (existingDeal.VendorID == vendorID) return;
+        if (activeDeals.Count(d => d.Category == category) >= 2) return; 
+        if (activeDeals.Any(d => d.VendorID == vendorID)) return; 
 
-            // Otherwise, we are breaking a contract! Apply Fine.
-            Debug.Log($"[Vendor] Breaking contract with {existingDeal.VendorID} for {category}");
-            if (CompanyManager.Instance != null)
-            {
-                CompanyManager.Instance.TryExecuteActionableTransaction(contractCancellationFine, TransactionCategory.General, "Contract Cancellation Fine");
-            }
-            activeDeals.Remove(existingDeal);
-        }
-
-        // 2. Add new deal
-        activeDeals.Add(new ActiveDeal {
-            Category = category,
-            VendorID = vendorID,
-            StartDate = DateTime.Now.ToString()
-        });
-
-        Debug.Log($"[Vendor] Signed deal with {vendorID} for {category}");
+        activeDeals.Add(new ActiveDeal { Category = category, VendorID = vendorID, StartDay = SimulationTimeManager.Instance.CurrentDay });
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());
     }
 
-    private void CancelDealInternal(BusPartCategory category)
+    private void CancelDealInternal(string vendorID)
     {
-        var existingDeal = activeDeals.FirstOrDefault(d => d.Category == category);
-        if (existingDeal != null)
+        // POINT 2: Block cancellation if there are active orders
+        if (activeOrders.Any(o => o.VendorID == vendorID))
         {
-            if (CompanyManager.Instance != null)
-            {
-                CompanyManager.Instance.TryExecuteActionableTransaction(contractCancellationFine, TransactionCategory.General, "Contract Cancellation Fine");
-            }
-            activeDeals.Remove(existingDeal);
+            Debug.LogWarning($"[Vendor] Cannot cancel deal with {vendorID}. There are active orders.");
+            return;
+        }
+
+        var deal = activeDeals.FirstOrDefault(d => d.VendorID == vendorID);
+        if (deal != null)
+        {
+            if (SimulationTimeManager.Instance.CurrentDay - deal.StartDay < 7)
+                CompanyManager.Instance.TryExecuteActionableTransaction(contractCancellationFine, TransactionCategory.General, "Contract Cancellation Fee");
+            
+            activeDeals.Remove(deal);
+            availableVendors.RemoveAll(v => v.VendorID == vendorID);
             
             SaveVendors();
             SyncVendorsRpc(SerializeVendors());
         }
     }
 
-    private void UpdateVendorReputation(VendorData vendor, bool positive)
+    private void PlaceOrderInternal(string vendorID, string baseItemName)
     {
-        if (positive)
+        var vendor = availableVendors.FirstOrDefault(v => v.VendorID == vendorID);
+        if (vendor == null) return;
+        if (activeOrders.Count(o => o.Category == vendor.Category) >= 2) return; 
+
+        var itemStats = GetItemStats(vendorID, baseItemName);
+
+        float estHours = baseDeliveryHours * itemStats.SpeedMultiplier;
+        float expectedTime = CurrentAbsoluteHour + estHours;
+        
+        bool isDelayed = UnityEngine.Random.Range(0f, 100f) > itemStats.Reliability;
+        float actualTime = expectedTime;
+        if (isDelayed) actualTime += UnityEngine.Random.Range(12f, 48f);
+
+        var counter = lifetimeItemCounts.FirstOrDefault(c => c.BaseName == baseItemName);
+        if (counter == null)
         {
-            vendor.CurrentXP += xpPerTimelyDelivery;
-            // Level Up Logic
-            if (vendor.CurrentXP >= 100f && vendor.LoyaltyLevel < maxLoyaltyLevel)
-            {
-                vendor.LoyaltyLevel++;
-                vendor.CurrentXP = 0; // Reset or carry over
-                // Reward: Better price?
-                vendor.PriceMultiplier -= 0.05f; // 5% discount per level
-                Debug.Log($"{vendor.Name} leveled up! New Price Multiplier: {vendor.PriceMultiplier}");
-            }
-            // Cap Reliability
-            vendor.ReliabilityScore = Mathf.Min(100f, vendor.ReliabilityScore + 1f);
+            counter = new ItemCounter { BaseName = baseItemName, Count = 0 };
+            lifetimeItemCounts.Add(counter);
         }
-        else
-        {
-            vendor.CurrentXP = Mathf.Max(0, vendor.CurrentXP + xpPenaltyLateDelivery);
-            vendor.ReliabilityScore = Mathf.Max(0f, vendor.ReliabilityScore - 2f); // Drop reliability
-        }
+        counter.Count++;
+        string generatedID = $"{baseItemName}{counter.Count}";
+
+        activeOrders.Add(new ActiveOrder {
+            OrderID = Guid.NewGuid().ToString().Substring(0, 6),
+            VendorID = vendorID,
+            ItemID = generatedID,
+            Category = vendor.Category,
+            ExpectedArrivalHour = expectedTime,
+            ActualArrivalHour = actualTime,
+            IsDelayed = isDelayed,
+            DurabilityRoll = itemStats.Durability // Use specific exact durability rolled in GetItemStats
+        });
+        
+        CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier, TransactionCategory.PartPurchase, $"Ordered {generatedID}");
 
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());
     }
 
-    // --- Networking ---
-
-    private void OnClientConnected(ulong clientId)
-    {
-        if (IsServer) SyncVendorsRpc(SerializeVendors(), RpcTarget.Single(clientId, RpcTargetUse.Temp));
-    }
-
-    [Rpc(SendTo.Server)]
-    private void RequestSignDealRpc(string vendorID, BusPartCategory category) { SignDealInternal(vendorID, category); }
-
-    [Rpc(SendTo.Server)]
-    private void RequestCancelDealRpc(BusPartCategory category) { CancelDealInternal(category); }
-
-    [Rpc(SendTo.Server)]
-    private void RequestReputationUpdateRpc(string vendorID, bool positive) 
-    {
-        var v = allVendors.FirstOrDefault(x => x.VendorID == vendorID);
-        if (v != null) UpdateVendorReputation(v, positive);
-    }
+    [Rpc(SendTo.Server)] private void RequestSignDealRpc(string vID, BusPartCategory c) { SignDealInternal(vID, c); }
+    [Rpc(SendTo.Server)] private void RequestCancelDealRpc(string vID) { CancelDealInternal(vID); }
+    [Rpc(SendTo.Server)] private void RequestPlaceOrderRpc(string vID, string iID) { PlaceOrderInternal(vID, iID); }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncVendorsRpc(string json, RpcParams rpcParams = default)
@@ -243,30 +306,16 @@ public class VendorManager : NetworkBehaviour
         var container = JsonUtility.FromJson<VendorContainer>(json);
         if (container != null)
         {
-            allVendors = container.AllVendors;
+            availableVendors = container.AvailableVendors;
             activeDeals = container.ActiveDeals;
+            activeOrders = container.ActiveOrders;
+            lifetimeItemCounts = container.LifetimeItemCounts;
             OnVendorDataUpdated?.Invoke();
         }
     }
 
-    // --- Persistence ---
-
-    private string SerializeVendors()
-    {
-        return JsonUtility.ToJson(new VendorContainer
-        {
-            AllVendors = allVendors,
-            ActiveDeals = activeDeals
-        }, true);
-    }
-
-    [ContextMenu("Save")]
-    public void SaveVendors()
-    {
-        File.WriteAllText(SavePath, SerializeVendors());
-    }
-
-    [ContextMenu("Load")]
+    private string SerializeVendors() { return JsonUtility.ToJson(new VendorContainer { AvailableVendors = availableVendors, ActiveDeals = activeDeals, ActiveOrders = activeOrders, LifetimeItemCounts = lifetimeItemCounts }, true); }
+    public void SaveVendors() { File.WriteAllText(SavePath, SerializeVendors()); }
     public void LoadVendors()
     {
         if (File.Exists(SavePath))
@@ -274,8 +323,10 @@ public class VendorManager : NetworkBehaviour
             var container = JsonUtility.FromJson<VendorContainer>(File.ReadAllText(SavePath));
             if (container != null)
             {
-                allVendors = container.AllVendors ?? new List<VendorData>();
+                availableVendors = container.AvailableVendors ?? new List<VendorData>();
                 activeDeals = container.ActiveDeals ?? new List<ActiveDeal>();
+                activeOrders = container.ActiveOrders ?? new List<ActiveOrder>();
+                lifetimeItemCounts = container.LifetimeItemCounts ?? new List<ItemCounter>();
             }
         }
     }

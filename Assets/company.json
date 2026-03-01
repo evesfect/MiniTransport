@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 75539.2421875,
+    "CurrentBalance": 45545.93359375,
     "History": [
         {
             "Amount": -442.0,
@@ -323,6 +323,545 @@
             "Category": 9,
             "Description": "Weekly Fleet Tax (3 buses)",
             "Timestamp": 14
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -175.9001007080078,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered engine1",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered engine1",
+            "Timestamp": 5
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Piston1",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Piston2",
+            "Timestamp": 3
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Piston3",
+            "Timestamp": 5
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Piston4",
+            "Timestamp": 6
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 10
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Piston5",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -64.44597625732422,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock1",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -51.7122917175293,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered BusFrame1",
+            "Timestamp": 10
+        },
+        {
+            "Amount": -63.054378509521487,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered DoorAssembly1",
+            "Timestamp": 11
+        },
+        {
+            "Amount": -62.512733459472659,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Dashboard1",
+            "Timestamp": 13
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 14
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 14
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 14
+        },
+        {
+            "Amount": -62.512733459472659,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered Dashboard2",
+            "Timestamp": 16
+        },
+        {
+            "Amount": -53.22759246826172,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WiringHarness1",
+            "Timestamp": 17
+        },
+        {
+            "Amount": -51.7122917175293,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered BusFrame2",
+            "Timestamp": 18
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 21
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 21
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 21
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 24
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 28
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 28
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 28
+        },
+        {
+            "Amount": -101.68534851074219,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered StandardTire1",
+            "Timestamp": 29
+        },
+        {
+            "Amount": -116.47582244873047,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WinterTire1",
+            "Timestamp": 29
+        },
+        {
+            "Amount": -101.68534851074219,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered StandardTire2",
+            "Timestamp": 30
+        },
+        {
+            "Amount": -101.68534851074219,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered StandardTire3",
+            "Timestamp": 31
+        },
+        {
+            "Amount": -77.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire1",
+            "Timestamp": 31
+        },
+        {
+            "Amount": -116.47582244873047,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WinterTire2",
+            "Timestamp": 32
+        },
+        {
+            "Amount": -116.47582244873047,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WinterTire3",
+            "Timestamp": 32
+        },
+        {
+            "Amount": -116.47582244873047,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WinterTire4",
+            "Timestamp": 33
+        },
+        {
+            "Amount": -77.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire2",
+            "Timestamp": 33
+        },
+        {
+            "Amount": -101.68534851074219,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered StandardTire4",
+            "Timestamp": 33
+        },
+        {
+            "Amount": -116.47582244873047,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WinterTire5",
+            "Timestamp": 33
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 35
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 35
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 35
+        },
+        {
+            "Amount": -111.47581481933594,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered WinterTire6",
+            "Timestamp": 36
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire3",
+            "Timestamp": 36
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire4",
+            "Timestamp": 36
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire5",
+            "Timestamp": 38
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire6",
+            "Timestamp": 39
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire7",
+            "Timestamp": 39
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire8",
+            "Timestamp": 39
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire9",
+            "Timestamp": 40
+        },
+        {
+            "Amount": -72.5244369506836,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire10",
+            "Timestamp": 40
+        },
+        {
+            "Amount": -67.52442932128906,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered HeavyDutyTire11",
+            "Timestamp": 41
+        },
+        {
+            "Amount": -1612.8045654296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (6 staff)",
+            "Timestamp": 42
+        },
+        {
+            "Amount": -300.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 42
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 42
+        },
+        {
+            "Amount": -76.5445327758789,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock2",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 4
+        },
+        {
+            "Amount": -37.862579345703128,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered StandardTire5",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 4
+        },
+        {
+            "Amount": -105.07884979248047,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock3",
+            "Timestamp": 2
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 3
+        },
+        {
+            "Amount": -133.48931884765626,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock4",
+            "Timestamp": 4
+        },
+        {
+            "Amount": -500.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Contract Cancellation Fee",
+            "Timestamp": 6
         }
     ]
 }
