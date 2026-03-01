@@ -9,8 +9,9 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
 
     [SerializeField] private ClientDataCache dataCache;
     private Dictionary<SyncDataType, int> interestCounts = new Dictionary<SyncDataType, int>();
+    
+    // Tracks successful local hooks to prevent double-subscribing
     private Dictionary<SyncDataType, bool> _activelyProviding = new Dictionary<SyncDataType, bool>();
-    private Dictionary<SyncDataType, bool> _networkSubscribed = new Dictionary<SyncDataType, bool>();
 
     private void Awake()
     {
@@ -20,31 +21,14 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
 
     private void Update()
     {
+        // Clean, lightweight retry for local manager hooks only
         foreach (var kvp in interestCounts)
         {
             if (kvp.Value > 0 && !_activelyProviding.GetValueOrDefault(kvp.Key, false))
             {
                 TryStartProvidingData(kvp.Key);
             }
-
-            // 2. Retry sending network subscription to the Server
-            if (!_networkSubscribed.GetValueOrDefault(kvp.Key, false))
-            {
-                // Wait until we are fully connected as a Client
-                if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsConnectedClient && !NetworkManager.Singleton.IsServer)
-                {
-                    // Wait until the Broker is fully spawned over the network
-                    if (NetworkSyncBroker.Instance != null && NetworkSyncBroker.Instance.IsSpawned)
-                    {
-                        Debug.Log($"<color=yellow>[Local Broker]</color> Connection ready! Sending SubscribeRpc for {kvp.Key}");
-                        NetworkSyncBroker.Instance.SubscribeRpc(kvp.Key);
-                        _networkSubscribed[kvp.Key] = true;
-                    }
-                }
-            }
         }
-
-        
     }
 
     public void RegisterInterest(SyncDataType mask)
@@ -63,14 +47,13 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
 
     public void ResendSubscriptions()
     {
-        // Called by the Server Throttler the moment the Client officially connects
+        // Called cleanly by the Server Throttler the moment the Client officially connects
         if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer && NetworkSyncBroker.Instance != null)
         {
             foreach (var kvp in interestCounts)
             {
                 if (kvp.Value > 0)
                 {
-                    Debug.Log($"<color=yellow>[Local Broker]</color> Resending SubscribeRpc for {kvp.Key}");
                     NetworkSyncBroker.Instance.SubscribeRpc(kvp.Key);
                 }
             }
@@ -84,7 +67,10 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
 
         if (interestCounts[type] == 1)
         {
-            _networkSubscribed[type] = false; // Arm the network retry loop
+            if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer && NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.SubscribeRpc(type);
+            }
             TryStartProvidingData(type);
         }
         else
@@ -101,6 +87,7 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
             if (interestCounts[type] <= 0)
             {
                 interestCounts[type] = 0;
+                
                 if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer && NetworkSyncBroker.Instance != null)
                 {
                     NetworkSyncBroker.Instance.UnsubscribeRpc(type);
@@ -110,14 +97,13 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
         }
     }
 
-    // Renamed from StartProvidingData to safely retry
     private void TryStartProvidingData(SyncDataType type)
     {
         bool success = false;
 
         if (type == SyncDataType.CompanyStats && CompanyManager.Instance != null)
         {
-            CompanyManager.Instance.OnBalanceChanged -= OnCompanyBalanceUpdated; // Prevent double hooks
+            CompanyManager.Instance.OnBalanceChanged -= OnCompanyBalanceUpdated;
             CompanyManager.Instance.OnBalanceChanged += OnCompanyBalanceUpdated;
             PushCurrentState(SyncDataType.CompanyStats);
             success = true;
@@ -137,27 +123,19 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
             success = true;
         }
 
-        if (success) 
-        {
-            _activelyProviding[type] = true;
-        }
+        if (success) _activelyProviding[type] = true;
     }
 
     private void StopProvidingData(SyncDataType type)
     {
         _activelyProviding[type] = false;
+        
         if (type == SyncDataType.CompanyStats && CompanyManager.Instance != null)
-        {
             CompanyManager.Instance.OnBalanceChanged -= OnCompanyBalanceUpdated;
-        }
         else if (type == SyncDataType.FleetStats && FleetManager.Instance != null)
-        {
             FleetManager.Instance.OnFleetUpdated -= OnFleetUpdated;
-        }
         else if (type == SyncDataType.MaintenanceStats && FleetManager.Instance != null)
-        {
             FleetManager.Instance.OnFleetUpdated -= OnMaintenanceUpdated;
-        }
     }
 
     private void OnCompanyBalanceUpdated(float amt) => PushCurrentState(SyncDataType.CompanyStats);
@@ -170,11 +148,7 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
         {
             CompanyData realData = CompanyManager.Instance.GetCompanyData();
             if (realData != null)
-            {
-                dataCache.SetCompanyData(new CompanyStatsData { 
-                    currentBalance = realData.CurrentBalance
-                });
-            }
+                dataCache.SetCompanyData(new CompanyStatsData { currentBalance = realData.CurrentBalance });
         }
         else if (type == SyncDataType.FleetStats && FleetManager.Instance != null)
         {

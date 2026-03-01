@@ -11,17 +11,15 @@ public class NetworkSyncBroker : NetworkBehaviour
 
     [Header("Rate Limits (Seconds)")]
     public float companyStatsRate = 0.5f;
+    public float companyLedgerRate = 1.0f;
     public float fleetStatsRate = 2.0f;
     public float maintenanceStatsRate = 1.0f;
-    public float companyLedgerRate = 1.0f;
 
     private Dictionary<SyncDataType, bool> _dirtyFlags = new Dictionary<SyncDataType, bool>();
     private Dictionary<SyncDataType, float> _timers = new Dictionary<SyncDataType, float>();
     
-    // Tracks which Client IDs want which data
     private Dictionary<SyncDataType, HashSet<ulong>> _subscribers = new Dictionary<SyncDataType, HashSet<ulong>>();
 
-    // Events fired when the timer elapses. Managers listen to these to serialize their data.
     public event Action<BaseRpcTarget> OnCompanySyncTriggered;
     public event Action<BaseRpcTarget> OnCompanyLedgerSyncTriggered;
     public event Action<BaseRpcTarget> OnFleetSyncTriggered;
@@ -43,7 +41,6 @@ public class NetworkSyncBroker : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // When the network connects, tell the UI to push its pending subscriptions
         if (!IsServer && LocalDataBroker.Instance != null)
         {
             LocalDataBroker.Instance.ResendSubscriptions();
@@ -77,7 +74,6 @@ public class NetworkSyncBroker : NetworkBehaviour
                 var targetClients = _subscribers[type].ToArray();
                 if (targetClients.Length > 0)
                 {
-                    Debug.Log($"<color=green>[Server Throttler]</color> Rate limit hit for {type}. Dispatching to {targetClients.Length} clients.");
                     BaseRpcTarget target = RpcTarget.Group(targetClients, RpcTargetUse.Temp);
                     syncAction?.Invoke(target);
                 }
@@ -88,15 +84,13 @@ public class NetworkSyncBroker : NetworkBehaviour
         }
     }
 
-    // --- Client Opt-in / Opt-out ---
-
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void SubscribeRpc(SyncDataType type, RpcParams rpcParams = default)
     {
         ulong clientId = rpcParams.Receive.SenderClientId;
         _subscribers[type].Add(clientId);
-        Debug.Log($"<color=green>[Server Throttler]</color> Received Subscribe request for {type} from Client {clientId}.");
-
+        
+        // Immediately deliver the current state to the new subscriber
         BaseRpcTarget target = RpcTarget.Single(clientId, RpcTargetUse.Temp);
         
         if (type == SyncDataType.CompanyStats) OnCompanySyncTriggered?.Invoke(target);
