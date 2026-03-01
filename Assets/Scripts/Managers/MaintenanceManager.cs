@@ -17,7 +17,7 @@ public class MaintenanceManager : NetworkBehaviour
     public float decayRatePerMinute = 0.2f;  
 
     [Tooltip("Durability gained per in-game hour while in depot")]
-    public float repairRatePerHour = 10f;
+    public float repairPerSkillPoint = 0.2f;
 
     private List<string> _breakdownList = new List<string>();
     private Queue<string> _breakdownQueue = new Queue<string>();
@@ -69,7 +69,7 @@ public class MaintenanceManager : NetworkBehaviour
                 // Check Breakdown
                 if (newDurability < breakdownThreshold)
                 {
-                    TriggerBreakdown(busData);
+                    TriggerBreakdown(busData.BusID);
                     Debug.Log($"Breakdown triggered for BUSID: {busData.BusID}");
                 }
             }
@@ -78,37 +78,78 @@ public class MaintenanceManager : NetworkBehaviour
 
     private void OnHourTick()
     {
-        if (FleetManager.Instance == null) return;
+        if (FleetManager.Instance == null || EmployeeManager.Instance == null) return;
 
-        // 1. Repair Inactive Buses (In Depot)
+        // 1. Calculate Repair Power for EACH Depot
+        // Dictionary: Key = DepotID, Value = Total Mechanic Skill
+        Dictionary<string, float> depotRepairPower = new Dictionary<string, float>();
+
+        foreach (var emp in EmployeeManager.Instance.allEmployees)
+        {
+            // We only care about Mechanics who are assigned to a valid depot
+            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            {
+                if (!depotRepairPower.ContainsKey(emp.AssignedDepotID))
+                {
+                    depotRepairPower[emp.AssignedDepotID] = 0f;
+                }
+
+                // Add this mechanic's skill to their depot's total
+                depotRepairPower[emp.AssignedDepotID] += emp.SkillLevel;
+            }
+        }
+
+        // 2. Repair Inactive Buses based on THEIR Assigned Depot
         foreach (var busData in FleetManager.Instance.allBuses)
         {
-            if (!FleetManager.Instance.IsBusActive(busData.BusID) && busData.Durability < 100f)
+            // Only repair buses that are sitting in the depot (Inactive)
+            if (!FleetManager.Instance.IsBusActive(busData.BusID))
             {
-                             
-                float newDurability = busData.Durability + repairRatePerHour;
-                FleetManager.Instance.UpdateBusDurability(busData.BusID, newDurability);
-                Debug.Log($"BusID: {busData.BusID}, Durability: {newDurability}");
-                
+                // Don't repair if already at 100%
+                if (busData.Durability >= 100f) continue;
+
+                // CHECK: Which depot is this bus assigned to?
+                string assignedDepot = busData.AssignedDepotID;
+
+                // If bus has no depot, nobody repairs it
+                if (string.IsNullOrEmpty(assignedDepot)) continue;
+
+                // Find the repair power for THIS specific depot
+                float totalSkillInDepot = 0f;
+                if (depotRepairPower.TryGetValue(assignedDepot, out float power))
+                {
+                    totalSkillInDepot = power;
+                }
+
+                // Calculate repair amount
+                // If totalSkillInDepot is 0 (no mechanics), repairAmount is 0
+                float repairAmount = totalSkillInDepot * repairPerSkillPoint;
+
+                if (repairAmount > 0)
+                {
+                    float newDurability = Mathf.Min(100f, busData.Durability + repairAmount);
+                    FleetManager.Instance.UpdateBusDurability(busData.BusID, newDurability);
+
+                    // Debug.Log($"[Maintenance] Repaired {busData.BusID} at {assignedDepot}. Amount: {repairAmount:F1}");
+                }
             }
         }
     }
-
-    private void TriggerBreakdown(BusData busData)
+    private void TriggerBreakdown(string busID)
     {
-        GameObject busObj = FleetManager.Instance.GetActiveBus(busData.BusID);
+        GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
         if (busObj != null)
         {
             BusDriver driver = busObj.GetComponent<BusDriver>();
             if (driver != null)
             {
                 driver.SetBrokenDown(true);
-                Debug.Log($"[Maintenance] Bus {busData.BusID} Broken Down. Adding to Queue.");
+                Debug.Log($"[Maintenance] Bus {busID} Broken Down. Adding to Queue.");
 
-                if (!_breakdownSet.Contains(busData.BusID))
+                if (!_breakdownSet.Contains(busID))
                 {
-                    _breakdownQueue.Enqueue(busData.BusID);
-                    _breakdownSet.Add(busData.BusID);
+                    _breakdownQueue.Enqueue(busID);
+                    _breakdownSet.Add(busID);
                     TryDispatchJobs();
                 }
             }
