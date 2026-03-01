@@ -11,12 +11,14 @@ public class MasterUIDataBroker : MonoBehaviour, IUIDataProvider
     {
         if ((mask & UIDataType.CompanyStats) != 0) HandleInterestAdded(UIDataType.CompanyStats);
         if ((mask & UIDataType.FleetStats) != 0) HandleInterestAdded(UIDataType.FleetStats);
+        if ((mask & UIDataType.MaintenanceStats) != 0) HandleInterestAdded(UIDataType.MaintenanceStats);
     }
 
     public void UnregisterInterest(UIDataType mask)
     {
         if ((mask & UIDataType.CompanyStats) != 0) HandleInterestRemoved(UIDataType.CompanyStats);
         if ((mask & UIDataType.FleetStats) != 0) HandleInterestRemoved(UIDataType.FleetStats);
+        if ((mask & UIDataType.MaintenanceStats) != 0) HandleInterestRemoved(UIDataType.MaintenanceStats);
     }
 
     private void HandleInterestAdded(UIDataType type)
@@ -67,6 +69,12 @@ public class MasterUIDataBroker : MonoBehaviour, IUIDataProvider
             FleetManager.Instance.OnFleetUpdated += OnFleetUpdated;
             PushCurrentState(UIDataType.FleetStats);
         }
+        else if (type == UIDataType.MaintenanceStats && FleetManager.Instance != null)
+        {
+            // Durability changes whenever the fleet updates, so we reuse this event
+            FleetManager.Instance.OnFleetUpdated += OnMaintenanceUpdated; 
+            PushCurrentState(UIDataType.MaintenanceStats);
+        }
     }
 
     private void StopProvidingData(UIDataType type)
@@ -80,12 +88,17 @@ public class MasterUIDataBroker : MonoBehaviour, IUIDataProvider
         {
             FleetManager.Instance.OnFleetUpdated -= OnFleetUpdated;
         }
+        else if (type == UIDataType.MaintenanceStats && FleetManager.Instance != null)
+        {
+            FleetManager.Instance.OnFleetUpdated -= OnMaintenanceUpdated;
+        }
     }
 
     // --- Event Listeners ---
     private void OnCompanyBalanceUpdated(float newBalance) => PushCurrentState(UIDataType.CompanyStats);
     private void OnCompanyTransaction(Transaction t) => PushCurrentState(UIDataType.CompanyStats);
     private void OnFleetUpdated() => PushCurrentState(UIDataType.FleetStats);
+    private void OnMaintenanceUpdated() => PushCurrentState(UIDataType.MaintenanceStats);
 
     // --- Core Logic ---
     private void PushCurrentState(UIDataType type)
@@ -108,6 +121,21 @@ public class MasterUIDataBroker : MonoBehaviour, IUIDataProvider
             dataCache.SetFleetData(new FleetStatsData {
                 totalBuses = currentBuses.Count,
                 lowDurabilityBuses = currentBuses.Count(b => b.Durability < 50f) 
+            });
+        }
+        else if (type == UIDataType.MaintenanceStats && MaintenanceManager.Instance != null && FleetManager.Instance != null)
+        {
+            // 1. Convert the complex BusData list into our lightweight UI struct list
+            List<BusHealthData> healthList = FleetManager.Instance.allBuses.Select(b => new BusHealthData { 
+                busID = b.BusID, 
+                durability = b.Durability 
+            }).ToList();
+
+            // 2. Package it with the thresholds and push to cache
+            dataCache.SetMaintenanceData(new MaintenanceStatsData {
+                operationalThreshold = MaintenanceManager.Instance.operationalThreshold,
+                breakdownThreshold = MaintenanceManager.Instance.breakdownThreshold,
+                busHealthList = healthList
             });
         }
     }

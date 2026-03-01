@@ -9,7 +9,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 98.3802719116211
+            "Durability": 100.0
         },
         {
             "BusID": "02",
@@ -20,7 +20,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 98.44026184082031
+            "Durability": 100.0
         },
         {
             "BusID": "03",
@@ -31,7 +31,40 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 98.92018127441406
+            "Durability": 100.0
+        },
+        {
+            "BusID": "aaa",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "",
+                "StartTime": 8.0,
+                "EndTime": 17.0,
+                "TurnaroundWait": 10.0
+            },
+            "Durability": 100.0
+        },
+        {
+            "BusID": "aab",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "",
+                "StartTime": 8.0,
+                "EndTime": 17.0,
+                "TurnaroundWait": 10.0
+            },
+            "Durability": 100.0
+        },
+        {
+            "BusID": "aabccd",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "",
+                "StartTime": 8.0,
+                "EndTime": 17.0,
+                "TurnaroundWait": 10.0
+            },
+            "Durability": 100.0
         }
     ]
 }
