@@ -135,11 +135,6 @@ public class EmployeeManager : NetworkBehaviour
                     changed = true;
                     Debug.Log($"[Auto-Assign] Driver {freeDriver.FullName} assigned to {bus.BusID}");
                 }
-                else
-                {
-                    // No free drivers available
-                    Debug.Log($"[Auto-Assign] Bus {bus.BusID} waiting for a driver...");
-                }
             }
         }
 

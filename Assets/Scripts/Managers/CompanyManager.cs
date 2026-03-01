@@ -48,12 +48,14 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer)
         {
             LoadCompanyData();
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
 
             if (SimulationTimeManager.Instance != null)
-            {
                 SimulationTimeManager.Instance.OnDayChanged += CheckDateForBills;
 
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnCompanySyncTriggered += PerformStatsSync;
+                NetworkSyncBroker.Instance.OnCompanyLedgerSyncTriggered += PerformLedgerSync;
             }
         }
         else
@@ -65,13 +67,53 @@ public class CompanyManager : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         if (IsServer && NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-            
+        {   
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged -= CheckDateForBills;
 
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnCompanySyncTriggered -= PerformStatsSync;
+                NetworkSyncBroker.Instance.OnCompanyLedgerSyncTriggered -= PerformLedgerSync;
+            }
         }
+    }
+
+    private void PerformLedgerSync(BaseRpcTarget target)
+    {
+        // Heavy payload (Full transaction list)
+        var ledger = new CompanyLedgerData {
+            transactions = _companyData.History
+        };
+        SyncLedgerRpc(JsonUtility.ToJson(ledger), target);
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void SyncStatsRpc(string json, RpcParams rpcParams = default)
+    {
+        if (IsServer) return;
+        Debug.Log($"<color=magenta>[Client RPC]</color> Received CompanyStats update from Server: {json}");
+        var stats = JsonUtility.FromJson<CompanyStatsData>(json);
+        _companyData.CurrentBalance = stats.currentBalance;
+        
+        OnBalanceChanged?.Invoke(stats.currentBalance);
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void SyncLedgerRpc(string json, RpcParams rpcParams = default)
+    {
+        if (IsServer) return;
+        var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
+        _companyData.History = ledger.transactions;
+    }
+
+    private void PerformStatsSync(BaseRpcTarget target)
+    {
+        // Lightweight payload (Just the float)
+        var stats = new CompanyStatsData {
+            currentBalance = _companyData.CurrentBalance
+        };
+        SyncStatsRpc(JsonUtility.ToJson(stats), target);
     }
 
     // --- Trigger ---
@@ -174,8 +216,12 @@ public class CompanyManager : NetworkBehaviour
         OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
         OnTransactionAdded?.Invoke(newTrans);
 
-        // Sync clients
-        UpdateStateClientRpc(_companyData.CurrentBalance, JsonUtility.ToJson(newTrans));
+        // Mark as dirty for rate limiter
+        if (NetworkSyncBroker.Instance != null)
+        {
+            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyStats);
+            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
+        }
 
         // Auto-Save on Server
         if (IsServer) SaveCompanyData();
@@ -183,13 +229,11 @@ public class CompanyManager : NetworkBehaviour
 
     // --- Networking ---
 
-    private void OnClientConnected(ulong clientId)
+    private void PerformBulkSync(BaseRpcTarget target)
     {
-        if (IsServer)
-        {
-            string json = JsonUtility.ToJson(_companyData);
-            SyncFullStateRpc(json, RpcTarget.Single(clientId, RpcTargetUse.Temp));
-        }
+        string json = JsonUtility.ToJson(_companyData);
+        // The Broker determines who receives this RPC
+        SyncFullStateRpc(json, target); 
     }
 
     [Rpc(SendTo.Server)]
@@ -202,23 +246,12 @@ public class CompanyManager : NetworkBehaviour
         ProcessTransaction(amount, type, category, desc);
     }
 
-    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
+    [Rpc(SendTo.SpecifiedInParams)]
     private void SyncFullStateRpc(string json, RpcParams rpcParams = default)
     {
-        if (IsServer) return;
+        if (IsServer) return; 
         _companyData = JsonUtility.FromJson<CompanyData>(json);
         OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
-    }
-
-    [Rpc(SendTo.NotServer)]
-    private void UpdateStateClientRpc(float newBalance, string transactionJson)
-    {
-        _companyData.CurrentBalance = newBalance;
-        Transaction t = JsonUtility.FromJson<Transaction>(transactionJson);
-        _companyData.History.Add(t);
-
-        OnBalanceChanged?.Invoke(newBalance);
-        OnTransactionAdded?.Invoke(t);
     }
 
     // --- Persistence ---
