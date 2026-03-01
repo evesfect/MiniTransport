@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 89056.8046875,
+    "CurrentBalance": 85045.6328125,
     "History": [
         {
             "Amount": -442.0,
@@ -155,6 +155,48 @@
             "Category": 0,
             "Description": "Hiring Fee: Applicant 520",
             "Timestamp": 2
+        },
+        {
+            "Amount": -1305.5882568359375,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (5 staff)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -250.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 7
+        },
+        {
+            "Amount": -1305.5882568359375,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (5 staff)",
+            "Timestamp": 14
+        },
+        {
+            "Amount": -250.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 14
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 14
         }
     ]
 }

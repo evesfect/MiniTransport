@@ -135,6 +135,7 @@ public class FleetManager : NetworkBehaviour
         {
             allBuses = container.Buses;
             Debug.Log($"[FleetManager] Synced {allBuses.Count} buses from Server.");
+            OnFleetUpdated?.Invoke();
         }
     }
 
@@ -232,6 +233,7 @@ public class FleetManager : NetworkBehaviour
         if (bus != null)
         {
             bus.Durability = Mathf.Clamp(newDurability, 0f, 100f);
+            OnFleetUpdated?.Invoke();
         }
     }
 

@@ -22,6 +22,8 @@ public class CompanyManager : NetworkBehaviour
     [Header("Runtime State")]
     [SerializeField] private CompanyData _companyData;
 
+    public CompanyData GetCompanyData() => _companyData;
+
     // --- Events ---
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
