@@ -1,7 +1,8 @@
 using System;
-using UnityEngine;
-using Unity.Netcode;
+using System.Collections.Generic;
 using Unity.Collections;
+using Unity.Netcode;
+using UnityEngine;
 
 [Serializable]
 public class BusSchedule
@@ -12,14 +13,59 @@ public class BusSchedule
     public float TurnaroundWait = 10f;
 }
 
+public enum BusPartType
+{
+    Engine = 0,
+    Transmission = 1,
+    Wheels = 2,
+    Body = 3,
+    Interior = 4,
+    None = 255 // For when not broken
+}
+
+[Serializable]
+public class BusPartData
+{
+    public BusPartType PartType;
+    public float Health = 100f;   // Current condition (0 = Breakdown)
+    public float MaxLife = 100f;  // Maximum repairable condition (0 = Scrap)
+
+    public BusPartData(BusPartType type)
+    {
+        PartType = type;
+        Health = 100f;
+        MaxLife = 100f;
+    }
+}
+
 [Serializable]
 public class BusData
 {
     public string BusID;
     public string AssignedDepotID;
     public BusSchedule Schedule;
-    public float Durability = 100f;
+    public List<BusPartData> Parts = new List<BusPartData>();
     public ushort Capacity;
+
+    public void InitializeParts()
+    {
+        if (Parts.Count == 0)
+        {
+            Parts.Add(new BusPartData(BusPartType.Engine));
+            Parts.Add(new BusPartData(BusPartType.Transmission));
+            Parts.Add(new BusPartData(BusPartType.Wheels));
+            Parts.Add(new BusPartData(BusPartType.Body));
+            Parts.Add(new BusPartData(BusPartType.Interior));
+        }
+    }
+
+    public float GetAverageHealth()
+    {
+        if (Parts == null || Parts.Count == 0) return 0f;
+        float sum = 0;
+        foreach (var p in Parts) sum += p.Health;
+        return sum / Parts.Count;
+    }
 }
 
 public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState>
@@ -33,6 +79,7 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
     public bool IsBrokenDown;
     public float BreakdownStopDistance;
     public ushort PassengerCount;
+    public BusPartType BreakdownReason;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
@@ -45,6 +92,7 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
         serializer.SerializeValue(ref IsBrokenDown);
         serializer.SerializeValue(ref BreakdownStopDistance);
         serializer.SerializeValue(ref PassengerCount);
+        serializer.SerializeValue(ref BreakdownReason);
     }
 
     public bool Equals(BusNetworkState other)
@@ -57,6 +105,7 @@ public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState
                IsInService == other.IsInService &&
                IsBrokenDown == other.IsBrokenDown &&
                Mathf.Approximately(BreakdownStopDistance, other.BreakdownStopDistance) &&
-               PassengerCount == other.PassengerCount;
+               PassengerCount == other.PassengerCount && 
+               BreakdownReason == other.BreakdownReason;
     }
 }

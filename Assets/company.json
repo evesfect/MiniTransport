@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 89056.8046875,
+    "CurrentBalance": 88326.8046875,
     "History": [
         {
             "Amount": -442.0,
@@ -155,6 +155,20 @@
             "Category": 0,
             "Description": "Hiring Fee: Applicant 520",
             "Timestamp": 2
+        },
+        {
+            "Amount": -396.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 375",
+            "Timestamp": 1
+        },
+        {
+            "Amount": -334.0,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 659",
+            "Timestamp": 1
         }
     ]
 }

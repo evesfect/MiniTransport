@@ -44,9 +44,7 @@
             "WeeklySalary": 282.2897033691406,
             "AssignedBusID": "03",
             "AssignedDepotID": ""
-        }
-    ],
-    "Candidates": [
+        },
         {
             "EmployeeID": "80664ef2",
             "FullName": "Applicant 375",
@@ -54,7 +52,7 @@
             "SkillLevel": 48.60816955566406,
             "WeeklySalary": 297.2163391113281,
             "AssignedBusID": "",
-            "AssignedDepotID": ""
+            "AssignedDepotID": "Depot_Main"
         },
         {
             "EmployeeID": "fb076144",
@@ -63,7 +61,8 @@
             "SkillLevel": 17.09154510498047,
             "WeeklySalary": 234.18309020996095,
             "AssignedBusID": "",
-            "AssignedDepotID": ""
+            "AssignedDepotID": "Depot_Main"
         }
-    ]
+    ],
+    "Candidates": []
 }

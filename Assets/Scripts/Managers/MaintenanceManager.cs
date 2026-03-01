@@ -3,6 +3,7 @@ using System.Linq;
 using Unity.Netcode;
 using Unity.VisualScripting.FullSerializer;
 using UnityEngine;
+using static Unity.Burst.Intrinsics.X86.Avx;
 
 [DefaultExecutionOrder(-45)] // Run after TimeManager/FleetManager, before Depot
 public class MaintenanceManager : NetworkBehaviour
@@ -12,12 +13,14 @@ public class MaintenanceManager : NetworkBehaviour
     [Header("Settings")]
     public float operationalThreshold = 30f; // Min durability to leave depot (X)
     public float breakdownThreshold = 5f;    // Durability where bus stops (Y)
-    
+    public float replacePartThreshold = 20f;
+
     [Tooltip("Durability lost per in-game minute while driving")]
-    public float decayRatePerMinute = 0.5f;  
+    public float decayRatePerMinute = 0.5f;
+    public float maxLifeDecayRate = 0.05f;
 
     [Tooltip("Durability gained per in-game hour while in depot")]
-    public float repairPerSkillPoint = 0.2f;
+    public float repairPerSkillPoint = 2.0f;
 
     private List<string> _breakdownList = new List<string>();
     private Queue<string> _breakdownQueue = new Queue<string>();
@@ -52,25 +55,39 @@ public class MaintenanceManager : NetworkBehaviour
     {
         if (FleetManager.Instance == null) return;
 
-        // 1. Decay Active Buses
         foreach (var busData in FleetManager.Instance.allBuses)
         {
+            // Ensure parts exist (Migration helper)
+            if (busData.Parts == null || busData.Parts.Count == 0) busData.InitializeParts();
+
             GameObject busObj = FleetManager.Instance.GetActiveBus(busData.BusID);
 
+            // Only decay active buses
             if (busObj != null)
             {
                 BusDriver driver = busObj.GetComponent<BusDriver>();
+                if (driver == null || driver.IsBroken) continue;
 
-                if (driver == null || driver.IsBroken){ continue; }
-                // Apply Decay
-                float newDurability = busData.Durability - decayRatePerMinute;
-                FleetManager.Instance.UpdateBusDurability(busData.BusID, newDurability);
-                // Debug.Log($"Durability to BUSID: {busData.BusID}, durability: {newDurability}");
-                // Check Breakdown
-                if (newDurability < breakdownThreshold)
+                // Decay each part
+                foreach (var part in busData.Parts)
                 {
-                    TriggerBreakdown(busData.BusID);
-                    Debug.Log($"Breakdown triggered for BUSID: {busData.BusID}");
+                    // Decay Health
+                    
+                    float decayMult = GetDecayMultiplier(part.PartType);
+                    part.Health -= decayRatePerMinute * decayMult;
+                    part.MaxLife -= maxLifeDecayRate * decayMult;
+
+                    if (part.MaxLife < 10f) part.MaxLife = 10f; // Minimum structural integrity                 
+                    if (part.Health <= breakdownThreshold)
+                    {
+                        
+                        // Only critical parts stop the bus immediately
+                        if (IsCriticalPart(part.PartType))
+                        {
+                            TriggerBreakdown(busData.BusID, part.PartType);
+                            break; // Stop checking other parts for this bus
+                        }
+                    }
                 }
             }
         }
@@ -96,46 +113,65 @@ public class MaintenanceManager : NetworkBehaviour
 
                 // Add this mechanic's skill to their depot's total
                 depotRepairPower[emp.AssignedDepotID] += emp.SkillLevel;
+                
             }
         }
-
+        
         // 2. Repair Inactive Buses based on THEIR Assigned Depot
         foreach (var busData in FleetManager.Instance.allBuses)
         {
-            // Only repair buses that are sitting in the depot (Inactive)
-            if (!FleetManager.Instance.IsBusActive(busData.BusID))
+            // Only repair buses in depot
+            if (FleetManager.Instance.IsBusActive(busData.BusID)) continue;
+            if (busData.Parts == null) continue;
+
+            string assignedDepot = busData.AssignedDepotID;
+            if (string.IsNullOrEmpty(assignedDepot) || !depotRepairPower.ContainsKey(assignedDepot)) continue;
+
+            float repairBudget = depotRepairPower[assignedDepot] * repairPerSkillPoint;
+            
+            foreach (var part in busData.Parts)
             {
-                // Don't repair if already at 100%
-                if (busData.Durability >= 100f) continue;
+                if (repairBudget <= 0) break;
 
-                // CHECK: Which depot is this bus assigned to?
-                string assignedDepot = busData.AssignedDepotID;
-
-                // If bus has no depot, nobody repairs it
-                if (string.IsNullOrEmpty(assignedDepot)) continue;
-
-                // Find the repair power for THIS specific depot
-                float totalSkillInDepot = 0f;
-                if (depotRepairPower.TryGetValue(assignedDepot, out float power))
+                // STRATEGY: REPLACE OR REPAIR?
+                
+                // A. REPLACEMENT (If MaxLife is too low)
+                if (part.MaxLife < replacePartThreshold)
                 {
-                    totalSkillInDepot = power;
+                    string itemID = GetItemIDForPart(part.PartType);
+
+                    // Check Inventory
+                    if (InventoryManager.Instance.GetItemQuantity(itemID) > 0)
+                    {
+                        // Consume Item
+                        InventoryManager.Instance.DecreaseItemQuantity(itemID, 1);
+
+                        // Reset Part to Brand New
+                        FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, 100f);
+                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, 100f);
+
+                        Debug.Log($"[Maintenance] Replaced {part.PartType} on {busData.BusID}");
+                        continue; // Done with this part
+                    }
                 }
 
-                // Calculate repair amount
-                // If totalSkillInDepot is 0 (no mechanics), repairAmount is 0
-                float repairAmount = totalSkillInDepot * repairPerSkillPoint;
-
-                if (repairAmount > 0)
+                // B. REPAIR (If not replacing, or no item available)
+                if (part.Health < part.MaxLife)
                 {
-                    float newDurability = Mathf.Min(100f, busData.Durability + repairAmount);
-                    FleetManager.Instance.UpdateBusDurability(busData.BusID, newDurability);
+                    Debug.Log("Test");
+                    float needed = part.MaxLife - part.Health;
+                    float applied = Mathf.Min(needed, repairBudget);
 
-                    // Debug.Log($"[Maintenance] Repaired {busData.BusID} at {assignedDepot}. Amount: {repairAmount:F1}");
+                    float newHealth = part.Health + applied;
+                    if (newHealth > part.MaxLife) newHealth = part.MaxLife;
+                    Debug.Log($"[Maintenance] Repaired {part.PartType}");
+                    FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, newHealth);
+                    repairBudget -= applied;
                 }
             }
         }
     }
-    private void TriggerBreakdown(string busID)
+    private void TriggerBreakdown(string busID, BusPartType reason)
     {
         GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
         if (busObj != null)
@@ -143,8 +179,8 @@ public class MaintenanceManager : NetworkBehaviour
             BusDriver driver = busObj.GetComponent<BusDriver>();
             if (driver != null)
             {
-                driver.SetBrokenDown(true);
-                Debug.Log($"[Maintenance] Bus {busID} Broken Down. Adding to Queue.");
+                driver.SetBrokenDown(true, reason);
+                Debug.Log($"[Maintenance] Bus {busID} Broken Down. Reason: {reason}. Adding to Queue.");
 
                 if (!_breakdownSet.Contains(busID))
                 {
@@ -216,4 +252,34 @@ public class MaintenanceManager : NetworkBehaviour
         return depots.FirstOrDefault(d => d.depotID == depotID);
     }
 
+    // HELPERS
+
+    private string GetItemIDForPart(BusPartType type)
+    {
+        switch (type)
+        {
+            case BusPartType.Engine: return "engine_block";
+            case BusPartType.Transmission: return "gearbox_std";
+            case BusPartType.Wheels: return "tire_standard";
+            case BusPartType.Body: return "body_panel";
+            case BusPartType.Interior: return "seat_fabric";
+            default: return "generic_part";
+        }
+    }
+
+    private bool IsCriticalPart(BusPartType type)
+    {
+        return type == BusPartType.Engine || type == BusPartType.Transmission || type == BusPartType.Wheels;
+    }
+
+
+    private float GetDecayMultiplier(BusPartType type)
+    {
+        switch (type)
+        {
+            case BusPartType.Wheels: return 1.2f; // Tires wear out fast
+            case BusPartType.Body: return 0.2f;   // Body lasts long
+            default: return 1.0f;
+        }
+    }
 }

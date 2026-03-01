@@ -7,7 +7,7 @@ public abstract class VehicleDriver : NetworkBehaviour
 {
     [Header("Vehicle Configuration")]
     [Tooltip("Base speed in Units/Sec")]
-    public float baseSpeed = 20f;
+    public float baseSpeed = 50f;
     
     [Tooltip("Multiplier for Clients to ensure they arrive before Server")]
     public float clientSpeedBuffer = 1.1f; 

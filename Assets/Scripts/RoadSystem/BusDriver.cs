@@ -24,6 +24,7 @@ public class BusDriver : VehicleDriver
 
 
     // Breakdown logic
+    public BusPartType BreakdownReason => _netState.Value.BreakdownReason;
 
     public int PassengerCount => _netState.Value.PassengerCount;
 
@@ -186,7 +187,7 @@ public class BusDriver : VehicleDriver
     }
 
     // Maintenance Logic
-    public void SetBrokenDown(bool isBroken)
+    public void SetBrokenDown(bool isBroken, BusPartType reason = BusPartType.None)
     {
         if (!IsServer) return;
         var state = _netState.Value;
@@ -200,12 +201,14 @@ public class BusDriver : VehicleDriver
         
             state.BreakdownStopDistance = targetDist;
             state.IsBrokenDown = true;
+            state.BreakdownReason = reason;
             _hasNotifiedStop = false;
         }
         else if (!isBroken)
         {
             state.BreakdownStopDistance = 0f;
             state.IsBrokenDown = false;
+            state.BreakdownReason = BusPartType.None;
             _hasNotifiedStop = false;
         }
         _netState.Value = state;
