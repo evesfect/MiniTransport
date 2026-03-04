@@ -160,14 +160,6 @@ public class CompanyManager : NetworkBehaviour
     }
 
 
-    // Reputation System
-    public void ModifySatisfaction(float amount)
-    {
-        GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
-        Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
-        OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
-    }
-
     private void PerformStatsSync(BaseRpcTarget target)
     {
         var stats = new CompanyStatsData { currentBalance = _companyData.CurrentBalance };

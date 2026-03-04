@@ -15,7 +15,7 @@
             "Role": 0,
             "SkillLevel": 55.5766487121582,
             "WeeklySalary": 311.1532897949219,
-            "AssignedBusID": "02",
+            "AssignedBusID": "",
             "AssignedDepotID": ""
         },
         {
@@ -42,7 +42,7 @@
             "Role": 0,
             "SkillLevel": 41.14485549926758,
             "WeeklySalary": 282.2897033691406,
-            "AssignedBusID": "03",
+            "AssignedBusID": "",
             "AssignedDepotID": ""
         }
     ],
@@ -65,6 +65,5 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main"
         }
-    ],
-    "Candidates": []
+    ]
 }

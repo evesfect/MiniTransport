@@ -155,13 +155,14 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
             var currentBuses = FleetManager.Instance.allBuses;
             dataCache.SetFleetData(new FleetStatsData {
                 totalBuses = currentBuses.Count,
-                lowDurabilityBuses = currentBuses.Count(b => b.Durability < 50f) 
+                lowDurabilityBuses = currentBuses.Count(b => b.GetAverageHealth() < 50f)
             });
         }
         else if (type == SyncDataType.MaintenanceStats && MaintenanceManager.Instance != null && FleetManager.Instance != null)
         {
-            List<BusHealthData> healthList = FleetManager.Instance.allBuses.Select(b => new BusHealthData { 
-                busID = b.BusID, durability = b.Durability 
+            List<BusHealthData> healthList = FleetManager.Instance.allBuses.Select(b => new BusHealthData
+            {
+                busID = b.BusID,durability = b.GetAverageHealth()
             }).ToList();
 
             dataCache.SetMaintenanceData(new MaintenanceStatsData {
