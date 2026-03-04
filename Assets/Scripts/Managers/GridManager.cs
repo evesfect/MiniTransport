@@ -380,7 +380,6 @@ public class GridManager : NetworkBehaviour
         if (Application.isPlaying && showValues && _gridData != null)
         {
             GUIStyle style = new GUIStyle();
-            style.normal.textColor = Color.white;
             style.fontSize = 11;
             style.alignment = TextAnchor.MiddleCenter;
 
@@ -390,7 +389,18 @@ public class GridManager : NetworkBehaviour
                 int y = i / resolutionX;
                 Vector3 pos = GridToWorld(x,y);
                 
-                string label = $"Pop:{_gridData[i].Population}\nJob:{_gridData[i].Jobs}\nIn:{_gridData[i].InDemand} Out:{_gridData[i].OutDemand}";
+                // --- GIZMO UPGRADE: Color the active event tile RED ---
+                if (SimulationDirector.Instance != null && SimulationDirector.Instance.activeEventTileIndex == i)
+                {
+                    style.normal.textColor = Color.red;
+                }
+                else
+                {
+                    style.normal.textColor = Color.white;
+                }
+
+                // --- GIZMO UPGRADE: Added Traffic (Trf) to the label ---
+                string label = $"Pop:{_gridData[i].Population} Trf:{_gridData[i].Traffic}\nJob:{_gridData[i].Jobs}\nIn:{_gridData[i].InDemand} Out:{_gridData[i].OutDemand}";
 #if UNITY_EDITOR
                 UnityEditor.Handles.Label(pos + Vector3.up * (gizmoHeight + 2f), label, style);
 #endif
