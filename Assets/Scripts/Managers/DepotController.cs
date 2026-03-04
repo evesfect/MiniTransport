@@ -80,7 +80,7 @@ public class DepotController : NetworkBehaviour
     public void CheckSchedules()
     {
         if (FleetManager.Instance == null) return;
-        float threshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 0f;
+        float threshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 15f;
 
         float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
         var myBuses = FleetManager.Instance.allBuses.Where(b => b.AssignedDepotID == depotID);

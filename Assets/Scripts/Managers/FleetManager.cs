@@ -37,22 +37,25 @@ public class FleetManager : NetworkBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-
     public override void OnNetworkSpawn()
     {
         if (IsServer)
         {
             LoadFleet();
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
 
             if (CompanyManager.Instance != null)
             {
                 CompanyManager.Instance.OnWeeklyExpensesRequested += SubmitFleetExpenses;
             }
 
+            // Hook into the throttler
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnFleetSyncTriggered += PerformFleetSync;
+            }
+
             OnFleetUpdated?.Invoke();
         }
-
         else
         {
             allBuses.Clear();
@@ -61,12 +64,16 @@ public class FleetManager : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        if (IsServer && NetworkManager.Singleton != null)
+        if (IsServer)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-
             if (CompanyManager.Instance != null)
                 CompanyManager.Instance.OnWeeklyExpensesRequested -= SubmitFleetExpenses;
+
+            // Unhook from the throttler
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnFleetSyncTriggered -= PerformFleetSync;
+            }
         }
     }
 
@@ -83,15 +90,6 @@ public class FleetManager : NetworkBehaviour
             TransactionCategory.Tax,
             $"Weekly Fleet Tax ({allBuses.Count} buses)"
         );
-    }
-
-    private void OnClientConnected(ulong clientId)
-    {
-        if (IsServer)
-        {
-            string json = SerializeFleet();
-            SyncFleetRpc(json, RpcTarget.Single(clientId, RpcTargetUse.Temp));
-        }
     }
 
     private void OnApplicationQuit()
@@ -128,14 +126,23 @@ public class FleetManager : NetworkBehaviour
 
     // --- Networking & Data ---
 
-    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
+    private void PerformFleetSync(BaseRpcTarget target)
+    {
+        string json = SerializeFleet();
+        SyncFleetRpc(json, target);
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
     private void SyncFleetRpc(string jsonFleet, RpcParams rpcParams = default)
     {
+        if (IsServer) return;
+        
         FleetContainer container = JsonUtility.FromJson<FleetContainer>(jsonFleet);
         if (container != null && container.Buses != null)
         {
             allBuses = container.Buses;
             Debug.Log($"[FleetManager] Synced {allBuses.Count} buses from Server.");
+            OnFleetUpdated?.Invoke();
         }
     }
 
@@ -181,9 +188,14 @@ public class FleetManager : NetworkBehaviour
         if (changed)
         {
             SaveFleet();
-            string json = SerializeFleet();
-            SyncFleetRpc(json);
             OnFleetUpdated?.Invoke();
+
+            // Tell the Rate Limiter we have new data instead of blasting the RPC
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.MaintenanceStats);
+            }
         }
     }
 
@@ -259,6 +271,14 @@ public class FleetManager : NetworkBehaviour
                 part.MaxLife = Mathf.Clamp(newMaxLife, 10f, 100f); // Keep min 10% structural integrity
                 // Health cannot exceed MaxLife
                 if (part.Health > part.MaxLife) part.Health = part.MaxLife;
+            }
+            OnFleetUpdated?.Invoke();
+
+            // Tell the Rate Limiter we have new data
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.MaintenanceStats);
             }
         }
     }

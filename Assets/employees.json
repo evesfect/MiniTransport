@@ -44,13 +44,15 @@
             "WeeklySalary": 282.2897033691406,
             "AssignedBusID": "03",
             "AssignedDepotID": ""
-        },
+        }
+    ],
+    "Candidates": [
         {
             "EmployeeID": "80664ef2",
             "FullName": "Applicant 375",
             "Role": 1,
-            "SkillLevel": 48.60816955566406,
-            "WeeklySalary": 297.2163391113281,
+            "SkillLevel": 78.60816955566406,
+            "WeeklySalary": 357.2163391113281,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main"
         },
