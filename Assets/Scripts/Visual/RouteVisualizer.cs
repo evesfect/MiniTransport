@@ -250,4 +250,13 @@ public class RouteVisualizer : MonoBehaviour
             _activeLines.Remove(routeID);
         }
     }
+
+    // --- UI Toggle Helper ---
+    public void SetRoutesVisible(bool isVisible)
+    {
+        if (isVisible) 
+            ShowAll();
+        else 
+            HideAll();
+    }
 }

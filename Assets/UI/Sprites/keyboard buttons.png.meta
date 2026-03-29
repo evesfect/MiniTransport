@@ -3353,7 +3353,7 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: keyboard buttons_148
+      name: long_button_0
       rect:
         serializedVersion: 2
         x: 131
@@ -3362,7 +3362,7 @@ TextureImporter:
         height: 103
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
+      border: {x: 32, y: 53, z: 32, w: 29}
       customData: 
       outline: []
       physicsShape: []
@@ -3375,16 +3375,16 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: keyboard buttons_149
+      name: long_button_1
       rect:
         serializedVersion: 2
         x: 579
         y: 2441
         width: 361
-        height: 95
+        height: 103
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
+      border: {x: 34, y: 46, z: 32, w: 28}
       customData: 
       outline: []
       physicsShape: []
@@ -5251,8 +5251,6 @@ TextureImporter:
       keyboard buttons_145: -940668096
       keyboard buttons_146: 1496658959
       keyboard buttons_147: 1499377065
-      keyboard buttons_148: 1323367263
-      keyboard buttons_149: 1867622137
       keyboard buttons_15: -1708751273
       keyboard buttons_150: -986994095
       keyboard buttons_151: 624592374
@@ -5426,6 +5424,8 @@ TextureImporter:
       keyboard buttons_97: 1169920744
       keyboard buttons_98: -310386519
       keyboard buttons_99: 506067256
+      long_button_0: 1323367263
+      long_button_1: 1867622137
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

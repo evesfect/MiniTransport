@@ -77,4 +77,18 @@ public class BasePanel : MonoBehaviour
         _canvasGroup.interactable = false;
         _canvasGroup.blocksRaycasts = false;
     }
+
+    public void SetPanelState(bool shouldBeOpen)
+    {
+        if (UIManager.Instance == null) return;
+
+        if (shouldBeOpen && !IsOpen)
+        {
+            UIManager.Instance.RequestToggle(this); 
+        }
+        else if (!shouldBeOpen && IsOpen)
+        {
+            UIManager.Instance.ClosePanel(this);
+        }
+    }
 }
