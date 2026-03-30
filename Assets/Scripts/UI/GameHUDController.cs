@@ -257,7 +257,15 @@ public class GameHUDController : MonoBehaviour
             Label lblStatus = new Label();
             lblStatus.AddToClassList("fleet-col-status");
 
-            Label lblHealth = new Label($"{busData.Durability:F0}%");
+            float avgHealth = 0f;
+            if (busData.Parts != null && busData.Parts.Count > 0)
+            {
+                // Using LINQ Average for robustness if GetAverageHealth() isn't available,
+                // but if you added the helper method to BusData, you can use: busData.GetAverageHealth();
+                avgHealth = busData.Parts.Average(p => p.Health);
+            }
+
+            Label lblHealth = new Label($"{avgHealth:F0}%");
             lblHealth.AddToClassList("fleet-col-health");
 
             // Determine Runtime State

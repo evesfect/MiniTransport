@@ -92,7 +92,7 @@ public class DepotController : NetworkBehaviour
 
             if (shouldBeActive && !isCurrentlyActive)
             {
-                if (busData.Durability > threshold)
+                if (IsBusConditionGoodEnough(busData, threshold))
                 {
                     if (EmployeeManager.Instance != null && EmployeeManager.Instance.HasAssignedDriver(busData.BusID))
                     {
@@ -109,10 +109,15 @@ public class DepotController : NetworkBehaviour
                 {
                     BusDriver driver = busObj.GetComponent<BusDriver>();
                     // If driver is missing or Broken, DO NOT despawn
-                    if (driver != null && driver.IsBroken)
+                    if (driver != null && driver.IsBroken )
                     {
                         canReturn = false;
                         // Debug.Log($"[Depot] Keeping Bus {busData.BusID} active despite schedule end because it is BROKEN.");
+                    }
+
+                    if(driver != null && driver.PassengerCount > 0) 
+                    {
+                        canReturn = false;
                     }
                 }
 
@@ -122,6 +127,25 @@ public class DepotController : NetworkBehaviour
                 }
             }
         }
+    }
+
+    private bool IsBusConditionGoodEnough(BusData data, float avgThreshold)
+    {
+        if (data.Parts == null || data.Parts.Count == 0) return true;
+
+        // 1. Critical Check: If ANY part is completely at 0
+        if (data.Parts.Any(p => p.Health <= 0f)) return false;
+
+        // 2. MAX LIFE CHECK: Do not let bus leave if MaxLife of any part is below the operational threshold!
+        // This forces it to stay in the depot to be Replaced.
+        if (data.Parts.Any(p => p.MaxLife < avgThreshold)) return false;
+
+        // 3. Average Check
+        float sum = 0f;
+        foreach (var p in data.Parts) sum += p.Health;
+        float avg = sum / data.Parts.Count;
+
+        return avg > avgThreshold;
     }
 
     private void SpawnBus(BusData data)

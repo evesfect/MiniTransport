@@ -138,12 +138,12 @@ public class DemandSimulationSystem : GridSimulationSystem
 
             if (spawnCount > 0)
             {
-                DistributePassengersToStops(stops, spawnCount);
+                DistributePassengersToStops(stops, spawnCount, i);
             }
         }
     }
 
-    private void DistributePassengersToStops(List<BusStop> stops, int count)
+    private void DistributePassengersToStops(List<BusStop> stops, int count, int sourceIndex)
     {
         // Distribute evenly or random among stops in the tile
         for (int k = 0; k < count; k++)
@@ -152,7 +152,10 @@ public class DemandSimulationSystem : GridSimulationSystem
             int destIndex = PickWeightedDestination();
             
             // Don't go to the same tile we are currently in
-            if (_grid.GetTileData(destIndex).Equals(_grid.GetTileData(GridManager.Instance.GetIndex(0,0)))) continue; 
+            if (destIndex == sourceIndex) continue;
+
+            // Dont try to go to a tile that doesnt have a bus stop
+            if (GridManager.Instance.GetStopsInTile(destIndex) == null) continue;
 
             PassengerManager.Instance.AddPassengers(randomStop.stopID, destIndex, 1);
         }

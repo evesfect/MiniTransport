@@ -1,9 +1,10 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
-using System;
+using UnityEngine;
+using static UnityEditor.Experimental.GraphView.Port;
 
 [DefaultExecutionOrder(-50)]
 public class FleetManager : NetworkBehaviour
@@ -158,6 +159,7 @@ public class FleetManager : NetworkBehaviour
             case FleetOperation.Add:
                 if (!allBuses.Any(b => b.BusID == requestEntry.BusID))
                 {
+                    requestEntry.InitializeParts();
                     allBuses.Add(requestEntry);
                     changed = true;
                 }
@@ -225,6 +227,14 @@ public class FleetManager : NetworkBehaviour
                 if (container != null && container.Buses != null)
                 {
                     allBuses = container.Buses;
+                    foreach (var bus in allBuses)
+                    {
+                        if (bus.Parts == null || bus.Parts.Count == 0)
+                        {
+                            bus.InitializeParts();
+                        }
+                    }
+                    // Clear runtime map on load to prevent stale references
                     _activeBusInstances.Clear();
                     Debug.Log($"FleetManager: Loaded {allBuses.Count} buses.");
                 }
@@ -237,12 +247,31 @@ public class FleetManager : NetworkBehaviour
     }
 
     // Data Modificiation API
-    public void UpdateBusDurability(string busID, float newDurability)
+    public void UpdateBusPartHealth(string busID, BusPartType partType, float newHealth)
     {
         var bus = allBuses.FirstOrDefault(b => b.BusID == busID);
-        if (bus != null)
+        if (bus != null && bus.Parts != null)
         {
-            bus.Durability = Mathf.Clamp(newDurability, 0f, 100f);
+            var part = bus.Parts.FirstOrDefault(p => p.PartType == partType);
+            if (part != null)
+            {
+                part.Health = Mathf.Clamp(newHealth, 0f, 100f);
+            }
+        }
+    }
+
+    public void UpdateBusPartMaxLife(string busID, BusPartType partType, float newMaxLife)
+    {
+        var bus = allBuses.FirstOrDefault(b => b.BusID == busID);
+        if (bus != null && bus.Parts != null)
+        {
+            var part = bus.Parts.FirstOrDefault(p => p.PartType == partType);
+            if (part != null)
+            {
+                part.MaxLife = Mathf.Clamp(newMaxLife, 10f, 100f); // Keep min 10% structural integrity
+                // Health cannot exceed MaxLife
+                if (part.Health > part.MaxLife) part.Health = part.MaxLife;
+            }
             OnFleetUpdated?.Invoke();
 
             // Tell the Rate Limiter we have new data
@@ -260,13 +289,14 @@ public class FleetManager : NetworkBehaviour
         return allBuses.Where(b => b.AssignedDepotID == depotID).ToList();
     }
 
-    public void CreateBusClient(string busID, string depotID, BusSchedule schedule)
+    public void CreateBusClient(string busID, string depotID, BusSchedule schedule, ushort capacity)
     {
         BusData newBus = new BusData
         {
             BusID = busID,
             AssignedDepotID = depotID,
-            Schedule = schedule
+            Schedule = schedule,
+            Capacity = capacity
         };
         RequestFleetOperationRpc(JsonUtility.ToJson(newBus), FleetOperation.Add);
     }

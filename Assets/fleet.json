@@ -9,40 +9,34 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 29.39478874206543
-        },
-        {
-            "BusID": "02",
-            "AssignedDepotID": "Depot_Main",
-            "Schedule": {
-                "RouteID": "02576857",
-                "StartTime": 6.200000286102295,
-                "EndTime": 20.0,
-                "TurnaroundWait": 15.0
-            },
-            "Durability": 29.274782180786134
-        },
-        {
-            "BusID": "03",
-            "AssignedDepotID": "Depot_Main",
-            "Schedule": {
-                "RouteID": "02576857",
-                "StartTime": 6.599999904632568,
-                "EndTime": 20.0,
-                "TurnaroundWait": 15.0
-            },
-            "Durability": 28.302600860595704
-        },
-        {
-            "BusID": "04",
-            "AssignedDepotID": "Depot_Main",
-            "Schedule": {
-                "RouteID": "02576857",
-                "StartTime": 6.599999904632568,
-                "EndTime": 20.0,
-                "TurnaroundWait": 15.0
-            },
-            "Durability": 100.0
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 100.0,
+                    "MaxLife": 100.0
+                },
+                {
+                    "PartType": 1,
+                    "Health": 100.0,
+                    "MaxLife": 100.0
+                },
+                {
+                    "PartType": 2,
+                    "Health": 100.0,
+                    "MaxLife": 100.0
+                },
+                {
+                    "PartType": 3,
+                    "Health": 100.0,
+                    "MaxLife": 100.0
+                },
+                {
+                    "PartType": 4,
+                    "Health": 100.0,
+                    "MaxLife": 100.0
+                }
+            ],
+            "Capacity": 0
         }
     ]
 }

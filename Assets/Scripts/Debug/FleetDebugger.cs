@@ -4,13 +4,14 @@ using System.Linq;
 public class FleetDebugger : MonoBehaviour
 {
     // --- UI State ---
-    private Rect _windowRect = new Rect(360, 20, 360, 650);
+    private Rect _windowRect = new Rect(360, 20, 420, 650);
     private bool _isCollapsed = true;
 
     // Editing state
     private string _busID = "";
     private string _depotID = "";
     private BusSchedule _schedule = new BusSchedule();
+    private string _capacityStr = "30";
 
     private Vector2 _scroll;
 
@@ -68,6 +69,13 @@ public class FleetDebugger : MonoBehaviour
     {
         GUILayout.Label("Active Fleet (Global)", GUI.skin.box);
 
+        GUILayout.BeginHorizontal();
+        GUILayout.Label("Bus ID", GUILayout.Width(120));
+        GUILayout.Label("Depot", GUILayout.Width(70));
+        GUILayout.Label("Pax", GUILayout.Width(40)); // Passengers
+        GUILayout.Label("Status", GUILayout.Width(80));
+        GUILayout.EndHorizontal();
+
         _scroll = GUILayout.BeginScrollView(_scroll, GUILayout.Height(250));
 
         if (FleetManager.Instance.allBuses.Count == 0)
@@ -82,7 +90,22 @@ public class FleetDebugger : MonoBehaviour
 
                 // Determine state via FleetManager lookup instead of cached enum
                 bool isActive = FleetManager.Instance.IsBusActive(bus.BusID);
-                
+
+                string passengerText = "-";
+                if (isActive)
+                {
+                    GameObject busObj = FleetManager.Instance.GetActiveBus(bus.BusID);
+                    if (busObj != null)
+                    {
+                        BusDriver driver = busObj.GetComponent<BusDriver>();
+                        if (driver != null)
+                        {
+                            // Reads the property we added to BusDriver.cs
+                            passengerText = driver.PassengerCount.ToString();
+                        }
+                    }
+                }
+
                 Color prev = GUI.color;
                 GUI.color = isActive ? Color.green : Color.cyan;
 
@@ -91,7 +114,10 @@ public class FleetDebugger : MonoBehaviour
                     LoadBus(bus);
                 }
 
-                GUILayout.Label(bus.AssignedDepotID, GUILayout.Width(80));
+                GUILayout.Label(bus.AssignedDepotID, GUILayout.Width(70));
+
+                GUILayout.Label(passengerText, GUILayout.Width(40));
+
                 GUILayout.Label(isActive ? "Active" : "Depot", GUILayout.Width(80));
 
                 GUI.color = prev;
@@ -118,6 +144,7 @@ public class FleetDebugger : MonoBehaviour
         string scheduleJson = JsonUtility.ToJson(_schedule, true);
         scheduleJson = GUILayout.TextArea(scheduleJson, GUILayout.Height(80));
         JsonUtility.FromJsonOverwrite(scheduleJson, _schedule);
+        _capacityStr = DrawField("Capacity", _capacityStr);
 
         GUILayout.Space(5);
 
@@ -125,7 +152,11 @@ public class FleetDebugger : MonoBehaviour
 
         if (GUILayout.Button("Create"))
         {
-            FleetManager.Instance.CreateBusClient(_busID, _depotID, _schedule);
+            ushort cap = 30;
+            ushort.TryParse(_capacityStr, out cap);
+
+            // UPDATED CALL: Pass capacity to the new signature
+            FleetManager.Instance.CreateBusClient(_busID, _depotID, _schedule, cap);
         }
 
         if (GUILayout.Button("Update"))
@@ -137,6 +168,11 @@ public class FleetDebugger : MonoBehaviour
             {
                 entry.AssignedDepotID = _depotID;
                 entry.Schedule = _schedule;
+
+                if (ushort.TryParse(_capacityStr, out ushort newCap))
+                {
+                    entry.Capacity = newCap;
+                }
                 FleetManager.Instance.UpdateBusClient(entry);
             }
         }
@@ -169,6 +205,7 @@ public class FleetDebugger : MonoBehaviour
         _busID = bus.BusID;
         _depotID = bus.AssignedDepotID;
         _schedule = bus.Schedule;
+        _capacityStr = bus.Capacity.ToString();
     }
 
     #endregion
