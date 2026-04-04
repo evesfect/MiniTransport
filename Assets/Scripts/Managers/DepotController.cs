@@ -92,12 +92,17 @@ public class DepotController : NetworkBehaviour
 
             if (shouldBeActive && !isCurrentlyActive)
             {
-                if (IsBusConditionGoodEnough(busData, threshold))
+                if (!IsBusConditionGoodEnough(busData, threshold)) 
                 {
-                    if (EmployeeManager.Instance != null && EmployeeManager.Instance.HasAssignedDriver(busData.BusID))
-                    {
-                        SpawnBus(busData);
-                    }
+                    Debug.LogWarning($"Bus {busData.BusID} failed condition check.");
+                }
+                else if (EmployeeManager.Instance == null || !EmployeeManager.Instance.HasAssignedDriver(busData.BusID)) 
+                {
+                    Debug.LogWarning($"Bus {busData.BusID} has no assigned driver.");
+                }
+                else 
+                {
+                    SpawnBus(busData);
                 }
             }
             else if (!shouldBeActive && isCurrentlyActive)
@@ -158,10 +163,18 @@ public class DepotController : NetworkBehaviour
 
         // Validate Route
         Route route = TransportManager.Instance.GetRoute(data.Schedule.RouteID);
-        if (route == null || route.StopIDs.Count == 0) return;
-        
+        if (route == null || route.StopIDs.Count == 0) 
+        {
+            Debug.LogWarning($"Route invalid or empty for Bus {data.BusID}");
+            return;
+        }
+                
         BusStop startStop = TransportManager.Instance.GetStop(route.StopIDs[0]);
-        if (startStop == null) return;
+        if (startStop == null) 
+        {
+            Debug.LogWarning($"Start stop missing for Route {route.RouteName}");
+            return;
+        }
 
         // Instantiate
         GameObject newBusObj = Instantiate(busPrefab, startStop.transform.position, startStop.transform.rotation);
