@@ -12,28 +12,28 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 100.0,
-                    "MaxLife": 100.0
+                    "Health": 75.30414581298828,
+                    "MaxLife": 38.248199462890628
                 },
                 {
                     "PartType": 1,
-                    "Health": 100.0,
-                    "MaxLife": 100.0
+                    "Health": 75.30414581298828,
+                    "MaxLife": 38.248199462890628
                 },
                 {
                     "PartType": 2,
-                    "Health": 100.0,
-                    "MaxLife": 100.0
+                    "Health": 70.35743713378906,
+                    "MaxLife": 25.900787353515626
                 },
                 {
                     "PartType": 3,
-                    "Health": 100.0,
-                    "MaxLife": 100.0
+                    "Health": 95.06271362304688,
+                    "MaxLife": 87.6473617553711
                 },
                 {
                     "PartType": 4,
-                    "Health": 100.0,
-                    "MaxLife": 100.0
+                    "Health": 75.30414581298828,
+                    "MaxLife": 38.248199462890628
                 }
             ],
             "Capacity": 0
