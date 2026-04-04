@@ -147,7 +147,7 @@ public class PassengerManager : NetworkBehaviour
                     CompanyManager.Instance.ModifySatisfaction(penalty);
 
                     
-                    Debug.Log($"[PassengerManager] {leavingCount} passengers gave up at Stop {stopID}. Penalty: {penalty}");
+                    //Debug.Log($"[PassengerManager] {leavingCount} passengers gave up at Stop {stopID}. Penalty: {penalty}");
 
                     groups.RemoveAt(i);
                     changed = true;
