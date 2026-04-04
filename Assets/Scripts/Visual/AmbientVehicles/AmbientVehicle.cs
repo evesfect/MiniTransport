@@ -129,7 +129,8 @@ public class AmbientVehicle : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Bus")) 
+        // Check the object itself, or the root parent object
+        if (other.CompareTag("Bus") || other.transform.root.CompareTag("Bus")) 
         {
             _busIntersectCount++;
             _targetFade = 0.5f;
@@ -138,7 +139,7 @@ public class AmbientVehicle : MonoBehaviour
 
     private void OnTriggerExit(Collider other)
     {
-        if (other.CompareTag("Bus"))
+        if (other.CompareTag("Bus") || other.transform.root.CompareTag("Bus"))
         {
             _busIntersectCount--;
             if (_busIntersectCount <= 0)

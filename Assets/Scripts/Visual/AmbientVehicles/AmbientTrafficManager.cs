@@ -1,11 +1,21 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// 1. Define a struct to hold the Prefab and its Weight in the Inspector
+[System.Serializable]
+public struct AmbientVehicleSpawnDef
+{
+    public AmbientVehicle vehiclePrefab;
+    [Tooltip("Higher number means it spawns more often relative to others.")]
+    [Range(1, 100)] public int spawnWeight;
+}
+
 [DefaultExecutionOrder(50)] 
 public class AmbientTrafficManager : MonoBehaviour
 {
     [Header("Spawning Configuration")]
-    public AmbientVehicle vehiclePrefab;
+    // 2. Replace the single prefab with a list of our new struct
+    public List<AmbientVehicleSpawnDef> vehicleTypes = new List<AmbientVehicleSpawnDef>();
     public Transform cameraTarget; 
     public int maxVehicles = 100;
     
@@ -24,12 +34,72 @@ public class AmbientTrafficManager : MonoBehaviour
         if (cameraTarget == null && Camera.main != null)
             cameraTarget = Camera.main.transform;
 
-        for (int i = 0; i < maxVehicles; i++)
+        InitializeWeightedPool();
+    }
+
+    private void InitializeWeightedPool()
+    {
+        if (vehicleTypes == null || vehicleTypes.Count == 0)
         {
-            AmbientVehicle newVeh = Instantiate(vehiclePrefab, transform);
-            newVeh.Initialize();
-            newVeh.gameObject.SetActive(false);
-            _vehiclePool.Enqueue(newVeh);
+            Debug.LogError("[AmbientTrafficManager] No vehicle types assigned!");
+            return;
+        }
+
+        List<AmbientVehicle> initialSpawnList = new List<AmbientVehicle>();
+        
+        // Calculate total weight
+        int totalWeight = 0;
+        foreach (var def in vehicleTypes) totalWeight += def.spawnWeight;
+
+        int spawnedCount = 0;
+
+        // Instantiate the exact number of each prefab based on their weight
+        for (int i = 0; i < vehicleTypes.Count; i++)
+        {
+            var def = vehicleTypes[i];
+            if (def.vehiclePrefab == null) continue;
+
+            // Calculate ratio
+            int amountToSpawn = Mathf.RoundToInt(((float)def.spawnWeight / totalWeight) * maxVehicles);
+
+            // If it's the very last item, fill whatever is left to ensure we hit exactly maxVehicles
+            if (i == vehicleTypes.Count - 1)
+            {
+                amountToSpawn = maxVehicles - spawnedCount;
+            }
+
+            for (int j = 0; j < amountToSpawn; j++)
+            {
+                if (spawnedCount >= maxVehicles) break;
+                
+                AmbientVehicle newVeh = Instantiate(def.vehiclePrefab, transform);
+                newVeh.Initialize();
+                newVeh.gameObject.SetActive(false);
+                
+                initialSpawnList.Add(newVeh);
+                spawnedCount++;
+            }
+        }
+
+        // Shuffle the list so they don't spawn in clumps of the same type
+        ShuffleList(initialSpawnList);
+
+        // Enqueue them all
+        foreach (var veh in initialSpawnList)
+        {
+            _vehiclePool.Enqueue(veh);
+        }
+    }
+
+    // A fast Fisher-Yates shuffle
+    private void ShuffleList<T>(List<T> list)
+    {
+        for (int i = 0; i < list.Count; i++)
+        {
+            T temp = list[i];
+            int randomIndex = Random.Range(i, list.Count);
+            list[i] = list[randomIndex];
+            list[randomIndex] = temp;
         }
     }
 
@@ -53,9 +123,6 @@ public class AmbientTrafficManager : MonoBehaviour
     {
         if (_allRoads.Length == 0) return;
 
-        // Try up to 3 times per frame to find a valid road.
-        // This ensures the visual pool stays full even if the first random 
-        // picks happen to be dead roads that fail the traffic check.
         for (int i = 0; i < 3; i++)
         {
             RoadSegment randomRoad = _allRoads[Random.Range(0, _allRoads.Length)];
@@ -63,27 +130,22 @@ public class AmbientTrafficManager : MonoBehaviour
 
             if (distToCam > innerSpawnRadius && distToCam < outerDespawnRadius)
             {
-                // --- GRID TRAFFIC DENSITY CHECK ---
                 if (GridManager.Instance != null)
                 {
                     if (GridManager.Instance.WorldToGrid(randomRoad.transform.position, out int x, out int y))
                     {
                         TileData tile = GridManager.Instance.GetTileData(x, y);
-                        
-                        // Traffic is 0-100. We use it as a percentage chance to spawn.
-                        // We add a minimum 5% chance so dead zones aren't completely devoid of life.
                         int spawnChance = Mathf.Max(5, tile.Traffic);
 
                         if (Random.Range(0, 100) > spawnChance)
                         {
-                            continue; // Failed the density roll. Skip to the next attempt in the loop.
+                            continue; 
                         }
                     }
                 }
 
-                // If it passes the radius and the traffic density check, spawn it!
                 SpawnFromPool(randomRoad);
-                return; // Success, exit the loop for this frame.
+                return; 
             }
         }
     }
@@ -108,7 +170,6 @@ public class AmbientTrafficManager : MonoBehaviour
     private void UpdateActiveVehicles()
     {
         Vector3 camPos = GetGroundCameraPosition();
-        
         float dt = Time.deltaTime;
 
         for (int i = _activeVehicles.Count - 1; i >= 0; i--)
