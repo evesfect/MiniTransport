@@ -123,29 +123,37 @@ public class AmbientTrafficManager : MonoBehaviour
     {
         if (_allRoads.Length == 0) return;
 
-        for (int i = 0; i < 3; i++)
+        // Shuffle the roads to keep spawns organic, but iterate through them 
+        // to GUARANTEE we find a valid road if one exists near the camera.
+        int startIndex = Random.Range(0, _allRoads.Length);
+        
+        for (int i = 0; i < _allRoads.Length; i++)
         {
-            RoadSegment randomRoad = _allRoads[Random.Range(0, _allRoads.Length)];
-            float distToCam = Vector3.Distance(randomRoad.transform.position, GetGroundCameraPosition());
+            int index = (startIndex + i) % _allRoads.Length;
+            RoadSegment checkRoad = _allRoads[index];
+
+            // Use the Node position, as Spline pivots can lie and cause instant-despawns
+            Vector3 roadPos = checkRoad.NodeA != null ? checkRoad.NodeA.transform.position : checkRoad.transform.position;
+            float distToCam = Vector3.Distance(roadPos, GetGroundCameraPosition());
 
             if (distToCam > innerSpawnRadius && distToCam < outerDespawnRadius)
             {
                 if (GridManager.Instance != null)
                 {
-                    if (GridManager.Instance.WorldToGrid(randomRoad.transform.position, out int x, out int y))
+                    if (GridManager.Instance.WorldToGrid(roadPos, out int x, out int y))
                     {
                         TileData tile = GridManager.Instance.GetTileData(x, y);
                         int spawnChance = Mathf.Max(5, tile.Traffic);
 
                         if (Random.Range(0, 100) > spawnChance)
                         {
-                            continue; 
+                            continue; // Failed traffic check, keep searching
                         }
                     }
                 }
 
-                SpawnFromPool(randomRoad);
-                return; 
+                SpawnFromPool(checkRoad);
+                return; // Spawned successfully, exit the loop
             }
         }
     }

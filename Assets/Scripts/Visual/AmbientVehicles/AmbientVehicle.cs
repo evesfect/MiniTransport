@@ -39,30 +39,33 @@ public class AmbientVehicle : MonoBehaviour
     {
         _busIntersectCount = 0;
         _targetFade = 0f;
-        _currentFade = 1f; // Start fully dissolved so it fades IN
+        _currentFade = 1f; 
         DistanceTraveledOnSegment = 0f;
         IsDespawning = false;
+        IsActive = true;
+        
+        // Force the shader to completely clear any frozen states from a previous distance-death
         ApplyFade(_currentFade);
     }
 
     // Returns TRUE if the vehicle needs Manager attention (either reached end of road OR finished despawning)
     public bool CustomUpdate(float deltaTime)
     {
-        // 1. HANDLE VISUAL FADING
+        // 1. VISUAL FADING (Always run this, even if dying)
         if (!Mathf.Approximately(_currentFade, _targetFade))
         {
             _currentFade = Mathf.MoveTowards(_currentFade, _targetFade, deltaTime * fadeSpeed);
             ApplyFade(_currentFade);
         }
 
-        // 2. DESPAWN STATE CHECK
+        // 2. DEATH CHECK
         if (IsDespawning)
         {
-            // If we are despawning, stop moving. Tell manager to pool us ONLY when fade is 100% complete.
+            // Only allow pooling if the fade is 100% complete
             return _currentFade >= 1f; 
         }
 
-        // 3. MOVEMENT & ROTATION LOGIC (MATCHES VehicleDriver.cs EXACTLY)
+        // 3. MOVEMENT LOGIC
         if (CurrentSegment == null || CurrentSegment.Length <= 0) return true;
 
         float localTraffic = 1.0f;
@@ -76,27 +79,22 @@ public class AmbientVehicle : MonoBehaviour
 
         if (DistanceTraveledOnSegment >= CurrentSegment.Length)
         {
-            return true; // Reached end of segment
+            return true; // Reached end of segment safely
         }
 
-        // Calculate T on Spline
         float currentT = DistanceTraveledOnSegment / CurrentSegment.Length;
         float evalT = IsHeadingToNodeB ? currentT : (1f - currentT);
 
-        // Position
         Vector3 newPos = CurrentSegment.GetPointOnRoad(evalT, IsHeadingToNodeB);
         transform.position = newPos;
 
-        // Rotation via Spline Tangent
         if (CurrentSegment.Container != null)
         {
             Vector3 tangent = (Vector3)CurrentSegment.Container.EvaluateTangent(evalT);
-            
-            // Invert tangent if moving backwards (from VehicleDriver)
             if (!IsHeadingToNodeB) tangent = -tangent;
 
             Vector3 dir = tangent;
-            dir.y = 0; // Flatness constraint
+            dir.y = 0; 
             dir.Normalize();
 
             if (dir.sqrMagnitude > 0.001f)
