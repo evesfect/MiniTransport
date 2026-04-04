@@ -1,0 +1,78 @@
+{
+    "Employees": [
+        {
+            "EmployeeID": "4552",
+            "FullName": "Employee 4552",
+            "Role": 1,
+            "SkillLevel": 35.0,
+            "WeeklySalary": 270.0,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_Main"
+        },
+        {
+            "EmployeeID": "99f27f21",
+            "FullName": "Applicant 885",
+            "Role": 0,
+            "SkillLevel": 55.5766487121582,
+            "WeeklySalary": 311.1532897949219,
+            "AssignedBusID": "02",
+            "AssignedDepotID": ""
+        },
+        {
+            "EmployeeID": "29e04b36",
+            "FullName": "Applicant 229",
+            "Role": 1,
+            "SkillLevel": 11.477323532104493,
+            "WeeklySalary": 222.95465087890626,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_North"
+        },
+        {
+            "EmployeeID": "612f0889",
+            "FullName": "Applicant 816",
+            "Role": 0,
+            "SkillLevel": 9.595304489135743,
+            "WeeklySalary": 219.19061279296876,
+            "AssignedBusID": "01",
+            "AssignedDepotID": ""
+        },
+        {
+            "EmployeeID": "612f0823",
+            "FullName": "Applicant 816",
+            "Role": 0,
+            "SkillLevel": 9.595304489135743,
+            "WeeklySalary": 219.19061279296876,
+            "AssignedBusID": "04",
+            "AssignedDepotID": ""
+        },
+        {
+            "EmployeeID": "1f35b546",
+            "FullName": "Applicant 520",
+            "Role": 0,
+            "SkillLevel": 41.14485549926758,
+            "WeeklySalary": 282.2897033691406,
+            "AssignedBusID": "03",
+            "AssignedDepotID": ""
+        }
+    ],
+    "Candidates": [
+        {
+            "EmployeeID": "80664ef2",
+            "FullName": "Applicant 375",
+            "Role": 1,
+            "SkillLevel": 78.60816955566406,
+            "WeeklySalary": 357.2163391113281,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_Main"
+        },
+        {
+            "EmployeeID": "fb076144",
+            "FullName": "Applicant 659",
+            "Role": 1,
+            "SkillLevel": 17.09154510498047,
+            "WeeklySalary": 234.18309020996095,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_Main"
+        }
+    ]
+}

@@ -1,8 +1,10 @@
-using UnityEngine;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
+using UnityEngine;
+using static UnityEditor.Experimental.GraphView.Port;
 
 [DefaultExecutionOrder(-50)]
 public class FleetManager : NetworkBehaviour
@@ -11,7 +13,12 @@ public class FleetManager : NetworkBehaviour
 
     [Header("Master Fleet Data")]
     public List<BusData> allBuses = new List<BusData>();
-    
+
+    [Header("Financial Settings")]
+    public float weeklyCostPerBus = 150f;
+
+    public event Action OnFleetUpdated;
+
     // Runtime Lookup: Maps BusID -> Spawned GameObject
     private Dictionary<string, GameObject> _activeBusInstances = new Dictionary<string, GameObject>();
 
@@ -35,7 +42,19 @@ public class FleetManager : NetworkBehaviour
         if (IsServer)
         {
             LoadFleet();
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+
+            if (CompanyManager.Instance != null)
+            {
+                CompanyManager.Instance.OnWeeklyExpensesRequested += SubmitFleetExpenses;
+            }
+
+            // Hook into the throttler
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnFleetSyncTriggered += PerformFleetSync;
+            }
+
+            OnFleetUpdated?.Invoke();
         }
         else
         {
@@ -45,19 +64,32 @@ public class FleetManager : NetworkBehaviour
 
     public override void OnNetworkDespawn()
     {
-        if (IsServer && NetworkManager.Singleton != null)
+        if (IsServer)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            if (CompanyManager.Instance != null)
+                CompanyManager.Instance.OnWeeklyExpensesRequested -= SubmitFleetExpenses;
+
+            // Unhook from the throttler
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnFleetSyncTriggered -= PerformFleetSync;
+            }
         }
     }
 
-    private void OnClientConnected(ulong clientId)
+    private void SubmitFleetExpenses()
     {
-        if (IsServer)
-        {
-            string json = SerializeFleet();
-            SyncFleetRpc(json, RpcTarget.Single(clientId, RpcTargetUse.Temp));
-        }
+        if (allBuses.Count == 0) return;
+
+        float totalTax = allBuses.Count * weeklyCostPerBus;
+
+        Debug.Log($"[FleetManager] Submitting weekly tax: {totalTax}");
+
+        CompanyManager.Instance.ProcessPassiveExpense(
+            totalTax,
+            TransactionCategory.Tax,
+            $"Weekly Fleet Tax ({allBuses.Count} buses)"
+        );
     }
 
     private void OnApplicationQuit()
@@ -94,14 +126,23 @@ public class FleetManager : NetworkBehaviour
 
     // --- Networking & Data ---
 
-    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
+    private void PerformFleetSync(BaseRpcTarget target)
+    {
+        string json = SerializeFleet();
+        SyncFleetRpc(json, target);
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
     private void SyncFleetRpc(string jsonFleet, RpcParams rpcParams = default)
     {
+        if (IsServer) return;
+        
         FleetContainer container = JsonUtility.FromJson<FleetContainer>(jsonFleet);
         if (container != null && container.Buses != null)
         {
             allBuses = container.Buses;
             Debug.Log($"[FleetManager] Synced {allBuses.Count} buses from Server.");
+            OnFleetUpdated?.Invoke();
         }
     }
 
@@ -118,6 +159,7 @@ public class FleetManager : NetworkBehaviour
             case FleetOperation.Add:
                 if (!allBuses.Any(b => b.BusID == requestEntry.BusID))
                 {
+                    requestEntry.InitializeParts();
                     allBuses.Add(requestEntry);
                     changed = true;
                 }
@@ -146,8 +188,14 @@ public class FleetManager : NetworkBehaviour
         if (changed)
         {
             SaveFleet();
-            string json = SerializeFleet();
-            SyncFleetRpc(json);
+            OnFleetUpdated?.Invoke();
+
+            // Tell the Rate Limiter we have new data instead of blasting the RPC
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.MaintenanceStats);
+            }
         }
     }
 
@@ -179,6 +227,13 @@ public class FleetManager : NetworkBehaviour
                 if (container != null && container.Buses != null)
                 {
                     allBuses = container.Buses;
+                    foreach (var bus in allBuses)
+                    {
+                        if (bus.Parts == null || bus.Parts.Count == 0)
+                        {
+                            bus.InitializeParts();
+                        }
+                    }
                     // Clear runtime map on load to prevent stale references
                     _activeBusInstances.Clear();
                     Debug.Log($"FleetManager: Loaded {allBuses.Count} buses.");
@@ -192,12 +247,39 @@ public class FleetManager : NetworkBehaviour
     }
 
     // Data Modificiation API
-    public void UpdateBusDurability(string busID, float newDurability)
+    public void UpdateBusPartHealth(string busID, BusPartType partType, float newHealth)
     {
         var bus = allBuses.FirstOrDefault(b => b.BusID == busID);
-        if (bus != null)
+        if (bus != null && bus.Parts != null)
         {
-            bus.Durability = Mathf.Clamp(newDurability, 0f, 100f);
+            var part = bus.Parts.FirstOrDefault(p => p.PartType == partType);
+            if (part != null)
+            {
+                part.Health = Mathf.Clamp(newHealth, 0f, 100f);
+            }
+        }
+    }
+
+    public void UpdateBusPartMaxLife(string busID, BusPartType partType, float newMaxLife)
+    {
+        var bus = allBuses.FirstOrDefault(b => b.BusID == busID);
+        if (bus != null && bus.Parts != null)
+        {
+            var part = bus.Parts.FirstOrDefault(p => p.PartType == partType);
+            if (part != null)
+            {
+                part.MaxLife = Mathf.Clamp(newMaxLife, 10f, 100f); // Keep min 10% structural integrity
+                // Health cannot exceed MaxLife
+                if (part.Health > part.MaxLife) part.Health = part.MaxLife;
+            }
+            OnFleetUpdated?.Invoke();
+
+            // Tell the Rate Limiter we have new data
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.MaintenanceStats);
+            }
         }
     }
 
@@ -207,13 +289,14 @@ public class FleetManager : NetworkBehaviour
         return allBuses.Where(b => b.AssignedDepotID == depotID).ToList();
     }
 
-    public void CreateBusClient(string busID, string depotID, BusSchedule schedule)
+    public void CreateBusClient(string busID, string depotID, BusSchedule schedule, ushort capacity)
     {
         BusData newBus = new BusData
         {
             BusID = busID,
             AssignedDepotID = depotID,
-            Schedule = schedule
+            Schedule = schedule,
+            Capacity = capacity
         };
         RequestFleetOperationRpc(JsonUtility.ToJson(newBus), FleetOperation.Add);
     }
