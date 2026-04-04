@@ -137,6 +137,22 @@ PrefabInstance:
       propertyPath: m_Name
       value: kozak_i_van
       objectReference: {fileID: 0}
+    - target: {fileID: 3298527340143751871, guid: 507777845a9393a4e83f8c362e915549, type: 3}
+      propertyPath: m_TagString
+      value: Bus
+      objectReference: {fileID: 0}
+    - target: {fileID: 4450806795601807231, guid: 507777845a9393a4e83f8c362e915549, type: 3}
+      propertyPath: m_Size.x
+      value: 2.82
+      objectReference: {fileID: 0}
+    - target: {fileID: 4450806795601807231, guid: 507777845a9393a4e83f8c362e915549, type: 3}
+      propertyPath: m_Size.y
+      value: 3.26
+      objectReference: {fileID: 0}
+    - target: {fileID: 4450806795601807231, guid: 507777845a9393a4e83f8c362e915549, type: 3}
+      propertyPath: m_Size.z
+      value: 8.93
+      objectReference: {fileID: 0}
     - target: {fileID: 4710386744780114714, guid: 507777845a9393a4e83f8c362e915549, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.47851
