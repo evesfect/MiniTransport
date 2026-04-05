@@ -3,9 +3,9 @@ using UnityEngine;
 public class AmbientVehicle : MonoBehaviour
 {
     [Header("Settings")]
-    public float baseSpeed = 20f; // Match your Bus baseSpeed
-    public float rotationSpeed = 10f; // Match VehicleDriver rotation speed
-    public string dissolvePropertyName = "_Dissolve";
+    public float baseSpeed = 20f; 
+    public float rotationSpeed = 10f; 
+    public string dissolvePropertyName = "_Dissolve"; // Ensure this matches your shader reference
     public float fadeSpeed = 3f;
     
     [Header("State (For Manager)")]
@@ -29,7 +29,6 @@ public class AmbientVehicle : MonoBehaviour
         _propBlock = new MaterialPropertyBlock();
         _dissolvePropertyID = Shader.PropertyToID(dissolvePropertyName);
         
-        // Force fully opaque at start
         _currentFade = 0f;
         _targetFade = 0f;
         ApplyFade(_currentFade);
@@ -44,15 +43,16 @@ public class AmbientVehicle : MonoBehaviour
         IsDespawning = false;
         IsActive = true;
         
-        // Force the shader to completely clear any frozen states from a previous distance-death
+        // Force fully invisible at the exact moment of spawn to guarantee no pop-in
         ApplyFade(_currentFade);
     }
 
-    // Returns TRUE if the vehicle needs Manager attention (either reached end of road OR finished despawning)
-    public bool CustomUpdate(float deltaTime)
+    // THE FIX: Added 'bool isVisible' parameter for Frustum Culling
+    public bool CustomUpdate(float deltaTime, bool isVisible)
     {
-        // 1. VISUAL FADING (Always run this, even if dying)
-        if (!Mathf.Approximately(_currentFade, _targetFade))
+        // 1. VISUAL FADING
+        // Only spend CPU updating the shader if the car is on-screen OR actively dying
+        if ((isVisible || IsDespawning) && !Mathf.Approximately(_currentFade, _targetFade))
         {
             _currentFade = Mathf.MoveTowards(_currentFade, _targetFade, deltaTime * fadeSpeed);
             ApplyFade(_currentFade);
@@ -61,11 +61,11 @@ public class AmbientVehicle : MonoBehaviour
         // 2. DEATH CHECK
         if (IsDespawning)
         {
-            // Only allow pooling if the fade is 100% complete
             return _currentFade >= 1f; 
         }
 
-        // 3. MOVEMENT LOGIC
+        // 3. POSITION MATH
+        // Always run this, even if off-screen, so the simulation keeps flowing
         if (CurrentSegment == null || CurrentSegment.Length <= 0) return true;
 
         float localTraffic = 1.0f;
@@ -79,7 +79,7 @@ public class AmbientVehicle : MonoBehaviour
 
         if (DistanceTraveledOnSegment >= CurrentSegment.Length)
         {
-            return true; // Reached end of segment safely
+            return true; // Reached end of segment
         }
 
         float currentT = DistanceTraveledOnSegment / CurrentSegment.Length;
@@ -88,7 +88,9 @@ public class AmbientVehicle : MonoBehaviour
         Vector3 newPos = CurrentSegment.GetPointOnRoad(evalT, IsHeadingToNodeB);
         transform.position = newPos;
 
-        if (CurrentSegment.Container != null)
+        // 4. ROTATION MATH (Frustum Culled)
+        // Skip this expensive Quaternion math entirely if the player isn't looking at the car
+        if (isVisible && CurrentSegment.Container != null)
         {
             Vector3 tangent = (Vector3)CurrentSegment.Container.EvaluateTangent(evalT);
             if (!IsHeadingToNodeB) tangent = -tangent;
@@ -110,7 +112,7 @@ public class AmbientVehicle : MonoBehaviour
 
     public void TriggerDespawnFade()
     {
-        if (IsDespawning) return; // Prevent spamming
+        if (IsDespawning) return; 
         _targetFade = 1f;
         IsDespawning = true;
     }
@@ -127,7 +129,8 @@ public class AmbientVehicle : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        // Check the object itself, or the root parent object
+        if (IsDespawning) return; // Prevent zombie locks
+
         if (other.CompareTag("Bus") || other.transform.root.CompareTag("Bus")) 
         {
             _busIntersectCount++;
@@ -137,6 +140,8 @@ public class AmbientVehicle : MonoBehaviour
 
     private void OnTriggerExit(Collider other)
     {
+        if (IsDespawning) return; 
+
         if (other.CompareTag("Bus") || other.transform.root.CompareTag("Bus"))
         {
             _busIntersectCount--;
@@ -144,26 +149,6 @@ public class AmbientVehicle : MonoBehaviour
             {
                 _busIntersectCount = 0;
                 if (!IsDespawning) _targetFade = 0f;
-            }
-        }
-    }
-
-    private void OnDrawGizmos()
-    {
-        // Draw the trigger sphere/box
-        Collider col = GetComponent<Collider>();
-        if (col != null)
-        {
-            Gizmos.color = new Color(0f, 1f, 0f, 0.3f); // Semi-transparent green
-            Gizmos.matrix = transform.localToWorldMatrix;
-            
-            if (col is SphereCollider sphere)
-            {
-                Gizmos.DrawWireSphere(sphere.center, sphere.radius);
-            }
-            else if (col is BoxCollider box)
-            {
-                Gizmos.DrawWireCube(box.center, box.size);
             }
         }
     }
