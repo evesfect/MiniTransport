@@ -5,7 +5,7 @@ public class AmbientVehicle : MonoBehaviour
     [Header("Settings")]
     public float baseSpeed = 20f; 
     public float rotationSpeed = 10f; 
-    public string dissolvePropertyName = "_Dissolve"; // Ensure this matches your shader reference
+    public string dissolvePropertyName = "_Dissolve"; 
     public float fadeSpeed = 3f;
     
     [Header("State (For Manager)")]
@@ -14,6 +14,11 @@ public class AmbientVehicle : MonoBehaviour
     [HideInInspector] public float DistanceTraveledOnSegment; 
     [HideInInspector] public bool IsActive = false;
     [HideInInspector] public bool IsDespawning = false;
+    
+    // --- OPTIMIZATION CACHES ---
+    [HideInInspector] public float CachedTrafficLimit = 1.0f;
+    [HideInInspector] public bool IsCurrentlyVisible = false;
+    [HideInInspector] public float VisCheckTimer = 0f;
 
     private Renderer[] _renderers;
     private MaterialPropertyBlock _propBlock;
@@ -22,6 +27,7 @@ public class AmbientVehicle : MonoBehaviour
     private int _busIntersectCount = 0;
     private float _currentFade = 0f;
     private float _targetFade = 0f;
+    private Vector3 _lastPosition; // Used for ultra-cheap rotation math
 
     public void Initialize()
     {
@@ -43,69 +49,58 @@ public class AmbientVehicle : MonoBehaviour
         IsDespawning = false;
         IsActive = true;
         
-        // Force fully invisible at the exact moment of spawn to guarantee no pop-in
+        // Stagger the initial visibility check so 1000 cars don't all check on the exact same frame
+        VisCheckTimer = Random.Range(0f, 0.2f);
+        IsCurrentlyVisible = false; 
+
         ApplyFade(_currentFade);
     }
 
-    // THE FIX: Added 'bool isVisible' parameter for Frustum Culling
-    public bool CustomUpdate(float deltaTime, bool isVisible)
+    public bool CustomUpdate(float deltaTime)
     {
         // 1. VISUAL FADING
-        // Only spend CPU updating the shader if the car is on-screen OR actively dying
-        if ((isVisible || IsDespawning) && !Mathf.Approximately(_currentFade, _targetFade))
+        if ((IsCurrentlyVisible || IsDespawning) && !Mathf.Approximately(_currentFade, _targetFade))
         {
             _currentFade = Mathf.MoveTowards(_currentFade, _targetFade, deltaTime * fadeSpeed);
             ApplyFade(_currentFade);
         }
 
-        // 2. DEATH CHECK
-        if (IsDespawning)
-        {
-            return _currentFade >= 1f; 
-        }
+        if (IsDespawning) return _currentFade >= 1f; 
 
-        // 3. POSITION MATH
-        // Always run this, even if off-screen, so the simulation keeps flowing
         if (CurrentSegment == null || CurrentSegment.Length <= 0) return true;
 
-        float localTraffic = 1.0f;
-        if (GridManager.Instance != null)
-        {
-            localTraffic = GridManager.Instance.GetTrafficModifierAt(transform.position);
-        }
-
-        float step = baseSpeed * localTraffic * deltaTime; 
+        // 2. POSITION MATH (Ultra-Fast: No Grid Lookups)
+        float step = baseSpeed * CachedTrafficLimit * deltaTime; 
         DistanceTraveledOnSegment += step;
 
-        if (DistanceTraveledOnSegment >= CurrentSegment.Length)
-        {
-            return true; // Reached end of segment
-        }
+        if (DistanceTraveledOnSegment >= CurrentSegment.Length) return true; 
 
         float currentT = DistanceTraveledOnSegment / CurrentSegment.Length;
         float evalT = IsHeadingToNodeB ? currentT : (1f - currentT);
 
         Vector3 newPos = CurrentSegment.GetPointOnRoad(evalT, IsHeadingToNodeB);
-        transform.position = newPos;
 
-        // 4. ROTATION MATH (Frustum Culled)
-        // Skip this expensive Quaternion math entirely if the player isn't looking at the car
-        if (isVisible && CurrentSegment.Container != null)
+        // Initialize _lastPosition on the first frame to prevent snapping
+        if (_lastPosition == Vector3.zero) _lastPosition = newPos;
+
+        // 3. ROTATION MATH (Ultra-Fast: Delta Position instead of Spline Tangents)
+        if (IsCurrentlyVisible)
         {
-            Vector3 tangent = (Vector3)CurrentSegment.Container.EvaluateTangent(evalT);
-            if (!IsHeadingToNodeB) tangent = -tangent;
-
-            Vector3 dir = tangent;
+            Vector3 dir = newPos - _lastPosition;
             dir.y = 0; 
-            dir.Normalize();
-
-            if (dir.sqrMagnitude > 0.001f)
+            
+            if (dir.sqrMagnitude > 0.0001f)
             {
+                dir.Normalize();
                 Quaternion targetRot = Quaternion.LookRotation(dir);
                 float timeMult = SimulationTimeManager.Instance != null ? SimulationTimeManager.Instance.TimeMultiplier : 1f;
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, deltaTime * rotationSpeed * timeMult);
             }
         }
+
+        // Apply position and save for next frame's rotation calculation
+        transform.position = newPos;
+        _lastPosition = newPos;
 
         return false;
     }
@@ -129,7 +124,7 @@ public class AmbientVehicle : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (IsDespawning) return; // Prevent zombie locks
+        if (IsDespawning) return; 
 
         if (other.CompareTag("Bus") || other.transform.root.CompareTag("Bus")) 
         {

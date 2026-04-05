@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 28850.642578125,
+    "CurrentBalance": 30774.94921875,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -553,6 +553,22 @@
             "Description": "Simulated Random Repair",
             "Timestamp": 2,
             "Count": 375
+        },
+        {
+            "Amount": -23405.111328125,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 98
+        },
+        {
+            "Amount": 25329.412109375,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 99
         }
     ]
 }
