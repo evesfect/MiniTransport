@@ -16,14 +16,16 @@ public class DepotController : NetworkBehaviour
     [Header("Recovery Spawn Point")]
     public RoadNode SpawnNode;
 
+    [Header("Debug")]
+    [Tooltip("If true, ignores wear and tear, allowing all buses to spawn.")]
+    public bool disableMaintenanceChecks = false;
+
     private RecoveryVehicle _activeRecoveryVehicle;
 
     public bool IsRecoveryAvailable
     {
         get
         {
-            // If we haven't spawned one, we are available. 
-            // If we have, check if it's busy.
             return _activeRecoveryVehicle == null || !_activeRecoveryVehicle.IsBusy;
         }
     }
@@ -53,7 +55,6 @@ public class DepotController : NetworkBehaviour
             return;
         }
 
-        // 1. Spawn if doesn't exist
         if (_activeRecoveryVehicle == null)
         {
             GameObject go = Instantiate(recoveryVehiclePrefab.gameObject, SpawnNode.transform.position, SpawnNode.transform.rotation);
@@ -62,25 +63,21 @@ public class DepotController : NetworkBehaviour
             _activeRecoveryVehicle = go.GetComponent<RecoveryVehicle>();
         }
 
-        // 2. Start Mission
         _activeRecoveryVehicle.StartMission(busID, this);
     }
 
-    // Called by RecoveryVehicle when it returns
     public void OnRecoveryVehicleFinished()
     {
-        // Tell the Manager we are ready for the next job
         if (MaintenanceManager.Instance != null)
         {
             MaintenanceManager.Instance.OnDepotFree(this.depotID);
         }
     }
 
-    // Main Loop: Iterate global list, filter for this depot, act on state
     public void CheckSchedules()
     {
         if (FleetManager.Instance == null) return;
-        float threshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 0f;
+        float threshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 15f;
 
         float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
         var myBuses = FleetManager.Instance.allBuses.Where(b => b.AssignedDepotID == depotID);
@@ -92,11 +89,15 @@ public class DepotController : NetworkBehaviour
 
             if (shouldBeActive && !isCurrentlyActive)
             {
-                if (busData.Durability > threshold)
+                if (IsBusConditionGoodEnough(busData, threshold))
                 {
                     if (EmployeeManager.Instance != null && EmployeeManager.Instance.HasAssignedDriver(busData.BusID))
                     {
                         SpawnBus(busData);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[Depot] Bus {busData.BusID} cannot spawn: No assigned driver.");
                     }
                 }
             }
@@ -108,11 +109,14 @@ public class DepotController : NetworkBehaviour
                 if (busObj != null)
                 {
                     BusDriver driver = busObj.GetComponent<BusDriver>();
-                    // If driver is missing or Broken, DO NOT despawn
-                    if (driver != null && driver.IsBroken)
+                    if (driver != null && driver.IsBroken )
                     {
                         canReturn = false;
-                        // Debug.Log($"[Depot] Keeping Bus {busData.BusID} active despite schedule end because it is BROKEN.");
+                    }
+
+                    if(driver != null && driver.PassengerCount > 0) 
+                    {
+                        canReturn = false;
                     }
                 }
 
@@ -124,6 +128,41 @@ public class DepotController : NetworkBehaviour
         }
     }
 
+    private bool IsBusConditionGoodEnough(BusData data, float avgThreshold)
+    {
+        if (disableMaintenanceChecks) return true;
+
+        if (data.Parts == null || data.Parts.Count == 0) return true;
+
+        // Loop through to provide granular debugging on the exact failure point
+        foreach (var p in data.Parts)
+        {
+            if (p.Health <= 0f)
+            {
+                Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Part {p.PartType} Health is {p.Health} (Critical 0% failure).");
+                return false;
+            }
+
+            if (p.MaxLife < avgThreshold)
+            {
+                Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Part {p.PartType} MaxLife is {p.MaxLife} (Permanently degraded below operational threshold of {avgThreshold}).");
+                return false;
+            }
+        }
+
+        float sum = 0f;
+        foreach (var p in data.Parts) sum += p.Health;
+        float avg = sum / data.Parts.Count;
+
+        if (avg <= avgThreshold)
+        {
+            Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Average health is {avg:F1} (Below threshold {avgThreshold}).");
+            return false;
+        }
+
+        return true;
+    }
+
     private void SpawnBus(BusData data)
     {
         if (busPrefab == null)
@@ -132,17 +171,14 @@ public class DepotController : NetworkBehaviour
             return;
         }
 
-        // Validate Route
         Route route = TransportManager.Instance.GetRoute(data.Schedule.RouteID);
         if (route == null || route.StopIDs.Count == 0) return;
         
         BusStop startStop = TransportManager.Instance.GetStop(route.StopIDs[0]);
         if (startStop == null) return;
 
-        // Instantiate
         GameObject newBusObj = Instantiate(busPrefab, startStop.transform.position, startStop.transform.rotation);
         
-        // Setup Network
         var netObj = newBusObj.GetComponent<NetworkObject>();
         if (netObj != null)
         {
@@ -154,15 +190,12 @@ public class DepotController : NetworkBehaviour
             return;
         }
 
-        // Initialize Driver
         BusDriver driver = newBusObj.GetComponent<BusDriver>();
         if (driver != null)
         {
-            // Note: BusDriver needs to handle the new BusData class type
             driver.ServerInitialize(data, this);
         }
 
-        // Register with Manager
         FleetManager.Instance.RegisterSpawnedBus(data.BusID, newBusObj);
         Debug.Log($"[Depot] Spawned Bus {data.BusID} on Route {route.RouteName}");
     }

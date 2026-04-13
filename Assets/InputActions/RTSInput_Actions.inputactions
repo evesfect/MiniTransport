@@ -209,6 +209,54 @@
                     "isPartOfComposite": false
                 }
             ]
+        },
+        {
+            "name": "UI",
+            "id": "521bca96-1a76-4b56-b222-ff0fb90c2919",
+            "actions": [
+                {
+                    "name": "ToggleOverview",
+                    "type": "Button",
+                    "id": "e180b448-cc3d-4166-9b22-e1977722a9a1",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CloseTopPanel",
+                    "type": "Button",
+                    "id": "874b08ac-dbab-4762-a5c6-e35104ed1357",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "c443a004-3e96-455d-9c1d-ccd209da0670",
+                    "path": "<Keyboard>/o",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleOverview",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "32410713-8f29-40f5-a342-767b776f091e",
+                    "path": "<Keyboard>/escape",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CloseTopPanel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
         }
     ],
     "controlSchemes": []

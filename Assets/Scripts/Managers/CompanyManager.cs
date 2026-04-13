@@ -1,7 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System;
 using Unity.Netcode;
 
@@ -10,24 +9,34 @@ public class CompanyManager : NetworkBehaviour
 {
     public static CompanyManager Instance { get; private set; }
 
-    // --- Configuration ---
     [Header("Company Identity")]
     public string defaultCompanyName;
     public float startingBalance;
 
+    [Header("Reputation System")]
+    public float GlobalSatisfaction = 80f;
+    public const float MaxSatisfaction = 100f;
+
+    public float satisfactionPenaltyPertimeout = 2.0f; 
+    public float baseRewardPerPassenger = 0.5f; 
+
     [Tooltip("The maximum debt allowed")]
     public float bankruptcyThreshold;
 
-    // --- State Data ---
     [Header("Runtime State")]
     [SerializeField] private CompanyData _companyData;
 
-    // --- Events ---
+    // Buffer flags to stop disk write spam
+    private bool _needsSave = false;
+    private float _saveTimer = 0f;
+
+    public CompanyData GetCompanyData() => _companyData;
+
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
     public event Action OnWeeklyExpensesRequested;
+    public event Action<float> OnSatisfactionChanged;
 
-    // --- Persistence ---
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "company.json");
 #else
@@ -46,12 +55,14 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer)
         {
             LoadCompanyData();
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
 
             if (SimulationTimeManager.Instance != null)
-            {
                 SimulationTimeManager.Instance.OnDayChanged += CheckDateForBills;
 
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnCompanySyncTriggered += PerformStatsSync;
+                NetworkSyncBroker.Instance.OnCompanyLedgerSyncTriggered += PerformLedgerSync;
             }
         }
         else
@@ -63,63 +74,59 @@ public class CompanyManager : NetworkBehaviour
     public override void OnNetworkDespawn()
     {
         if (IsServer && NetworkManager.Singleton != null)
-        {
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-            
+        {   
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged -= CheckDateForBills;
 
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.OnCompanySyncTriggered -= PerformStatsSync;
+                NetworkSyncBroker.Instance.OnCompanyLedgerSyncTriggered -= PerformLedgerSync;
+            }
         }
     }
 
-    // --- Trigger ---
+    private void Update()
+    {
+        if (IsServer && _needsSave)
+        {
+            _saveTimer += Time.deltaTime;
+            if (_saveTimer >= 5f) 
+            {
+                SaveCompanyData();
+                _needsSave = false;
+                _saveTimer = 0f;
+                
+                if (NetworkSyncBroker.Instance != null)
+                {
+                    NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
+                }
+            }
+        }
+    }
 
     private void CheckDateForBills()
     {
-        // Logic: If it's a new week, yell at everyone to send their bills
         int day = SimulationTimeManager.Instance.CurrentDay;
-
         if (day > 0 && day % 7 == 0)
         {
-            Debug.Log("[Company] Weekly Expenses Requested.");
             OnWeeklyExpensesRequested?.Invoke();
         }
     }
 
-
-    //Used by other managers to send their recurring costs
     public void ProcessPassiveExpense(float amount, TransactionCategory category, string description)
     {
-        if (amount <= 0) return; // Expense must be positive number (we negate internally)
-
-        if (IsServer)
-        {
-            ProcessTransaction(-amount, TransactionType.Passive, category, description);
-        }
-        else
-        {
-            RequestTransactionRpc(-amount, TransactionType.Passive, category, description);
-        }
+        if (amount <= 0) return;
+        if (IsServer) ProcessTransaction(-amount, TransactionType.Passive, category, description);
+        else RequestTransactionRpc(-amount, TransactionType.Passive, category, description);
     }
 
-    
-
-    /// <summary>
-    /// Used by Player for buying items. Checks Bankruptcy threshold.
-    /// </summary>
     public bool TryExecuteActionableTransaction(float amount, TransactionCategory category, string itemDescription)
     {
-
         if (amount < 0) return false;
-
         float projectedBalance = _companyData.CurrentBalance - amount;
 
-        // Check Affordability
-        if (projectedBalance < bankruptcyThreshold)
-        {
-            Debug.LogWarning($"[Company] Transaction declined. Bankruptcy limit ({bankruptcyThreshold}) would be exceeded.");
-            return false; ;
-        }
+        if (projectedBalance < bankruptcyThreshold) return false;
 
         if (IsServer)
         {
@@ -128,66 +135,98 @@ public class CompanyManager : NetworkBehaviour
         }
         else
         {
-            // Client requests purchase
             RequestTransactionRpc(-amount, TransactionType.Actionable, category, itemDescription);
-            return true; // Optimistic return
+            return true; 
         }
     }
 
-    /// <summary>
-    /// Used for Income (Tickets, Grants).
-    /// </summary>
     public void AddIncome(float amount, TransactionCategory category, string description)
     {
         if (amount <= 0) return;
-
-        if (IsServer)
-        {
-            ProcessTransaction(amount, TransactionType.Passive, category, description);
-        }
-        else
-        {
-            RequestTransactionRpc(amount, TransactionType.Passive, category, description);
-        }
+        if (IsServer) ProcessTransaction(amount, TransactionType.Passive, category, description);
+        else RequestTransactionRpc(amount, TransactionType.Passive, category, description);
     }
-
-    // --- Core Transaction Processing ---
 
     private void ProcessTransaction(float amount, TransactionType type, TransactionCategory category, string description)
     {
         _companyData.CurrentBalance += amount;
+        int currentDay = SimulationTimeManager.Instance ? SimulationTimeManager.Instance.CurrentDay : 0;
 
-        Transaction newTrans = new Transaction
+        bool aggregated = false;
+        
+        // Transaction Aggregator: Combines rapid transactions into a single daily line
+        if (_companyData.History.Count > 0)
         {
-            Amount = amount,
-            Type = type,
-            Category = category,
-            Description = description,
-            Timestamp = SimulationTimeManager.Instance ? SimulationTimeManager.Instance.CurrentDay : 0 // Or System.DateTime
-        };
+            // Search backwards through the ledger
+            for (int i = _companyData.History.Count - 1; i >= 0; i--)
+            {
+                var tx = _companyData.History[i];
+                
+                // Optimization: Stop searching if we hit a transaction from yesterday
+                if (tx.Timestamp != currentDay) break;
 
-        _companyData.History.Add(newTrans);
+                // Match by category and type
+                if (tx.Type == type && tx.Category == category)
+                {
+                    tx.Amount += amount;
+                    tx.Count += 1; // Increment the times this happened
+                    _companyData.History[i] = tx; 
+                    aggregated = true;
+                    break;
+                }
+            }
+        }
 
-        // Notify UI
+        if (!aggregated)
+        {
+            Transaction newTrans = new Transaction
+            {
+                Amount = amount,
+                Type = type,
+                Category = category,
+                Description = description,
+                Timestamp = currentDay,
+                Count = 1 // Starts at 1
+            };
+
+            _companyData.History.Add(newTrans);
+            OnTransactionAdded?.Invoke(newTrans);
+        }
+
         OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
-        OnTransactionAdded?.Invoke(newTrans);
 
-        // Sync clients
-        UpdateStateClientRpc(_companyData.CurrentBalance, JsonUtility.ToJson(newTrans));
+        if (NetworkSyncBroker.Instance != null)
+        {
+            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyStats);
+            
+            // Only force an immediate network sync if it's a new line, 
+            // aggregated data will sync automatically every 5 seconds with the save timer
+            if (!aggregated) 
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
+            }
+        }
 
-        // Auto-Save on Server
-        if (IsServer) SaveCompanyData();
+        _needsSave = true;
     }
 
-    // --- Networking ---
-
-    private void OnClientConnected(ulong clientId)
+    public void ModifySatisfaction(float amount)
     {
-        if (IsServer)
-        {
-            string json = JsonUtility.ToJson(_companyData);
-            SyncFullStateRpc(json, RpcTarget.Single(clientId, RpcTargetUse.Temp));
-        }
+        GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
+        Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
+    }
+
+    private void PerformStatsSync(BaseRpcTarget target)
+    {
+        var stats = new CompanyStatsData { currentBalance = _companyData.CurrentBalance };
+        SyncStatsRpc(JsonUtility.ToJson(stats), target);
+    }
+
+    private void PerformLedgerSync(BaseRpcTarget target)
+    {
+        var ledger = new CompanyLedgerData { transactions = _companyData.History };
+        SyncLedgerRpc(JsonUtility.ToJson(ledger), target);
     }
 
     [Rpc(SendTo.Server)]
@@ -200,26 +239,24 @@ public class CompanyManager : NetworkBehaviour
         ProcessTransaction(amount, type, category, desc);
     }
 
-    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
-    private void SyncFullStateRpc(string json, RpcParams rpcParams = default)
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void SyncStatsRpc(string json, RpcParams rpcParams = default)
     {
         if (IsServer) return;
-        _companyData = JsonUtility.FromJson<CompanyData>(json);
-        OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
+        
+        var stats = JsonUtility.FromJson<CompanyStatsData>(json);
+        _companyData.CurrentBalance = stats.currentBalance;
+        
+        OnBalanceChanged?.Invoke(stats.currentBalance);
     }
 
-    [Rpc(SendTo.NotServer)]
-    private void UpdateStateClientRpc(float newBalance, string transactionJson)
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void SyncLedgerRpc(string json, RpcParams rpcParams = default)
     {
-        _companyData.CurrentBalance = newBalance;
-        Transaction t = JsonUtility.FromJson<Transaction>(transactionJson);
-        _companyData.History.Add(t);
-
-        OnBalanceChanged?.Invoke(newBalance);
-        OnTransactionAdded?.Invoke(t);
+        if (IsServer) return;
+        var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
+        _companyData.History = ledger.transactions;
     }
-
-    // --- Persistence ---
 
     [ContextMenu("Save Company")]
     public void SaveCompanyData()
@@ -244,10 +281,7 @@ public class CompanyManager : NetworkBehaviour
                 ResetData();
             }
         }
-        else
-        {
-            ResetData();
-        }
+        else ResetData();
     }
 
     private void ResetData()
@@ -261,8 +295,6 @@ public class CompanyManager : NetworkBehaviour
     }
 }
 
-// --- Data Types ---
-
 [Serializable]
 public class CompanyData
 {
@@ -274,29 +306,17 @@ public class CompanyData
 [Serializable]
 public struct Transaction
 {
-    public float Amount;      // Positive = Income, Negative = Expense
+    public float Amount;      
     public TransactionType Type;
     public TransactionCategory Category;
     public string Description;
-    public int Timestamp;     // The Day this happened
+    public int Timestamp;     
+    public int Count; // Tracks how many times this specific transaction occurred
 }
 
-public enum TransactionType
-{
-    Actionable, // Initiated by Player (Buying parts, Hiring)
-    Passive     // Initiated by System (Weekly tax, upkeep, automatic fines)
-}
+public enum TransactionType { Actionable, Passive }
 
 public enum TransactionCategory
 {
-    General,
-    Grant,          // Income
-    TicketRevenue,  // Income
-    VehiclePurchase,// Actionable Expense
-    PartPurchase,   // Actionable Expense
-    Maintenance,    // Actionable/Passive (Repairs)
-    Fuel,           // Passive Expense
-    StaffSalary,    // Passive Expense (Monthly/Weekly)
-    StaffUpkeep,    // Passive Expense (Food/Tax)
-    Tax             // Passive Expense (Bus Tax)
+    General, Grant, TicketRevenue, VehiclePurchase, PartPurchase, Maintenance, Fuel, StaffSalary, StaffUpkeep, Tax
 }

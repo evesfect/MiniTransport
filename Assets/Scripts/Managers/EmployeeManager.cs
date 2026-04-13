@@ -135,11 +135,6 @@ public class EmployeeManager : NetworkBehaviour
                     changed = true;
                     Debug.Log($"[Auto-Assign] Driver {freeDriver.FullName} assigned to {bus.BusID}");
                 }
-                else
-                {
-                    // No free drivers available
-                    Debug.Log($"[Auto-Assign] Bus {bus.BusID} waiting for a driver...");
-                }
             }
         }
 
@@ -461,5 +456,11 @@ public class EmployeeManager : NetworkBehaviour
                 candidates = container.Candidates ?? new List<EmployeeData>();
             }
         }
+    }
+
+    public EmployeeData GetDriverForBus(string busID)
+    {
+        // Search all employees for one assigned to this bus
+        return allEmployees.FirstOrDefault(e => e.AssignedBusID == busID);
     }
 }
