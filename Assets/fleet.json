@@ -47,20 +47,6 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-<<<<<<< HEAD
-            "Durability": 90.9826889038086
-        },
-        {
-            "BusID": "02",
-            "AssignedDepotID": "Depot_Main",
-            "Schedule": {
-                "RouteID": "02576857",
-                "StartTime": 6.200000286102295,
-                "EndTime": 20.0,
-                "TurnaroundWait": 15.0
-            },
-            "Durability": 91.04267883300781
-=======
             "Parts": [
                 {
                     "PartType": 0,
@@ -89,7 +75,6 @@
                 }
             ],
             "Capacity": 50
->>>>>>> dev
         },
         {
             "BusID": "03",
@@ -100,9 +85,6 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-<<<<<<< HEAD
-            "Durability": 91.52259826660156
-=======
             "Parts": [
                 {
                     "PartType": 0,
@@ -169,7 +151,6 @@
                 }
             ],
             "Capacity": 50
->>>>>>> dev
         }
     ]
 }

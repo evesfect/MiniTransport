@@ -61,15 +61,8 @@
             "SkillLevel": 78.60816955566406,
             "WeeklySalary": 357.2163391113281,
             "AssignedBusID": "",
-<<<<<<< HEAD
-            "AssignedDepotID": ""
-        }
-    ],
-    "Candidates": [
-=======
             "AssignedDepotID": "Depot_Main"
         },
->>>>>>> dev
         {
             "EmployeeID": "fb076144",
             "FullName": "Applicant 659",
