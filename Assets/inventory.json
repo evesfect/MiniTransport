@@ -1,1 +1,1 @@
-{"Items":[{"ID":"EngineBlock3","Conditions":[{"CurrentDurability":62.22111511230469,"MaxDurability":62.22111511230469}]},{"ID":"EngineBlock4","Conditions":[{"CurrentDurability":92.63468170166016,"MaxDurability":92.63468170166016}]}]}
+{"Items":[{"ID":"engine_block","Conditions":[]},{"ID":"gearbox_std","Conditions":[]},{"ID":"tire_standard","Conditions":[]},{"ID":"body_panel","Conditions":[]},{"ID":"seat_fabric","Conditions":[]}]}
