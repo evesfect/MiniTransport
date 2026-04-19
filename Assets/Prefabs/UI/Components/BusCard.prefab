@@ -431,8 +431,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
@@ -861,6 +861,12 @@ MonoBehaviour:
   statusText: {fileID: 717526884642288288}
   recallButton: {fileID: 3816705981750639821}
   infoButton: {fileID: 7167599466760303077}
+  cardBackgroundImage: {fileID: 2319726087992630896}
+  healthyColor: {r: 0.6, g: 1, b: 0.6, a: 1}
+  warningColor: {r: 1, g: 1, b: 0.6, a: 1}
+  criticalColor: {r: 1, g: 0.6, b: 0.6, a: 1}
+  warningThreshold: 70
+  criticalThreshold: 30
 --- !u!1 &5460591169960958486
 GameObject:
   m_ObjectHideFlags: 0
@@ -1292,8 +1298,8 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
-  m_fontColor: {r: 1, g: 1, b: 1, a: 1}
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
   m_fontColorGradient:
