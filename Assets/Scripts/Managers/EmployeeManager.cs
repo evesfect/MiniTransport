@@ -49,6 +49,14 @@ public class EmployeeManager : NetworkBehaviour
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
         DontDestroyOnLoad(gameObject);
+
+        // Fallback for scenes where this NetworkBehaviour is not network-spawned.
+        // In that case OnNetworkSpawn won't run, so load persisted data here.
+        if (allEmployees == null || allEmployees.Count <= 1)
+        {
+            LoadEmployees();
+            if (candidates == null) candidates = new List<EmployeeData>();
+        }
     }
 
     public override void OnNetworkSpawn()
@@ -452,10 +460,18 @@ public class EmployeeManager : NetworkBehaviour
             var container = JsonUtility.FromJson<EmployeeContainer>(File.ReadAllText(SavePath));
             if (container != null)
             {
-                allEmployees = container.Employees;
+                allEmployees = container.Employees ?? new List<EmployeeData>();
                 candidates = container.Candidates ?? new List<EmployeeData>();
             }
         }
+        else
+        {
+            if (allEmployees == null) allEmployees = new List<EmployeeData>();
+            if (candidates == null) candidates = new List<EmployeeData>();
+            Debug.LogWarning($"[EmployeeManager] employees.json not found at: {SavePath}");
+        }
+
+        Debug.Log($"[EmployeeManager] Loaded {allEmployees.Count} employees from: {SavePath}");
     }
 
     public EmployeeData GetDriverForBus(string busID)
