@@ -11,9 +11,21 @@ public class BusCardDisplay : MonoBehaviour
     public Button recallButton;
     public Button infoButton;
 
-    private BusData currentBus;
+    [Header("Card Background")]
+    [Tooltip("The Image component that makes up the background of the card")]
+    public Image cardBackgroundImage;
 
-    // We can use Actions (delegates) to tell the manager when a button is clicked
+    [Header("Health Colors")]
+    public Color healthyColor = new Color(0.6f, 1f, 0.6f);  // Soft Green
+    public Color warningColor = new Color(1f, 1f, 0.6f);  // Soft Yellow
+    public Color criticalColor = new Color(1f, 0.6f, 0.6f); // Soft Red
+
+    [Tooltip("Health percentage below which the card turns yellow")]
+    public float warningThreshold = 70f;
+    [Tooltip("Health percentage below which the card turns red")]
+    public float criticalThreshold = 30f;
+
+    private BusData currentBus;
     private Action<BusData> onInfoClickedCallback;
 
     public void Setup(BusData bus, Action<BusData> onInfoClicked)
@@ -21,42 +33,65 @@ public class BusCardDisplay : MonoBehaviour
         currentBus = bus;
         onInfoClickedCallback = onInfoClicked;
 
-        // 1. Set Overall Health
+        // 1. Calculate and Set Health
         float avgHealth = bus.GetAverageHealth();
-        healthText.text = $"Health: {avgHealth:F1}%";
+        if (healthText != null) healthText.text = $"Health: {avgHealth:F1}%";
 
-        // 2. Set Current Assignment Status
-        if (bus.Schedule != null && !string.IsNullOrEmpty(bus.Schedule.RouteID))
+        // 2. Change the background color based on health
+        if (cardBackgroundImage != null)
         {
-            statusText.text = $"Status: On Route {bus.Schedule.RouteID}";
-        }
-        else if (!string.IsNullOrEmpty(bus.AssignedDepotID))
-        {
-            statusText.text = $"Status: In Depot {bus.AssignedDepotID}";
-        }
-        else
-        {
-            statusText.text = "Status: Unassigned";
+            if (avgHealth < criticalThreshold)
+            {
+                cardBackgroundImage.color = criticalColor;
+            }
+            else if (avgHealth < warningThreshold)
+            {
+                cardBackgroundImage.color = warningColor;
+            }
+            else
+            {
+                cardBackgroundImage.color = healthyColor;
+            }
         }
 
-        // 3. Setup Button Listeners
-        // Remove old listeners to prevent multiple fires if the card is reused
-        recallButton.onClick.RemoveAllListeners();
-        infoButton.onClick.RemoveAllListeners();
+        // 3. Set Current Assignment Status
+        if (statusText != null)
+        {
+            if (bus.Schedule != null && !string.IsNullOrEmpty(bus.Schedule.RouteID))
+            {
+                statusText.text = $"Status: On Route {bus.Schedule.RouteID}";
+            }
+            else if (!string.IsNullOrEmpty(bus.AssignedDepotID))
+            {
+                statusText.text = $"Status: In Depot {bus.AssignedDepotID}";
+            }
+            else
+            {
+                statusText.text = "Status: Unassigned";
+            }
+        }
 
-        recallButton.onClick.AddListener(OnRecallPressed);
-        infoButton.onClick.AddListener(OnInfoPressed);
+        // 4. Setup Button Listeners
+        if (recallButton != null)
+        {
+            recallButton.onClick.RemoveAllListeners();
+            recallButton.onClick.AddListener(OnRecallPressed);
+        }
+
+        if (infoButton != null)
+        {
+            infoButton.onClick.RemoveAllListeners();
+            infoButton.onClick.AddListener(OnInfoPressed);
+        }
     }
 
     private void OnRecallPressed()
     {
         Debug.Log($"Recalling Bus: {currentBus.BusID}");
-        // Add your recall logic here, or pass it back via a callback similar to Info
     }
 
     private void OnInfoPressed()
     {
-        // Trigger the callback passed from the manager, sending this specific bus's data
         onInfoClickedCallback?.Invoke(currentBus);
     }
 }
