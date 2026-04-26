@@ -14,27 +14,52 @@ public class RouteScrollManager : MonoBehaviour
 
     private readonly List<GameObject> _pool = new List<GameObject>();
     private string _selectedRouteID;
+    private BasePanel _basePanel;
+
+    private void Awake()
+    {
+        _basePanel = GetComponent<BasePanel>();
+    }
 
     private void OnEnable()
     {
         if (TransportManager.Instance != null)
             TransportManager.Instance.OnRoutesChanged += Refresh;
 
-        // Show all routes when panel opens (if no specific selection)
-        if (RouteVisualizer.Instance != null)
+        if (_basePanel != null)
         {
-            RouteVisualizer.Instance.ShowAll();
-            if (!string.IsNullOrEmpty(_selectedRouteID))
-                RouteVisualizer.Instance.HighlightRoute(_selectedRouteID);
+            _basePanel.OnPanelShown += OnPanelOpened;
+            _basePanel.OnPanelHidden += OnPanelClosed;
         }
-
-        Refresh();
     }
 
     private void OnDisable()
     {
         if (TransportManager.Instance != null)
             TransportManager.Instance.OnRoutesChanged -= Refresh;
+
+        if (_basePanel != null)
+        {
+            _basePanel.OnPanelShown -= OnPanelOpened;
+            _basePanel.OnPanelHidden -= OnPanelClosed;
+        }
+    }
+
+    private void OnPanelOpened()
+    {
+        if (RouteVisualizer.Instance != null)
+        {
+            RouteVisualizer.Instance.ShowAll();
+            if (!string.IsNullOrEmpty(_selectedRouteID))
+                RouteVisualizer.Instance.HighlightRoute(_selectedRouteID);
+        }
+        Refresh();
+    }
+
+    private void OnPanelClosed()
+    {
+        if (RouteVisualizer.Instance != null)
+            RouteVisualizer.Instance.HideAll();
     }
 
     public void Refresh()
@@ -42,21 +67,6 @@ public class RouteScrollManager : MonoBehaviour
         var routes = TransportManager.Instance != null
             ? TransportManager.Instance.ActiveRoutes
             : new List<Route>();
-
-        // Ensure routes are visible when the panel is open
-        var basePanel = GetComponent<BasePanel>();
-        bool panelOpen = basePanel != null ? basePanel.IsOpen : gameObject.activeInHierarchy;
-
-        if (RouteVisualizer.Instance != null && panelOpen)
-        {
-            // If edit panel is open, don't override its visualization
-            if (editPanel == null || editPanel.CurrentRoute == null)
-            {
-                RouteVisualizer.Instance.ShowAll();
-                if (!string.IsNullOrEmpty(_selectedRouteID))
-                    RouteVisualizer.Instance.HighlightRoute(_selectedRouteID);
-            }
-        }
 
         // Grow pool
         while (_pool.Count < routes.Count)
