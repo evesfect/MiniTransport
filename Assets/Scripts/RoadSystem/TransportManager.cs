@@ -5,7 +5,7 @@ using System.IO;
 using Unity.Netcode;
 using Unity.VisualScripting;
 using System.ComponentModel;
-
+using System;
 
 
 #if UNITY_EDITOR
@@ -23,7 +23,9 @@ public class TransportManager : NetworkBehaviour
 
     [Header("Routes")]
     public List<Route> ActiveRoutes = new List<Route>();
-    
+
+    public event Action OnRoutesChanged;
+
     // Local cache
     private Dictionary<string, List<RoadNode>> _pathCache = new Dictionary<string, List<RoadNode>>();
     
@@ -105,6 +107,7 @@ public class TransportManager : NetworkBehaviour
         {
             ActiveRoutes = container.Routes;
             Debug.Log($"[TransportManager] Synced {ActiveRoutes.Count} routes from Server.");
+            OnRoutesChanged?.Invoke();
         }
     }
 
@@ -150,6 +153,7 @@ public class TransportManager : NetworkBehaviour
             SyncRoutesRpc(fullJson); // broadcast to all clients
 
             Debug.Log($"[TransportManager] Route Operation {op} applied for {requestRoute.RouteName}");
+            OnRoutesChanged?.Invoke();
         }
     }
 
@@ -265,6 +269,8 @@ public class TransportManager : NetworkBehaviour
             return cachedPath;
         }
         if (start.parentSegment == null || end.parentSegment == null) return null;
+        if (start.parentSegment.NodeA == null || start.parentSegment.NodeB == null) return null;
+        if (end.parentSegment.NodeA == null || end.parentSegment.NodeB == null) return null;
 
         // Path not cached, calculate
         RoadNode searchStart = start.parentSegment.NodeB; 

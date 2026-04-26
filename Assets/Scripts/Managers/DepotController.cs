@@ -139,13 +139,13 @@ public class DepotController : NetworkBehaviour
         {
             if (p.Health <= 0f)
             {
-                Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Part {p.PartType} Health is {p.Health} (Critical 0% failure).");
+                // Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Part {p.PartType} Health is {p.Health} (Critical 0% failure).");
                 return false;
             }
 
             if (p.MaxLife < avgThreshold)
             {
-                Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Part {p.PartType} MaxLife is {p.MaxLife} (Permanently degraded below operational threshold of {avgThreshold}).");
+                // Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Part {p.PartType} MaxLife is {p.MaxLife} (Permanently degraded below operational threshold of {avgThreshold}).");
                 return false;
             }
         }
@@ -156,7 +156,7 @@ public class DepotController : NetworkBehaviour
 
         if (avg <= avgThreshold)
         {
-            Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Average health is {avg:F1} (Below threshold {avgThreshold}).");
+            // Debug.LogWarning($"[Depot] Bus {data.BusID} failed check: Average health is {avg:F1} (Below threshold {avgThreshold}).");
             return false;
         }
 

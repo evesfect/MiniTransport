@@ -18,6 +18,8 @@ public class BasePanel : MonoBehaviour
     private CanvasGroup _canvasGroup;
     public bool IsOpen { get; private set; }
 
+    private CanvasGroup CG => _canvasGroup != null ? _canvasGroup : (_canvasGroup = GetComponent<CanvasGroup>());
+
     private void Awake()
     {
         _canvasGroup = GetComponent<CanvasGroup>();
@@ -64,18 +66,18 @@ public class BasePanel : MonoBehaviour
     public void Show()
     {
         IsOpen = true;
-        _canvasGroup.alpha = 1f;
-        _canvasGroup.interactable = true;
-        _canvasGroup.blocksRaycasts = true;
-        transform.SetAsLastSibling(); // Brings this panel to the front of the Canvas
+        CG.alpha = 1f;
+        CG.interactable = true;
+        CG.blocksRaycasts = true;
+        transform.SetAsLastSibling();
     }
 
     public void Hide()
     {
         IsOpen = false;
-        _canvasGroup.alpha = 0f;
-        _canvasGroup.interactable = false;
-        _canvasGroup.blocksRaycasts = false;
+        CG.alpha = 0f;
+        CG.interactable = false;
+        CG.blocksRaycasts = false;
     }
 
     public void SetPanelState(bool shouldBeOpen)
