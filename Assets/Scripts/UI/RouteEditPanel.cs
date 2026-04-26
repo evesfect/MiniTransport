@@ -27,6 +27,7 @@ public class RouteEditPanel : MonoBehaviour
     public BusStopAddTool busStopAddTool;
 
     private Route _currentRoute;
+    public Route CurrentRoute => _currentRoute;
     private RouteScrollManager _parentManager;
     private readonly List<GameObject> _stopPool = new List<GameObject>();
     private readonly List<GameObject> _busPool = new List<GameObject>();
@@ -169,7 +170,7 @@ public class RouteEditPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// Called by BusStopAddTool when a new stop is selected.
+    /// Called by BusStopAddTool when a new stop is selected via left click.
     /// </summary>
     public void AddStop(string stopID)
     {
@@ -177,6 +178,21 @@ public class RouteEditPanel : MonoBehaviour
         if (_currentRoute.StopIDs.Contains(stopID)) return;
 
         _currentRoute.StopIDs.Add(stopID);
+        TransportManager.Instance?.UpdateRouteClient(_currentRoute);
+
+        RefreshStopList();
+        RefreshRouteVisualization();
+    }
+
+    /// <summary>
+    /// Called by BusStopAddTool when a stop is right-clicked to remove.
+    /// </summary>
+    public void RemoveStop(string stopID)
+    {
+        if (_currentRoute == null) return;
+        if (!_currentRoute.StopIDs.Contains(stopID)) return;
+
+        _currentRoute.StopIDs.Remove(stopID);
         TransportManager.Instance?.UpdateRouteClient(_currentRoute);
 
         RefreshStopList();

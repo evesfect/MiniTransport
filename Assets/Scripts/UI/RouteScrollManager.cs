@@ -43,6 +43,21 @@ public class RouteScrollManager : MonoBehaviour
             ? TransportManager.Instance.ActiveRoutes
             : new List<Route>();
 
+        // Ensure routes are visible when the panel is open
+        var basePanel = GetComponent<BasePanel>();
+        bool panelOpen = basePanel != null ? basePanel.IsOpen : gameObject.activeInHierarchy;
+
+        if (RouteVisualizer.Instance != null && panelOpen)
+        {
+            // If edit panel is open, don't override its visualization
+            if (editPanel == null || editPanel.CurrentRoute == null)
+            {
+                RouteVisualizer.Instance.ShowAll();
+                if (!string.IsNullOrEmpty(_selectedRouteID))
+                    RouteVisualizer.Instance.HighlightRoute(_selectedRouteID);
+            }
+        }
+
         // Grow pool
         while (_pool.Count < routes.Count)
         {

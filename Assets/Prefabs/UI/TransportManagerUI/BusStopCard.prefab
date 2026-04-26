@@ -287,6 +287,8 @@ GameObject:
   - component: {fileID: 4316445780206964288}
   - component: {fileID: 6157548814883002118}
   - component: {fileID: 6001732470541063158}
+  - component: {fileID: 4385917792631354695}
+  - component: {fileID: 3799319801034393432}
   m_Layer: 5
   m_Name: BusStopCard
   m_TagString: Untagged
@@ -396,6 +398,30 @@ MonoBehaviour:
   stopNameText: {fileID: 6854186123212300460}
   orderNumberText: {fileID: 3129041163734489533}
   deleteButton: {fileID: 8830083379160545534}
+--- !u!225 &4385917792631354695
+CanvasGroup:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1279018133879528635}
+  m_Enabled: 1
+  m_Alpha: 1
+  m_Interactable: 1
+  m_BlocksRaycasts: 1
+  m_IgnoreParentGroups: 0
+--- !u!114 &3799319801034393432
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1279018133879528635}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6d1348d50b975947b8f010ef42fbb79, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BusStopDragHandler
 --- !u!1 &2237764623686047057
 GameObject:
   m_ObjectHideFlags: 0

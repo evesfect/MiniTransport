@@ -19,6 +19,7 @@ public class BusStopAddTool : MonoBehaviour
 
     [Header("Outline")]
     public Color outlineColor = Color.green;
+    public Color removeOutlineColor = Color.red;
     public float outlineWidth = 4f;
 
     private RouteEditPanel _editPanel;
@@ -28,8 +29,6 @@ public class BusStopAddTool : MonoBehaviour
     private Camera _mainCamera;
 
     private InputAction _mousePositionAction;
-    private InputAction _clickAction;
-    private bool _clickedThisFrame;
 
     private void Awake()
     {
@@ -39,7 +38,6 @@ public class BusStopAddTool : MonoBehaviour
             if (cameraMap != null)
             {
                 _mousePositionAction = cameraMap.FindAction("MousePosition");
-                _clickAction = cameraMap.FindAction("Select");
             }
         }
     }
@@ -49,14 +47,11 @@ public class BusStopAddTool : MonoBehaviour
         _editPanel = editPanel;
         _isActive = true;
         _mainCamera = Camera.main;
-        _clickedThisFrame = false;
 
         if (_mousePositionAction != null) _mousePositionAction.Enable();
-        if (_clickAction != null)
-        {
-            _clickAction.Enable();
-            _clickAction.performed += OnClick;
-        }
+
+        var sel = Object.FindAnyObjectByType<SelectionBoxController>();
+        if (sel != null) sel.blockSelection = true;
     }
 
     public void Deactivate()
@@ -66,21 +61,16 @@ public class BusStopAddTool : MonoBehaviour
         _hoveredStop = null;
         _editPanel = null;
 
-        if (_clickAction != null)
-            _clickAction.performed -= OnClick;
-    }
-
-    private void OnClick(InputAction.CallbackContext ctx)
-    {
-        _clickedThisFrame = true;
+        var sel = Object.FindAnyObjectByType<SelectionBoxController>();
+        if (sel != null) sel.blockSelection = false;
     }
 
     private void Update()
     {
         if (!_isActive || _editPanel == null) return;
 
-        bool clicked = _clickedThisFrame;
-        _clickedThisFrame = false;
+        var mouse = Mouse.current;
+        if (mouse == null) return;
 
         // Don't raycast if pointer is over UI
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
@@ -114,11 +104,18 @@ public class BusStopAddTool : MonoBehaviour
             _hoveredStop = null;
         }
 
-        // Click to add
-        if (clicked && _hoveredStop != null)
+        if (_hoveredStop == null) return;
+
+        // Left click to add
+        if (mouse.leftButton.wasPressedThisFrame)
         {
             _editPanel.AddStop(_hoveredStop.stopID);
-            // Keep tool active for adding more stops
+        }
+
+        // Right click to remove
+        if (mouse.rightButton.wasPressedThisFrame)
+        {
+            _editPanel.RemoveStop(_hoveredStop.stopID);
         }
     }
 
@@ -150,8 +147,11 @@ public class BusStopAddTool : MonoBehaviour
         if (_currentOutline == null)
             _currentOutline = stop.gameObject.AddComponent<Outline>();
 
+        bool isInRoute = _editPanel != null && _editPanel.CurrentRoute != null
+            && _editPanel.CurrentRoute.StopIDs.Contains(stop.stopID);
+
         _currentOutline.OutlineMode = Outline.Mode.OutlineAll;
-        _currentOutline.OutlineColor = outlineColor;
+        _currentOutline.OutlineColor = isInRoute ? removeOutlineColor : outlineColor;
         _currentOutline.OutlineWidth = outlineWidth;
         _currentOutline.enabled = true;
     }
