@@ -1,1 +1,1 @@
-{"Items":[{"ID":"engine1","Count":0},{"ID":"tire1","Count":0}]}
+{"Items":[{"ID":"engine_block","Conditions":[]},{"ID":"gearbox_std","Conditions":[]},{"ID":"tire_standard","Conditions":[]},{"ID":"body_panel","Conditions":[]},{"ID":"seat_fabric","Conditions":[]}]}

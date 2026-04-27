@@ -1,44 +1,6 @@
 {
     "Buses": [
         {
-            "BusID": "02",
-            "AssignedDepotID": "Depot_Main",
-            "Schedule": {
-                "RouteID": "02576857",
-                "StartTime": 7.0,
-                "EndTime": 20.0,
-                "TurnaroundWait": 15.0
-            },
-            "Parts": [
-                {
-                    "PartType": 0,
-                    "Health": 68.78524017333985,
-                    "MaxLife": 21.948448181152345
-                },
-                {
-                    "PartType": 1,
-                    "Health": 68.78524017333985,
-                    "MaxLife": 21.948448181152345
-                },
-                {
-                    "PartType": 2,
-                    "Health": 62.532997131347659,
-                    "MaxLife": 10.0
-                },
-                {
-                    "PartType": 3,
-                    "Health": 93.75942993164063,
-                    "MaxLife": 84.38666534423828
-                },
-                {
-                    "PartType": 4,
-                    "Health": 68.78524017333985,
-                    "MaxLife": 21.948448181152345
-                }
-            ],
-            "Capacity": 10
-        },
-        {
             "BusID": "01",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
@@ -50,28 +12,66 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 78.06368255615235,
-                    "MaxLife": 45.148094177246097
+                    "Health": 100.0,
+                    "MaxLife": 100.0
                 },
                 {
                     "PartType": 1,
-                    "Health": 78.06368255615235,
-                    "MaxLife": 45.148094177246097
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 2,
-                    "Health": 73.66972351074219,
-                    "MaxLife": 34.180782318115237
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 3,
-                    "Health": 95.61441040039063,
-                    "MaxLife": 89.02765655517578
+                    "Health": 80.0,
+                    "MaxLife": 55.0
                 },
                 {
                     "PartType": 4,
-                    "Health": 78.06368255615235,
-                    "MaxLife": 45.148094177246097
+                    "Health": 10.0,
+                    "MaxLife": 10.0
+                }
+            ],
+            "Capacity": 50
+        },
+        {
+            "BusID": "02",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "02576857",
+                "StartTime": 7.0,
+                "EndTime": 20.0,
+                "TurnaroundWait": 15.0
+            },
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 85.0,
+                    "MaxLife": 85.0
+                },
+                {
+                    "PartType": 1,
+                    "Health": 90.0,
+                    "MaxLife": 90.0
+                },
+                {
+                    "PartType": 2,
+                    "Health": 12.0,
+                    "MaxLife": 12.0
+                },
+                {
+                    "PartType": 3,
+                    "Health": 80.0,
+                    "MaxLife": 80.0
+                },
+                {
+                    "PartType": 4,
+                    "Health": 75.0,
+                    "MaxLife": 75.0
                 }
             ],
             "Capacity": 50
@@ -81,73 +81,73 @@
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
-                "StartTime": 8.150001525878907,
+                "StartTime": 8.149999618530274,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 77.84371948242188,
-                    "MaxLife": 44.59810256958008
+                    "Health": 65.42496490478516,
+                    "MaxLife": 21.04876708984375
                 },
                 {
                     "PartType": 1,
-                    "Health": 77.84371948242188,
-                    "MaxLife": 44.59810256958008
+                    "Health": 62.42466354370117,
+                    "MaxLife": 18.048995971679689
                 },
                 {
                     "PartType": 2,
-                    "Health": 73.40570068359375,
-                    "MaxLife": 33.52076721191406
+                    "Health": 52.50276184082031,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 3,
-                    "Health": 95.5704345703125,
-                    "MaxLife": 88.91763305664063
+                    "Health": 84.08724975585938,
+                    "MaxLife": 75.20684051513672
                 },
                 {
                     "PartType": 4,
-                    "Health": 77.84371948242188,
-                    "MaxLife": 44.59810256958008
+                    "Health": 55.4233283996582,
+                    "MaxLife": 11.049434661865235
                 }
             ],
             "Capacity": 50
         },
         {
             "BusID": "04",
-            "AssignedDepotID": "Depot_Main",
+            "AssignedDepotID": "Depot_Empty",
             "Schedule": {
                 "RouteID": "02576857",
-                "StartTime": 12.150001525878907,
+                "StartTime": 12.149999618530274,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 86.18231964111328,
-                    "MaxLife": 65.44789123535156
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 1,
-                    "Health": 86.18231964111328,
-                    "MaxLife": 65.44789123535156
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 2,
-                    "Health": 83.41456604003906,
-                    "MaxLife": 58.54133987426758
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 3,
-                    "Health": 97.23751831054688,
-                    "MaxLife": 93.0885238647461
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 },
                 {
                     "PartType": 4,
-                    "Health": 86.18231964111328,
-                    "MaxLife": 65.44789123535156
+                    "Health": 10.0,
+                    "MaxLife": 10.0
                 }
             ],
             "Capacity": 50

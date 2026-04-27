@@ -1,9 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
-using Unity.VisualScripting.FullSerializer;
 using UnityEngine;
-using static Unity.Burst.Intrinsics.X86.Avx;
 
 [DefaultExecutionOrder(-45)] // Run after TimeManager/FleetManager, before Depot
 public class MaintenanceManager : NetworkBehaviour
@@ -22,9 +21,11 @@ public class MaintenanceManager : NetworkBehaviour
     [Tooltip("Durability gained per in-game hour while in depot")]
     public float repairPerSkillPoint = 2.0f;
 
-    private List<string> _breakdownList = new List<string>();
-    private Queue<string> _breakdownQueue = new Queue<string>();
-    private HashSet<string> _breakdownSet = new HashSet<string>();
+    private readonly List<WorkItem> _workItems = new List<WorkItem>();
+    private readonly HashSet<string> _breakdownSet = new HashSet<string>(); // Fast duplicate check for on-route breakdowns
+
+    public IReadOnlyList<WorkItem> WorkQueue => _workItems;
+    public event Action OnWorkQueueChanged;
 
    
     private void Awake()
@@ -97,98 +98,115 @@ public class MaintenanceManager : NetworkBehaviour
     {
         if (FleetManager.Instance == null || EmployeeManager.Instance == null) return;
 
-        // 1. Calculate Repair Power for EACH Depot
-        // Dictionary: Key = DepotID, Value = Total Mechanic Skill
+        // 1. Calculate repair power per depot
         Dictionary<string, float> depotRepairPower = new Dictionary<string, float>();
-
         foreach (var emp in EmployeeManager.Instance.allEmployees)
         {
-            // We only care about Mechanics who are assigned to a valid depot
             if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
             {
                 if (!depotRepairPower.ContainsKey(emp.AssignedDepotID))
-                {
                     depotRepairPower[emp.AssignedDepotID] = 0f;
-                }
-
-                // Add this mechanic's skill to their depot's total
                 depotRepairPower[emp.AssignedDepotID] += emp.SkillLevel;
-                
             }
         }
-        
-        // 2. Repair Inactive Buses based on THEIR Assigned Depot
+
+        // 2. Repair inactive buses and update work items for depot-parked buses
         foreach (var busData in FleetManager.Instance.allBuses)
         {
-            // Only repair buses in depot
             if (FleetManager.Instance.IsBusActive(busData.BusID)) continue;
             if (busData.Parts == null) continue;
 
             string assignedDepot = busData.AssignedDepotID;
-            if (string.IsNullOrEmpty(assignedDepot) || !depotRepairPower.ContainsKey(assignedDepot)) continue;
+            if (string.IsNullOrEmpty(assignedDepot)) continue;
+
+            bool hasMechanic = depotRepairPower.ContainsKey(assignedDepot) && depotRepairPower[assignedDepot] > 0f;
+
+            if (!hasMechanic)
+            {
+                bool needsRepair = busData.Parts.Any(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold);
+                if (needsRepair)
+                {
+                    var worstPart = busData.Parts.OrderBy(p => p.Health).First();
+                    UpsertDepotWorkItem(busData.BusID, worstPart.PartType, WorkItemStatus.AwaitingTechnician, "Unassigned");
+                }
+                continue;
+            }
 
             float repairBudget = depotRepairPower[assignedDepot] * repairPerSkillPoint;
-            
+            string mechanicName = GetAssignedMechanic(assignedDepot);
+
+            // Track the most critical part we can't service this tick
+            BusPartType? blockingPart = null;
+            WorkItemStatus blockingStatus = WorkItemStatus.AwaitingParts;
+
             foreach (var part in busData.Parts)
             {
                 if (repairBudget <= 0) break;
 
-                // STRATEGY: REPLACE OR REPAIR?
-                
                 // A. REPLACEMENT (If MaxLife is too low)
                 if (part.MaxLife < replacePartThreshold)
                 {
                     string itemID = GetItemIDForPart(part.PartType);
-
-                    // Check Inventory
                     if (InventoryManager.Instance.GetItemQuantity(itemID) > 0)
                     {
-                        // Consume Item
                         InventoryManager.Instance.DecreaseItemQuantity(itemID, 1);
-
-                        // Reset Part to Brand New
                         FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, 100f);
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, 100f);
-
                         Debug.Log($"[Maintenance] Replaced {part.PartType} on {busData.BusID}");
-                        continue; // Done with this part
+                        continue;
+                    }
+                    else
+                    {
+                        // Record only the most critical blocking part (lowest enum value = most critical)
+                        if (blockingPart == null || (int)part.PartType < (int)blockingPart.Value)
+                        {
+                            blockingPart = part.PartType;
+                            blockingStatus = WorkItemStatus.AwaitingParts;
+                        }
+                        continue;
                     }
                 }
 
-                // B. REPAIR (If not replacing, or no item available)
+                // B. REPAIR
                 if (part.Health < part.MaxLife)
                 {
-                    Debug.Log("Test");
                     float needed = part.MaxLife - part.Health;
                     float applied = Mathf.Min(needed, repairBudget);
-
-                    float newHealth = part.Health + applied;
-                    if (newHealth > part.MaxLife) newHealth = part.MaxLife;
-                    Debug.Log($"[Maintenance] Repaired {part.PartType}");
-                    FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, newHealth);
+                    FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, Mathf.Min(part.Health + applied, part.MaxLife));
                     repairBudget -= applied;
+                    Debug.Log($"[Maintenance] Repaired {part.PartType} on {busData.BusID}");
                 }
             }
+
+            // Upsert a single work item for the most critical blocking part
+            if (blockingPart.HasValue)
+                UpsertDepotWorkItem(busData.BusID, blockingPart.Value, blockingStatus, mechanicName);
+
+            // Remove depot work item once all parts are healthy
+            bool allHealthy = busData.Parts.All(p => p.Health >= p.MaxLife && p.MaxLife >= replacePartThreshold);
+            if (allHealthy)
+                RemoveDepotWorkItem(busData.BusID);
         }
     }
     private void TriggerBreakdown(string busID, BusPartType reason)
     {
         GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
-        if (busObj != null)
-        {
-            BusDriver driver = busObj.GetComponent<BusDriver>();
-            if (driver != null)
-            {
-                driver.SetBrokenDown(true, reason);
-                Debug.Log($"[Maintenance] Bus {busID} Broken Down. Reason: {reason}. Adding to Queue.");
+        if (busObj == null) return;
 
-                if (!_breakdownSet.Contains(busID))
-                {
-                    _breakdownQueue.Enqueue(busID);
-                    _breakdownSet.Add(busID);
-                    TryDispatchJobs();
-                }
-            }
+        BusDriver driver = busObj.GetComponent<BusDriver>();
+        if (driver == null) return;
+
+        driver.SetBrokenDown(true, reason);
+        Debug.Log($"[Maintenance] Bus {busID} Broken Down. Reason: {reason}. Adding to Queue.");
+
+        if (!_breakdownSet.Contains(busID))
+        {
+            _breakdownSet.Add(busID);
+            var item = new WorkItem(busID, reason, WorkItemStatus.AwaitingTechnician);
+            item.Priority = _workItems.Count;
+            _workItems.Add(item);
+            OnWorkQueueChanged?.Invoke();
+            TryDispatchJobs();
         }
     }
 
@@ -197,46 +215,37 @@ public class MaintenanceManager : NetworkBehaviour
     public void OnBusStopped(string busID)
     {
         Debug.Log($"[Maintenance] Bus {busID} reported fully stopped. Attempting dispatch.");
-        TryDispatchJobs(); 
+        TryDispatchJobs();
     }
+
     public void TryDispatchJobs()
     {
-        if (_breakdownQueue.Count == 0) return;
+        var pendingItems = _workItems
+            .Where(w => w.Status == WorkItemStatus.AwaitingTechnician && _breakdownSet.Contains(w.BusID))
+            .OrderBy(w => w.Priority)
+            .ToList();
 
-        List<string> requeue = new List<string>();
-
-        while (_breakdownQueue.Count > 0)
+        foreach (var item in pendingItems)
         {
-            string busID = _breakdownQueue.Dequeue();
-            _breakdownSet.Remove(busID);
+            GameObject busObj = FleetManager.Instance.GetActiveBus(item.BusID);
+            if (busObj == null) continue;
 
-            GameObject busObj = FleetManager.Instance.GetActiveBus(busID);
-            if (busObj == null) { continue;}
-            
             BusDriver driver = busObj.GetComponent<BusDriver>();
-            
-            if (driver != null && !driver.IsFullyStopped)
-            {
-                requeue.Add(busID);
-                continue;
-            }
+            if (driver != null && !driver.IsFullyStopped) continue;
 
-            var busData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID);
+            var busData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == item.BusID);
+            if (busData == null) continue;
+
             DepotController assignedDepot = FindDepotByID(busData.AssignedDepotID);
-
             if (assignedDepot != null && assignedDepot.IsRecoveryAvailable)
             {
-                Debug.Log($"[Maintenance] Dispatching Job for {busID} to {assignedDepot.depotID}");
-                assignedDepot.DispatchRecoveryVehicle(busID);
-            } else
-            {
-                requeue.Add(busID);
+                Debug.Log($"[Maintenance] Dispatching Job for {item.BusID} to {assignedDepot.depotID}");
+                assignedDepot.DispatchRecoveryVehicle(item.BusID);
+                item.Status = WorkItemStatus.InRepair;
+                item.AssignedTechnicianName = "Field Crew";
+                item.EstimatedCompletionLabel = "In Progress";
+                OnWorkQueueChanged?.Invoke();
             }
-        }
-        foreach (string busID in requeue)
-        {
-            _breakdownQueue.Enqueue(busID);
-            _breakdownSet.Add(busID);
         }
     }
 
@@ -245,9 +254,95 @@ public class MaintenanceManager : NetworkBehaviour
         TryDispatchJobs();
     }
 
+    // --- WORK QUEUE API ---
+
+    public void PrioritizeWorkItem(string workItemID)
+    {
+        var item = _workItems.FirstOrDefault(w => w.WorkItemID == workItemID);
+        if (item == null) return;
+
+        _workItems.Remove(item);
+        _workItems.Insert(0, item);
+
+        for (int i = 0; i < _workItems.Count; i++)
+            _workItems[i].Priority = i;
+
+        OnWorkQueueChanged?.Invoke();
+
+        if (item.Status == WorkItemStatus.AwaitingTechnician)
+            TryDispatchJobs();
+    }
+
+    public void RemoveWorkItem(string busID)
+    {
+        int removed = _workItems.RemoveAll(w => w.BusID == busID);
+        _breakdownSet.Remove(busID);
+        if (removed > 0)
+            OnWorkQueueChanged?.Invoke();
+    }
+
+    public void ReorderWorkQueue(List<string> workItemIDs)
+    {
+        var reordered = new List<WorkItem>(workItemIDs.Count);
+        foreach (var id in workItemIDs)
+        {
+            var item = _workItems.FirstOrDefault(w => w.WorkItemID == id);
+            if (item != null) reordered.Add(item);
+        }
+        // Append anything not covered (safety)
+        foreach (var item in _workItems)
+            if (!reordered.Contains(item)) reordered.Add(item);
+
+        _workItems.Clear();
+        _workItems.AddRange(reordered);
+
+        for (int i = 0; i < _workItems.Count; i++)
+            _workItems[i].Priority = i;
+
+        OnWorkQueueChanged?.Invoke();
+    }
+
+    // --- PRIVATE HELPERS ---
+
+    private void UpsertDepotWorkItem(string busID, BusPartType partType, WorkItemStatus status, string techName)
+    {
+        // One depot work item per bus (non-breakdown items)
+        var existing = _workItems.FirstOrDefault(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        if (existing != null)
+        {
+            existing.IssuePartType = partType;
+            existing.Status = status;
+            existing.AssignedTechnicianName = techName;
+            existing.EstimatedCompletionLabel = status == WorkItemStatus.AwaitingParts ? "Pending Delivery" : "No Mechanic Assigned";
+        }
+        else
+        {
+            var item = new WorkItem(busID, partType, status);
+            item.Priority = _workItems.Count;
+            item.AssignedTechnicianName = techName;
+            item.EstimatedCompletionLabel = status == WorkItemStatus.AwaitingParts ? "Pending Delivery" : "No Mechanic Assigned";
+            _workItems.Add(item);
+        }
+        OnWorkQueueChanged?.Invoke();
+    }
+
+    private void RemoveDepotWorkItem(string busID)
+    {
+        int removed = _workItems.RemoveAll(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        if (removed > 0)
+            OnWorkQueueChanged?.Invoke();
+    }
+
+    private string GetAssignedMechanic(string depotID)
+    {
+        if (EmployeeManager.Instance == null) return "Unassigned";
+        var mechanic = EmployeeManager.Instance.allEmployees
+            .FirstOrDefault(e => e.Role == EmployeeRole.Mechanic && e.AssignedDepotID == depotID);
+        return mechanic != null ? mechanic.FullName : "Unassigned";
+    }
+
     private DepotController FindDepotByID(string depotID)
     {
-        
         var depots = FindObjectsByType<DepotController>(FindObjectsSortMode.None);
         return depots.FirstOrDefault(d => d.depotID == depotID);
     }

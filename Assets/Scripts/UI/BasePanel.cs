@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
+using System;
 
 [RequireComponent(typeof(CanvasGroup))]
 public class BasePanel : MonoBehaviour
@@ -17,6 +18,11 @@ public class BasePanel : MonoBehaviour
 
     private CanvasGroup _canvasGroup;
     public bool IsOpen { get; private set; }
+
+    public event Action OnPanelShown;
+    public event Action OnPanelHidden;
+
+    private CanvasGroup CG => _canvasGroup != null ? _canvasGroup : (_canvasGroup = GetComponent<CanvasGroup>());
 
     private void Awake()
     {
@@ -64,18 +70,20 @@ public class BasePanel : MonoBehaviour
     public void Show()
     {
         IsOpen = true;
-        _canvasGroup.alpha = 1f;
-        _canvasGroup.interactable = true;
-        _canvasGroup.blocksRaycasts = true;
-        transform.SetAsLastSibling(); // Brings this panel to the front of the Canvas
+        CG.alpha = 1f;
+        CG.interactable = true;
+        CG.blocksRaycasts = true;
+        transform.SetAsLastSibling();
+        OnPanelShown?.Invoke();
     }
 
     public void Hide()
     {
         IsOpen = false;
-        _canvasGroup.alpha = 0f;
-        _canvasGroup.interactable = false;
-        _canvasGroup.blocksRaycasts = false;
+        CG.alpha = 0f;
+        CG.interactable = false;
+        CG.blocksRaycasts = false;
+        OnPanelHidden?.Invoke();
     }
 
     public void SetPanelState(bool shouldBeOpen)
