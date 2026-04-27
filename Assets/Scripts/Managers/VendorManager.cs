@@ -10,7 +10,7 @@ public struct VendorItemStats
     public float Reliability;
     public float SpeedMultiplier;
     public float PriceMultiplier;
-    public float Durability; // Added specific durability
+    public float Durability; 
 }
 
 [DefaultExecutionOrder(-49)] 
@@ -116,10 +116,20 @@ public class VendorManager : NetworkBehaviour
         {
             if (CurrentAbsoluteHour >= order.ActualArrivalHour)
             {
-                InventoryManager.Instance.AddPartWithDurability(order.ItemID, order.DurabilityRoll);
+                // Fallback for old save files where Amount might be 0
+                int actualAmount = Mathf.Max(1, order.Amount);
+
+                for (int i = 0; i < actualAmount; i++)
+                {
+                    string specificID = (order.Amount > 0 && !string.IsNullOrEmpty(order.BaseItemName)) 
+                        ? $"{order.BaseItemName}{order.StartIndex + i}" 
+                        : order.ItemID;
+                        
+                    InventoryManager.Instance.AddPartWithDurability(specificID, order.DurabilityRoll);
+                }
                 
-                if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} arrived LATE from {order.VendorID}.");
-                else Debug.Log($"[Vendor] {order.ItemID} arrived ON TIME from {order.VendorID}.");
+                if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived LATE from {order.VendorID}.");
+                else Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived ON TIME from {order.VendorID}.");
                 
                 var vendor = availableVendors.FirstOrDefault(v => v.VendorID == order.VendorID);
                 if (vendor != null)
@@ -215,10 +225,10 @@ public class VendorManager : NetworkBehaviour
         else RequestCancelDealRpc(vendorID);
     }
 
-    public void PlaceOrder(string vendorID, string baseItemName)
+    public void PlaceOrder(string vendorID, string baseItemName, int amount = 1)
     {
-        if (IsServer) PlaceOrderInternal(vendorID, baseItemName);
-        else RequestPlaceOrderRpc(vendorID, baseItemName);
+        if (IsServer) PlaceOrderInternal(vendorID, baseItemName, amount);
+        else RequestPlaceOrderRpc(vendorID, baseItemName, amount);
     }
 
     private void SignDealInternal(string vendorID, BusPartCategory category)
@@ -233,7 +243,6 @@ public class VendorManager : NetworkBehaviour
 
     private void CancelDealInternal(string vendorID)
     {
-        // POINT 2: Block cancellation if there are active orders
         if (activeOrders.Any(o => o.VendorID == vendorID))
         {
             Debug.LogWarning($"[Vendor] Cannot cancel deal with {vendorID}. There are active orders.");
@@ -254,8 +263,10 @@ public class VendorManager : NetworkBehaviour
         }
     }
 
-    private void PlaceOrderInternal(string vendorID, string baseItemName)
+    private void PlaceOrderInternal(string vendorID, string baseItemName, int amount)
     {
+        amount = Mathf.Clamp(amount, 1, 50); // Sanity check
+
         var vendor = availableVendors.FirstOrDefault(v => v.VendorID == vendorID);
         if (vendor == null) return;
         if (activeOrders.Count(o => o.Category == vendor.Category) >= 2) return; 
@@ -275,21 +286,28 @@ public class VendorManager : NetworkBehaviour
             counter = new ItemCounter { BaseName = baseItemName, Count = 0 };
             lifetimeItemCounts.Add(counter);
         }
-        counter.Count++;
-        string generatedID = $"{baseItemName}{counter.Count}";
+
+        int startIdx = counter.Count + 1;
+        counter.Count += amount;
+        int endIdx = counter.Count;
+
+        string generatedDisplayID = amount == 1 ? $"{baseItemName}{startIdx}" : $"{baseItemName}{startIdx}-{endIdx}";
 
         activeOrders.Add(new ActiveOrder {
             OrderID = Guid.NewGuid().ToString().Substring(0, 6),
             VendorID = vendorID,
-            ItemID = generatedID,
+            ItemID = generatedDisplayID,
+            BaseItemName = baseItemName,
+            StartIndex = startIdx,
+            Amount = amount,
             Category = vendor.Category,
             ExpectedArrivalHour = expectedTime,
             ActualArrivalHour = actualTime,
             IsDelayed = isDelayed,
-            DurabilityRoll = itemStats.Durability // Use specific exact durability rolled in GetItemStats
+            DurabilityRoll = itemStats.Durability 
         });
         
-        CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier, TransactionCategory.PartPurchase, $"Ordered {generatedID}");
+        CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier * amount, TransactionCategory.PartPurchase, $"Ordered {generatedDisplayID}");
 
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());
@@ -297,22 +315,29 @@ public class VendorManager : NetworkBehaviour
 
     [Rpc(SendTo.Server)] private void RequestSignDealRpc(string vID, BusPartCategory c) { SignDealInternal(vID, c); }
     [Rpc(SendTo.Server)] private void RequestCancelDealRpc(string vID) { CancelDealInternal(vID); }
-    [Rpc(SendTo.Server)] private void RequestPlaceOrderRpc(string vID, string iID) { PlaceOrderInternal(vID, iID); }
+    [Rpc(SendTo.Server)] private void RequestPlaceOrderRpc(string vID, string iID, int amount) { PlaceOrderInternal(vID, iID, amount); }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
-    private void SyncVendorsRpc(string json, RpcParams rpcParams = default)
+private void SyncVendorsRpc(string json, RpcParams rpcParams = default)
+{
+    if (IsServer)
     {
-        if (IsServer) return;
-        var container = JsonUtility.FromJson<VendorContainer>(json);
-        if (container != null)
-        {
-            availableVendors = container.AvailableVendors;
-            activeDeals = container.ActiveDeals;
-            activeOrders = container.ActiveOrders;
-            lifetimeItemCounts = container.LifetimeItemCounts;
-            OnVendorDataUpdated?.Invoke();
-        }
+        // The Host already updated its lists directly. It just needs the UI event to fire.
+        OnVendorDataUpdated?.Invoke();
+        return; 
     }
+    
+    // Clients need to deserialize the JSON first
+    var container = JsonUtility.FromJson<VendorContainer>(json);
+    if (container != null)
+    {
+        availableVendors = container.AvailableVendors;
+        activeDeals = container.ActiveDeals;
+        activeOrders = container.ActiveOrders;
+        lifetimeItemCounts = container.LifetimeItemCounts;
+        OnVendorDataUpdated?.Invoke();
+    }
+}
 
     private string SerializeVendors() { return JsonUtility.ToJson(new VendorContainer { AvailableVendors = availableVendors, ActiveDeals = activeDeals, ActiveOrders = activeOrders, LifetimeItemCounts = lifetimeItemCounts }, true); }
     public void SaveVendors() { File.WriteAllText(SavePath, SerializeVendors()); }

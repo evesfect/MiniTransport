@@ -1,19 +1,6 @@
 {
     "AvailableVendors": [
         {
-            "VendorID": "d5a5a32b",
-            "Name": "Prime Logistics",
-            "Category": 2,
-            "QualityTier": 1,
-            "ReliabilityScore": 84.22114562988281,
-            "DeliverySpeedMultiplier": 0.8675300478935242,
-            "PriceMultiplier": 0.9893115758895874,
-            "MinDurability": 60.0,
-            "MaxDurability": 85.0,
-            "LoyaltyLevel": 0,
-            "CurrentXP": 0.0
-        },
-        {
             "VendorID": "6f3fb4f2",
             "Name": "Global Motors",
             "Category": 2,
@@ -24,33 +11,7 @@
             "MinDurability": 85.0,
             "MaxDurability": 100.0,
             "LoyaltyLevel": 0,
-            "CurrentXP": 0.0
-        },
-        {
-            "VendorID": "e1301447",
-            "Name": "Budget Tech",
-            "Category": 3,
-            "QualityTier": 0,
-            "ReliabilityScore": 58.195430755615237,
-            "DeliverySpeedMultiplier": 1.7492928504943848,
-            "PriceMultiplier": 0.6045981645584106,
-            "MinDurability": 30.0,
-            "MaxDurability": 60.0,
-            "LoyaltyLevel": 0,
-            "CurrentXP": 0.0
-        },
-        {
-            "VendorID": "2a5ebc65",
-            "Name": "Global Tech",
-            "Category": 3,
-            "QualityTier": 1,
-            "ReliabilityScore": 83.10688781738281,
-            "DeliverySpeedMultiplier": 0.8873095512390137,
-            "PriceMultiplier": 1.064586877822876,
-            "MinDurability": 60.0,
-            "MaxDurability": 85.0,
-            "LoyaltyLevel": 0,
-            "CurrentXP": 0.0
+            "CurrentXP": 10.0
         },
         {
             "VendorID": "bd570359",
@@ -63,18 +24,18 @@
             "MinDurability": 85.0,
             "MaxDurability": 100.0,
             "LoyaltyLevel": 0,
-            "CurrentXP": 0.0
+            "CurrentXP": 30.0
         },
         {
-            "VendorID": "4eaa06bb",
-            "Name": "Metro Parts",
+            "VendorID": "151f4c45",
+            "Name": "Rapid Tech",
             "Category": 4,
-            "QualityTier": 0,
-            "ReliabilityScore": 56.31868362426758,
-            "DeliverySpeedMultiplier": 1.3609579801559449,
-            "PriceMultiplier": 0.7942979335784912,
-            "MinDurability": 30.0,
-            "MaxDurability": 60.0,
+            "QualityTier": 2,
+            "ReliabilityScore": 90.63880157470703,
+            "DeliverySpeedMultiplier": 0.6607037782669067,
+            "PriceMultiplier": 1.7861902713775635,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
             "LoyaltyLevel": 0,
             "CurrentXP": 0.0
         },
@@ -92,20 +53,184 @@
             "CurrentXP": 0.0
         },
         {
-            "VendorID": "151f4c45",
-            "Name": "Rapid Tech",
+            "VendorID": "278a215f",
+            "Name": "Apex Supplies",
+            "Category": 1,
+            "QualityTier": 0,
+            "ReliabilityScore": 59.2011833190918,
+            "DeliverySpeedMultiplier": 1.7995612621307374,
+            "PriceMultiplier": 0.5499873161315918,
+            "MinDurability": 30.0,
+            "MaxDurability": 60.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "44179fd0",
+            "Name": "Global Tech",
+            "Category": 1,
+            "QualityTier": 1,
+            "ReliabilityScore": 75.82862091064453,
+            "DeliverySpeedMultiplier": 0.8044434189796448,
+            "PriceMultiplier": 0.9493513107299805,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "0c270f31",
+            "Name": "Global Tech",
+            "Category": 1,
+            "QualityTier": 2,
+            "ReliabilityScore": 98.16678619384766,
+            "DeliverySpeedMultiplier": 0.5245534181594849,
+            "PriceMultiplier": 1.3197884559631348,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "e74e4105",
+            "Name": "Metro Supplies",
+            "Category": 2,
+            "QualityTier": 0,
+            "ReliabilityScore": 54.66435241699219,
+            "DeliverySpeedMultiplier": 1.331218957901001,
+            "PriceMultiplier": 0.530789315700531,
+            "MinDurability": 30.0,
+            "MaxDurability": 60.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "0d8de31f",
+            "Name": "Budget Parts",
+            "Category": 2,
+            "QualityTier": 1,
+            "ReliabilityScore": 75.65653991699219,
+            "DeliverySpeedMultiplier": 1.1373176574707032,
+            "PriceMultiplier": 1.0030168294906617,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "7f4ac480",
+            "Name": "Budget Logistics",
+            "Category": 2,
+            "QualityTier": 2,
+            "ReliabilityScore": 98.01074981689453,
+            "DeliverySpeedMultiplier": 0.6638278961181641,
+            "PriceMultiplier": 1.3845374584197999,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "70fe8dae",
+            "Name": "Budget Supplies",
+            "Category": 3,
+            "QualityTier": 0,
+            "ReliabilityScore": 53.785526275634769,
+            "DeliverySpeedMultiplier": 1.6080756187438965,
+            "PriceMultiplier": 0.6955350637435913,
+            "MinDurability": 30.0,
+            "MaxDurability": 60.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "927f7e60",
+            "Name": "Metro Supplies",
+            "Category": 3,
+            "QualityTier": 1,
+            "ReliabilityScore": 75.54029846191406,
+            "DeliverySpeedMultiplier": 0.9205743670463562,
+            "PriceMultiplier": 1.0984829664230347,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "755a7d50",
+            "Name": "Global Supplies",
+            "Category": 3,
+            "QualityTier": 2,
+            "ReliabilityScore": 91.5482177734375,
+            "DeliverySpeedMultiplier": 0.6326719522476196,
+            "PriceMultiplier": 1.3358030319213868,
+            "MinDurability": 85.0,
+            "MaxDurability": 100.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "7735b10d",
+            "Name": "Prime Logistics",
+            "Category": 4,
+            "QualityTier": 0,
+            "ReliabilityScore": 48.4405517578125,
+            "DeliverySpeedMultiplier": 1.6113786697387696,
+            "PriceMultiplier": 0.593243420124054,
+            "MinDurability": 30.0,
+            "MaxDurability": 60.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "d792a9b0",
+            "Name": "Rapid Supplies",
+            "Category": 4,
+            "QualityTier": 1,
+            "ReliabilityScore": 80.66180419921875,
+            "DeliverySpeedMultiplier": 0.9034430980682373,
+            "PriceMultiplier": 0.967735767364502,
+            "MinDurability": 60.0,
+            "MaxDurability": 85.0,
+            "LoyaltyLevel": 0,
+            "CurrentXP": 0.0
+        },
+        {
+            "VendorID": "592f6531",
+            "Name": "Global Parts",
             "Category": 4,
             "QualityTier": 2,
-            "ReliabilityScore": 90.63880157470703,
-            "DeliverySpeedMultiplier": 0.6607037782669067,
-            "PriceMultiplier": 1.7861902713775635,
+            "ReliabilityScore": 90.25830841064453,
+            "DeliverySpeedMultiplier": 0.5898884534835815,
+            "PriceMultiplier": 1.6015753746032715,
             "MinDurability": 85.0,
             "MaxDurability": 100.0,
             "LoyaltyLevel": 0,
             "CurrentXP": 0.0
         }
     ],
-    "ActiveDeals": [],
+    "ActiveDeals": [
+        {
+            "Category": 2,
+            "VendorID": "6f3fb4f2",
+            "StartDay": 1
+        },
+        {
+            "Category": 3,
+            "VendorID": "bd570359",
+            "StartDay": 1
+        },
+        {
+            "Category": 4,
+            "VendorID": "151f4c45",
+            "StartDay": 1
+        },
+        {
+            "Category": 4,
+            "VendorID": "751ff427",
+            "StartDay": 1
+        }
+    ],
     "ActiveOrders": [],
     "LifetimeItemCounts": [
         {
@@ -118,7 +243,7 @@
         },
         {
             "BaseName": "BusFrame",
-            "Count": 2
+            "Count": 6
         },
         {
             "BaseName": "DoorAssembly",
@@ -134,15 +259,19 @@
         },
         {
             "BaseName": "StandardTire",
-            "Count": 5
+            "Count": 7
         },
         {
             "BaseName": "WinterTire",
-            "Count": 6
+            "Count": 7
         },
         {
             "BaseName": "HeavyDutyTire",
             "Count": 11
+        },
+        {
+            "BaseName": "Axle",
+            "Count": 5
         }
     ]
 }
