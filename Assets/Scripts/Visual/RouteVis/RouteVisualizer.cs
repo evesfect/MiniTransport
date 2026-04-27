@@ -26,6 +26,10 @@ public class RouteVisualizer : MonoBehaviour
     private Material _markerMatInner; 
 
     private Dictionary<string, LineRenderer> _activeLines = new Dictionary<string, LineRenderer>();
+    private Dictionary<string, Color> _originalColors = new Dictionary<string, Color>();
+    private string _highlightedRouteID;
+
+    public static readonly Color GreyedOutColor = new Color(0.45f, 0.45f, 0.45f, 0.4f);
 
     private void Awake()
     {
@@ -65,6 +69,8 @@ public class RouteVisualizer : MonoBehaviour
     {
         foreach (var lr in _activeLines.Values) if (lr) Destroy(lr.gameObject);
         _activeLines.Clear();
+        _originalColors.Clear();
+        _highlightedRouteID = null;
     }
 
     public void ToggleRouteVisibility(string routeID)
@@ -149,6 +155,7 @@ public class RouteVisualizer : MonoBehaviour
             lr.positionCount = smoothPoints.Count;
             lr.SetPositions(smoothPoints.ToArray());
             _activeLines[routeID] = lr;
+            _originalColors[routeID] = route.RouteColor;
         }
         else
         {
@@ -248,6 +255,7 @@ public class RouteVisualizer : MonoBehaviour
         {
             if (lr != null) Destroy(lr.gameObject);
             _activeLines.Remove(routeID);
+            _originalColors.Remove(routeID);
         }
     }
 
@@ -258,5 +266,93 @@ public class RouteVisualizer : MonoBehaviour
             ShowAll();
         else 
             HideAll();
+    }
+
+    // --- Route Highlighting ---
+
+    /// <summary>
+    /// Highlights a single route with its original color and greys out all others.
+    /// Pass null to clear highlighting and restore all original colors.
+    /// </summary>
+    public void HighlightRoute(string routeID)
+    {
+        _highlightedRouteID = routeID;
+
+        if (string.IsNullOrEmpty(routeID))
+        {
+            // Restore all original colors
+            foreach (var kvp in _activeLines)
+            {
+                if (kvp.Value == null) continue;
+                if (_originalColors.TryGetValue(kvp.Key, out Color original))
+                    SetLineColor(kvp.Value, original);
+            }
+            // Restore marker colors
+            foreach (var kvp in _activeLines)
+            {
+                if (kvp.Value == null) continue;
+                if (_originalColors.TryGetValue(kvp.Key, out Color original))
+                    SetMarkerColors(kvp.Value.transform, original);
+            }
+            return;
+        }
+
+        foreach (var kvp in _activeLines)
+        {
+            if (kvp.Value == null) continue;
+            if (kvp.Key == routeID)
+            {
+                if (_originalColors.TryGetValue(kvp.Key, out Color original))
+                {
+                    SetLineColor(kvp.Value, original);
+                    SetMarkerColors(kvp.Value.transform, original);
+                }
+            }
+            else
+            {
+                SetLineColor(kvp.Value, GreyedOutColor);
+                SetMarkerColors(kvp.Value.transform, GreyedOutColor);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows only the specified route, hiding all others.
+    /// </summary>
+    public void ShowOnlyRoute(string routeID)
+    {
+        HideAll();
+        ShowRoute(routeID);
+    }
+
+    private void SetLineColor(LineRenderer lr, Color color)
+    {
+        lr.startColor = color;
+        lr.endColor = color;
+    }
+
+    private void SetMarkerColors(Transform routeRoot, Color outerColor)
+    {
+        foreach (Transform child in routeRoot)
+        {
+            if (!child.name.StartsWith("Marker_Outer")) continue;
+            var outerRen = child.GetComponent<MeshRenderer>();
+            if (outerRen != null) outerRen.material.color = outerColor;
+        }
+    }
+
+    /// <summary>
+    /// Returns the number of buses currently assigned to a route.
+    /// </summary>
+    public static int GetBusCountForRoute(string routeID)
+    {
+        if (FleetManager.Instance == null) return 0;
+        int count = 0;
+        foreach (var bus in FleetManager.Instance.allBuses)
+        {
+            if (bus.Schedule != null && bus.Schedule.RouteID == routeID)
+                count++;
+        }
+        return count;
     }
 }

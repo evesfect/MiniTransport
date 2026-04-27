@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 39532.828125,
+    "CurrentBalance": 23808.4921875,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -619,20 +619,68 @@
             "Count": 2
         },
         {
-            "Amount": 11946.255859375,
+            "Amount": 744496.875,
             "Type": 1,
             "Category": 2,
             "Description": "Simulated Passenger Fare",
             "Timestamp": 1,
-            "Count": 44
+            "Count": 2924
         },
         {
-            "Amount": -10468.5322265625,
+            "Amount": -751136.0625,
             "Type": 1,
             "Category": 5,
             "Description": "Simulated Random Repair",
             "Timestamp": 1,
-            "Count": 36
+            "Count": 2926
+        },
+        {
+            "Amount": 146378.859375,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 2,
+            "Count": 568
+        },
+        {
+            "Amount": -144098.40625,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 2,
+            "Count": 575
+        },
+        {
+            "Amount": 67993.0078125,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 3,
+            "Count": 269
+        },
+        {
+            "Amount": -75953.3125,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 3,
+            "Count": 293
+        },
+        {
+            "Amount": 9590.3642578125,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 35
+        },
+        {
+            "Amount": -11517.2265625,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 45
         }
     ]
 }
