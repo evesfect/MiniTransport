@@ -1,53 +1,58 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class InventoryScrollManager : BaseScrollManager<InventoryItemData>
 {
-    // You no longer need ANY detail references here!
+    private Coroutine _refreshRoutine;
 
-    void Start()
+    private void OnEnable()
     {
-        GenerateMockData();
+        if (_refreshRoutine != null)
+        {
+            StopCoroutine(_refreshRoutine);
+        }
 
-        PopulateList();
+        _refreshRoutine = StartCoroutine(WaitForInventoryDataAndRefresh());
     }
 
-    private void GenerateMockData()
+    private void OnDisable()
     {
-        activeItems.Clear();
+        if (_refreshRoutine != null)
+        {
+            StopCoroutine(_refreshRoutine);
+            _refreshRoutine = null;
+        }
+    }
 
-        // Mock Item 1: Engine Part
-        InventoryItemData item1 = ScriptableObject.CreateInstance<InventoryItemData>();
-        item1.ItemID = "engine_v8";
-        item1.DisplayName = "V8 Engine Block";
-        item1.Category = ItemCategory.Part;
-        item1.Cost = 2500.00f;
-        // Icons are tricky to mock purely in code without loading resources, so we leave it null 
-        activeItems.Add(item1);
+    private IEnumerator WaitForInventoryDataAndRefresh()
+    {
+        // Give network/load flow time to populate InventoryManager on first open.
+        const float timeout = 2f;
+        float elapsed = 0f;
 
-        // Mock Item 2: Tire Part
-        InventoryItemData item2 = ScriptableObject.CreateInstance<InventoryItemData>();
-        item2.ItemID = "tire_all_season";
-        item2.DisplayName = "All-Season Tire";
-        item2.Category = ItemCategory.Part;
-        item2.Cost = 150.50f;
-        activeItems.Add(item2);
+        while ((InventoryManager.Instance == null || InventoryManager.Instance.allAvailableItems == null) && elapsed < timeout)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
 
-        // Mock Item 3: Transmission
-        InventoryItemData item3 = ScriptableObject.CreateInstance<InventoryItemData>();
-        item3.ItemID = "transmission_auto";
-        item3.DisplayName = "Auto Transmission";
-        item3.Category = ItemCategory.Part;
-        item3.Cost = 1200.00f;
-        activeItems.Add(item3);
+        if (InventoryManager.Instance != null && InventoryManager.Instance.allAvailableItems != null)
+        {
+            activeItems.Clear();
 
-        // Mock Item 4: Other Supplies
-        InventoryItemData item4 = ScriptableObject.CreateInstance<InventoryItemData>();
-        item4.ItemID = "cleaning_supplies";
-        item4.DisplayName = "Interior Cleaning Kit";
-        item4.Category = ItemCategory.Other;
-        item4.Cost = 25.99f;
-        activeItems.Add(item4);
+            // Add the actual live data from the backend
+            activeItems.AddRange(InventoryManager.Instance.allAvailableItems);
+
+            PopulateList();
+            Debug.Log($"[InventoryScrollManager] Listed {activeItems.Count} items from InventoryManager.");
+        }
+        else
+        {
+            Debug.LogError("[InventoryScrollManager] InventoryManager is missing or data is not loaded within timeout!");
+        }
+
+        _refreshRoutine = null;
     }
 
     protected override void SetupItemDisplay(GameObject instantiatedPrefab, InventoryItemData itemData)

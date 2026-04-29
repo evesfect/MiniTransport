@@ -12,28 +12,28 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 100.0,
-                    "MaxLife": 100.0
+                    "Health": 29.984851837158204,
+                    "MaxLife": 54.885833740234378
                 },
                 {
                     "PartType": 1,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 29.984851837158204,
+                    "MaxLife": 54.885833740234378
                 },
                 {
                     "PartType": 2,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 4.940439701080322,
+                    "MaxLife": 45.85420608520508
                 },
                 {
                     "PartType": 3,
-                    "Health": 80.0,
-                    "MaxLife": 55.0
+                    "Health": 86.00736236572266,
+                    "MaxLife": 90.98495483398438
                 },
                 {
                     "PartType": 4,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 7.259305000305176,
+                    "MaxLife": 54.90583419799805
                 }
             ],
             "Capacity": 50
@@ -50,28 +50,28 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 85.0,
-                    "MaxLife": 85.0
+                    "Health": 18.59476089477539,
+                    "MaxLife": 51.0257453918457
                 },
                 {
                     "PartType": 1,
-                    "Health": 90.0,
-                    "MaxLife": 90.0
+                    "Health": 18.59476089477539,
+                    "MaxLife": 51.0257453918457
                 },
                 {
                     "PartType": 2,
-                    "Health": 12.0,
-                    "MaxLife": 12.0
+                    "Health": 4.996406078338623,
+                    "MaxLife": 41.22254180908203
                 },
                 {
                     "PartType": 3,
-                    "Health": 80.0,
-                    "MaxLife": 80.0
+                    "Health": 75.52477264404297,
+                    "MaxLife": 90.21737670898438
                 },
                 {
                     "PartType": 4,
-                    "Health": 75.0,
-                    "MaxLife": 75.0
+                    "Health": 9.17726993560791,
+                    "MaxLife": 51.06574630737305
                 }
             ],
             "Capacity": 50
@@ -88,35 +88,35 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 65.42496490478516,
-                    "MaxLife": 21.04876708984375
+                    "Health": 20.83441925048828,
+                    "MaxLife": 52.72578430175781
                 },
                 {
                     "PartType": 1,
-                    "Health": 62.42466354370117,
-                    "MaxLife": 18.048995971679689
+                    "Health": 20.83441925048828,
+                    "MaxLife": 52.72578430175781
                 },
                 {
                     "PartType": 2,
-                    "Health": 52.50276184082031,
-                    "MaxLife": 10.0
+                    "Health": 4.9928507804870609,
+                    "MaxLife": 43.262393951416019
                 },
                 {
                     "PartType": 3,
-                    "Health": 84.08724975585938,
-                    "MaxLife": 75.20684051513672
+                    "Health": 84.17658996582031,
+                    "MaxLife": 90.55319213867188
                 },
                 {
                     "PartType": 4,
-                    "Health": 55.4233283996582,
-                    "MaxLife": 11.049434661865235
+                    "Health": 20.884418487548829,
+                    "MaxLife": 52.745784759521487
                 }
             ],
             "Capacity": 50
         },
         {
             "BusID": "04",
-            "AssignedDepotID": "Depot_Empty",
+            "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
                 "StartTime": 12.149999618530274,
@@ -126,28 +126,28 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 20.80406951904297,
+                    "MaxLife": 53.62580490112305
                 },
                 {
                     "PartType": 1,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 20.80406951904297,
+                    "MaxLife": 53.62580490112305
                 },
                 {
                     "PartType": 2,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 4.9570794105529789,
+                    "MaxLife": 44.342315673828128
                 },
                 {
                     "PartType": 3,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 84.17035675048828,
+                    "MaxLife": 90.73309326171875
                 },
                 {
                     "PartType": 4,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 20.854068756103517,
+                    "MaxLife": 53.64580535888672
                 }
             ],
             "Capacity": 50

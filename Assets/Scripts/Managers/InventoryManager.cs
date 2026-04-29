@@ -114,6 +114,33 @@ public class InventoryManager : NetworkBehaviour
         return inventoryDatabase.ContainsKey(itemID) ? inventoryDatabase[itemID].Count : 0;
     }
 
+    public bool TryConsumeItem(string itemID, out float consumedDurability)
+    {
+        consumedDurability = 0f;
+
+        // Check if we have the item in stock
+        if (!inventoryDatabase.ContainsKey(itemID) || inventoryDatabase[itemID].Count == 0)
+            return false;
+
+        if (IsServer)
+        {
+            // Grab the durability of the first part in the stack (First In, First Out)
+            consumedDurability = inventoryDatabase[itemID][0].MaxDurability;
+
+            // Remove it from the inventory
+            inventoryDatabase[itemID].RemoveAt(0);
+
+            // Sync and Save
+            OnItemQuantityChanged?.Invoke(itemID, inventoryDatabase[itemID].Count);
+            UpdateItemClientRpc(itemID, SerializeInventory());
+            SaveInventory();
+
+            return true;
+        }
+
+        return false;
+    }
+
     private void ModifyQuantityInternal(string itemID, float durability, bool isAdd)
     {
         if (!inventoryDatabase.ContainsKey(itemID)) 
