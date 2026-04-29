@@ -202,31 +202,45 @@ public class MaintenanceManager : NetworkBehaviour
                 // A. REPLACEMENT LOGIC
                 if (part.MaxLife < replacePartThreshold)
                 {
-                    string itemID = GetItemIDForPart(part.PartType);
-                    if (InventoryManager.Instance.TryConsumeItem(itemID, out float partDurability))
+                    // 1. Get ALL the acceptable items that can fix this part
+                    string[] acceptableItemIDs = GetValidItemIDsForPart(part.PartType);
+
+                    bool successfullyReplaced = false;
+                    float consumedDurability = 0f;
+                    string consumedItemID = "";
+
+                    // 2. Check the inventory for each acceptable item. Stop as soon as we find one!
+                    foreach (string itemID in acceptableItemIDs)
                     {
-                        // Consume the part from inventory
-                        InventoryManager.Instance.DecreaseItemQuantity(itemID, 1);
+                        if (InventoryManager.Instance.TryConsumeItem(itemID, out consumedDurability))
+                        {
+                            successfullyReplaced = true;
+                            consumedItemID = itemID;
+                            break; // We found a valid part! Stop searching.
+                        }
+                    }
 
-                        // Reset stats via FleetManager
-                        FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, partDurability);
-                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, partDurability);
+                    // 3. Apply the results
+                    if (successfullyReplaced)
+                    {
+                        FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, consumedDurability);
+                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, consumedDurability);
 
-                        // Replacing a part takes time and effort, so we consume the capacity!
                         availableCapacity -= allocatedCapacity;
-                        Debug.Log($"[Maintenance] Replaced {part.PartType} on {busData.BusID}");
+                        Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using a '{consumedItemID}'. Consumed {allocatedCapacity:F1} capacity. {availableCapacity:F1} remaining.");
                         continue;
                     }
                     else
                     {
-                        
                         if (blockingPart == null || repairPriority.IndexOf(part.PartType) < repairPriority.IndexOf(blockingPart.Value))
                         {
                             blockingPart = part.PartType;
                             blockingStatus = WorkItemStatus.AwaitingParts;
                         }
 
-                        
+                        // Log all the items it was looking for so you know why it failed
+                        string missingPartsList = string.Join(", ", acceptableItemIDs);
+                        Debug.Log($"[Maintenance] Blocked: Need to replace {part.PartType} on {busData.BusID}, but we are out of stock of ALL acceptable parts: [{missingPartsList}]");
                         continue;
                     }
                 }
@@ -430,17 +444,18 @@ public class MaintenanceManager : NetworkBehaviour
 
     // HELPERS
 
-    private string GetItemIDForPart(BusPartType type)
+    private string[] GetValidItemIDsForPart(BusPartType type)
     {
-        switch (type)
+        // Returns an array of acceptable item IDs that can fulfill the replacement requirement
+        return type switch
         {
-            case BusPartType.Engine: return "EngineBlock";
-            case BusPartType.Transmission: return "Piston";
-            case BusPartType.Wheels: return "StandardTire";
-            case BusPartType.Body: return "BusFrame";
-            case BusPartType.Interior: return "Dashboard";
-            default: return "generic_part";
-        }
+            BusPartType.Engine => new[] { "EngineBlock", "Piston", "Alternator" },
+            BusPartType.Transmission => new[] { "Axle", "BusFrame" }, 
+            BusPartType.Wheels => new[] { "StandardTire", "WinterTire", "HeavyDutyTire" },
+            BusPartType.Body => new[] { "BusFrame", "DoorAssembly" },
+            BusPartType.Interior => new[] { "Dashboard", "SensorArray", "WiringHarness" },
+            _ => new[] { "generic_part" }
+        };
     }
 
     private bool IsCriticalPart(BusPartType type)

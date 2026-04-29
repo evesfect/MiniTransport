@@ -21,8 +21,13 @@ public class InventoryCardDisplay : MonoBehaviour
     [Tooltip("If stock falls below this number, the card turns red")]
     public int lowStockThreshold = 10;
 
+    // Cache the ID so the card remembers who it is when the megaphone shouts
+    private string _currentItemId;
+
     public void Setup(InventoryItemData item)
     {
+        _currentItemId = item.ItemID;
+
         // 1. Set the static data from your ScriptableObject
         if (nameText != null) nameText.text = item.DisplayName;
         if (idText != null) idText.text = $"ID: {item.ItemID}";
@@ -33,73 +38,65 @@ public class InventoryCardDisplay : MonoBehaviour
             itemIcon.sprite = item.icon;
         }
 
-        // 2. DEMO OVERRIDE: Injecting fake stock numbers directly into the UI
-        if (stockText != null)
-        {
-            int fakeStock = 0;
-
-            // Give specific demo items static fake numbers so they don't change every time you open the menu
-            switch (item.ItemID)
-            {
-                case "engine_v8":
-                    fakeStock = 5;
-                    break;
-                case "tire_all_season":
-                    fakeStock = 24;
-                    break;
-                case "transmission_auto":
-                    fakeStock = 2;
-                    break;
-                case "cleaning_supplies":
-                    fakeStock = 100;
-                    break;
-                default:
-                    // Any other random items you add to the demo will get a random stock number
-                    fakeStock = UnityEngine.Random.Range(1, 15);
-                    break;
-            }
-
-            stockText.text = $"Stock: {fakeStock}";
-
-            if (cardBackgroundImage != null)
-            {
-                if (fakeStock < lowStockThreshold)
-                {
-                    cardBackgroundImage.color = lowStockColor;
-                }
-                else
-                {
-                    cardBackgroundImage.color = normalColor;
-                }
-            }
-        }
-    }
-}
-
-//Actual function down below
-
-/*public void Setup(InventoryItemData item)
-{
-    // 1. Set the static data from your ScriptableObject
-    if (nameText != null) nameText.text = item.DisplayName;
-    if (idText != null) idText.text = $"ID: {item.ItemID}";
-    if (categoryText != null) categoryText.text = $"Category: {item.Category}";
-
-
-    if (itemIcon != null && item.icon != null)
-    {
-        itemIcon.sprite = item.icon;
-    }
-
-    // 2. Fetch the live stock number from your InventoryManager
-    if (stockText != null)
-    {
+        // 2. Fetch the initial live stock number from your InventoryManager
         int currentStock = 0;
         if (InventoryManager.Instance != null)
         {
-            currentStock = InventoryManager.Instance.GetItemQuantity(item.ItemID);
+            currentStock = InventoryManager.Instance.GetItemQuantity(_currentItemId);
         }
-        stockText.text = $"Stock: {currentStock}";
+
+        // 3. Update the visual text and colors
+        UpdateStockVisuals(currentStock);
+    }
+
+    // --- EVENT DRIVEN UI LOGIC ---
+
+    private void OnEnable()
+    {
+        // Subscribe to the broadcaster
+        if (InventoryManager.Instance != null)
+        {
+            InventoryManager.Instance.OnItemQuantityChanged += OnStockChanged;
+        }
+    }
+
+    private void OnDisable()
+    {
+        // Always unsubscribe to prevent memory leaks when the UI is destroyed or hidden!
+        if (InventoryManager.Instance != null)
+        {
+            InventoryManager.Instance.OnItemQuantityChanged -= OnStockChanged;
+        }
+    }
+
+    // This runs automatically whenever InventoryManager adds or removes ANY item
+    private void OnStockChanged(string changedItemID, int newQuantity)
+    {
+        // Check if the item that changed is THIS card's item
+        if (!string.IsNullOrEmpty(_currentItemId) && _currentItemId == changedItemID)
+        {
+            UpdateStockVisuals(newQuantity);
+        }
+    }
+
+    // Helper method to keep our logic clean
+    private void UpdateStockVisuals(int quantity)
+    {
+        if (stockText != null)
+        {
+            stockText.text = $"Stock: {quantity}";
+        }
+
+        if (cardBackgroundImage != null)
+        {
+            if (quantity < lowStockThreshold)
+            {
+                cardBackgroundImage.color = lowStockColor;
+            }
+            else
+            {
+                cardBackgroundImage.color = normalColor;
+            }
+        }
     }
 }
-}*/

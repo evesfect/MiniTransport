@@ -10,11 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c4275922d959ef742a03a5cf4edc7855, type: 3}
-  m_Name: Enigen
+  m_Name: HeavyDutyTire
   m_EditorClassIdentifier: Assembly-CSharp::InventoryItemData
-  ItemID: engine1
-  DisplayName: Enigen
-  Description: a really bad engine
+  ItemID: HeavyDutyTire
+  DisplayName: Heavy Duty Tire
+  Description: A reinforced tire designed to support maximum bus passenger capacities
+    without blowing out
   icon: {fileID: 0}
   Category: 0
-  Cost: 2000
+  Cost: 600
