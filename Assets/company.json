@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 46014.49609375,
+    "CurrentBalance": 55701.5859375,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -1297,6 +1297,46 @@
             "Description": "Ordered StandardTire6",
             "Timestamp": 2,
             "Count": 1
+        },
+        {
+            "Amount": -458197.375,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 1797
+        },
+        {
+            "Amount": 467804.125,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 1832
+        },
+        {
+            "Amount": -66.614990234375,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered StandardTire7",
+            "Timestamp": 1,
+            "Count": 1
+        },
+        {
+            "Amount": 21139.916015625,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 2,
+            "Count": 85
+        },
+        {
+            "Amount": -20992.810546875,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 2,
+            "Count": 84
         }
     ]
 }

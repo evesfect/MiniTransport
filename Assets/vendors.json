@@ -189,6 +189,16 @@
             "ActualArrivalHour": 104.37141418457031,
             "IsDelayed": true,
             "DurabilityRoll": 42.474945068359378
+        },
+        {
+            "OrderID": "61594d",
+            "VendorID": "01a5339b",
+            "ItemID": "StandardTire",
+            "Category": 2,
+            "ExpectedArrivalHour": 51.322235107421878,
+            "ActualArrivalHour": 51.322235107421878,
+            "IsDelayed": false,
+            "DurabilityRoll": 43.40314865112305
         }
     ],
     "LifetimeItemCounts": [
@@ -218,7 +228,7 @@
         },
         {
             "BaseName": "StandardTire",
-            "Count": 6
+            "Count": 7
         },
         {
             "BaseName": "WinterTire",

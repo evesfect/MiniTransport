@@ -76,6 +76,24 @@ public class MaintenanceManager : NetworkBehaviour
         }
     }
 
+    // --- NETWORKED SETTINGS SYNC ---
+
+    [Rpc(SendTo.Server)]
+    public void UpdateThresholdsRpc(float breakdown, float operational, float replace)
+    {
+        breakdownThreshold = breakdown;
+        operationalThreshold = operational;
+        replacePartThreshold = replace;
+    }
+
+    [Rpc(SendTo.Server)]
+    public void UpdateRepairPriorityRpc(BusPartType[] newPriority)
+    {
+        // Convert the array back to a List and save it
+        repairPriority = new List<BusPartType>(newPriority);
+        Debug.Log("[Maintenance] Priority list reordered by player!");
+    }
+
     private void OnMinuteTick()
     {
         if (FleetManager.Instance == null) return;
@@ -202,45 +220,47 @@ public class MaintenanceManager : NetworkBehaviour
                 // A. REPLACEMENT LOGIC
                 if (part.MaxLife < replacePartThreshold)
                 {
-                    // 1. Get ALL the acceptable items that can fix this part
-                    string[] acceptableItemIDs = GetValidItemIDsForPart(part.PartType);
-
-                    bool successfullyReplaced = false;
-                    float consumedDurability = 0f;
-                    string consumedItemID = "";
-
-                    // 2. Check the inventory for each acceptable item. Stop as soon as we find one!
-                    foreach (string itemID in acceptableItemIDs)
+                    // 1. DIAGNOSIS: If the bus doesn't know what part it needs yet, roll a random one!
+                    if (string.IsNullOrEmpty(part.PendingReplacementItemID))
                     {
-                        if (InventoryManager.Instance.TryConsumeItem(itemID, out consumedDurability))
-                        {
-                            successfullyReplaced = true;
-                            consumedItemID = itemID;
-                            break; // We found a valid part! Stop searching.
-                        }
+                        string[] acceptableItemIDs = GetValidItemIDsForPart(part.PartType);
+
+                        // Pick a random index from the array
+                        int randomIndex = UnityEngine.Random.Range(0, acceptableItemIDs.Length);
+                        part.PendingReplacementItemID = acceptableItemIDs[randomIndex];
+
+                        Debug.Log($"[Maintenance] DIAGNOSIS: Bus {busData.BusID}'s {part.PartType} has failed. Mechanic demands a '{part.PendingReplacementItemID}' to fix it.");
+
+                        // Note: You may want to call a FleetManager RPC here to sync this new string to clients so the UI updates!
                     }
 
-                    // 3. Apply the results
-                    if (successfullyReplaced)
+                    string requiredItemID = part.PendingReplacementItemID;
+                    float consumedDurability = 0f;
+
+                    // 2. Try to consume that EXACT required part
+                    if (InventoryManager.Instance.TryConsumeItem(requiredItemID, out consumedDurability))
                     {
+                        // We found the exact part! Reset the stats
                         FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, consumedDurability);
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, consumedDurability);
 
+                        // CLEAR THE DIAGNOSIS so the next time it breaks, it can ask for something else
+                        part.PendingReplacementItemID = "";
+
                         availableCapacity -= allocatedCapacity;
-                        Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using a '{consumedItemID}'. Consumed {allocatedCapacity:F1} capacity. {availableCapacity:F1} remaining.");
+                        Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using the required '{requiredItemID}'. Consumed {allocatedCapacity:F1} capacity. {availableCapacity:F1} remaining.");
                         continue;
                     }
                     else
                     {
+                        // 3. We don't have the specific part in stock. Block the repair queue.
                         if (blockingPart == null || repairPriority.IndexOf(part.PartType) < repairPriority.IndexOf(blockingPart.Value))
                         {
                             blockingPart = part.PartType;
                             blockingStatus = WorkItemStatus.AwaitingParts;
                         }
 
-                        // Log all the items it was looking for so you know why it failed
-                        string missingPartsList = string.Join(", ", acceptableItemIDs);
-                        Debug.Log($"[Maintenance] Blocked: Need to replace {part.PartType} on {busData.BusID}, but we are out of stock of ALL acceptable parts: [{missingPartsList}]");
+                        Debug.Log($"[Maintenance] Blocked: Need to replace {part.PartType} on {busData.BusID}. Waiting for delivery of '{requiredItemID}'.");
                         continue;
                     }
                 }
