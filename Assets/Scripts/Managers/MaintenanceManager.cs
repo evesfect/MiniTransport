@@ -79,9 +79,8 @@ public class MaintenanceManager : NetworkBehaviour
     // --- NETWORKED SETTINGS SYNC ---
 
     [Rpc(SendTo.Server)]
-    public void UpdateThresholdsRpc(float breakdown, float operational, float replace)
+    public void UpdateThresholdsRpc(float operational, float replace)
     {
-        breakdownThreshold = breakdown;
         operationalThreshold = operational;
         replacePartThreshold = replace;
     }

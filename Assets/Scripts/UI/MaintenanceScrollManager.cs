@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,6 +8,9 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
     [Header("References")]
     public Transform contentContainer;
     public GameObject maintenanceItemPrefab; // Assign your NEW prefab here
+    
+    [Header("Popup Reference")]
+    public MaintenanceInfoPopup infoPopupPanel;
 
     private readonly List<GameObject> _pool = new List<GameObject>();
 
@@ -64,19 +68,41 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
                 var workItem = queue[i];
 
                 // Fetch the Capacity Demand
-                float capacityCost = 0f;
-                if (MaintenanceManager.Instance != null)
+                float totalCapacityCost = 0f;
+                // NEW: Calculate the TOTAL demand for the entire bus
+                if (MaintenanceManager.Instance != null && FleetManager.Instance != null)
                 {
-                    capacityCost = MaintenanceManager.Instance.GetMaxCapacityAllowance(workItem.IssuePartType);
+                    var bus = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == workItem.BusID);
+                    if (bus != null)
+                    {
+                        float replaceThreshold = MaintenanceManager.Instance.replacePartThreshold;
+
+                        foreach (var part in bus.Parts)
+                        {
+                            // Check if the part actually needs repair (same logic as MaintenanceManager)
+                            if (part.Health < part.MaxLife || part.MaxLife < replaceThreshold)
+                            {
+                                totalCapacityCost += MaintenanceManager.Instance.GetMaxCapacityAllowance(part.PartType);
+                            }
+                        }
+                    }
                 }
 
-                card.Setup(workItem, HandlePrioritize, capacityCost);
+                card.Setup(workItem, HandlePrioritize, HandleInfoClick ,totalCapacityCost);
             }
         }
 
         // 3. Hide unused slots
         for (int i = queue.Count; i < _pool.Count; i++)
             _pool[i].SetActive(false);
+    }
+
+    private void HandleInfoClick(WorkItem item)
+    {
+        if (infoPopupPanel != null)
+        {
+            infoPopupPanel.Show(item);
+        }
     }
 
     private void CommitDragOrder()
