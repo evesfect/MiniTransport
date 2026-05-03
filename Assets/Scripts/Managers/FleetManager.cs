@@ -43,6 +43,8 @@ public class FleetManager : NetworkBehaviour
         {
             LoadFleet();
 
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+
             if (CompanyManager.Instance != null)
             {
                 CompanyManager.Instance.OnWeeklyExpensesRequested += SubmitFleetExpenses;
@@ -66,6 +68,10 @@ public class FleetManager : NetworkBehaviour
     {
         if (IsServer)
         {
+
+            if (NetworkManager.Singleton != null)
+                NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+
             if (CompanyManager.Instance != null)
                 CompanyManager.Instance.OnWeeklyExpensesRequested -= SubmitFleetExpenses;
 
@@ -75,6 +81,11 @@ public class FleetManager : NetworkBehaviour
                 NetworkSyncBroker.Instance.OnFleetSyncTriggered -= PerformFleetSync;
             }
         }
+    }
+
+    private void OnClientConnected(ulong clientId)
+    {
+        if (IsServer) SyncFleetRpc(SerializeFleet(), RpcTarget.Single(clientId, RpcTargetUse.Temp));
     }
 
     private void SubmitFleetExpenses()
@@ -132,7 +143,7 @@ public class FleetManager : NetworkBehaviour
         SyncFleetRpc(json, target);
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
+    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncFleetRpc(string jsonFleet, RpcParams rpcParams = default)
     {
         if (IsServer) return;
@@ -141,6 +152,13 @@ public class FleetManager : NetworkBehaviour
         if (container != null && container.Buses != null)
         {
             allBuses = container.Buses;
+            foreach (var bus in allBuses)
+            {
+                if (bus.Parts == null || bus.Parts.Count == 0)
+                {
+                    bus.InitializeParts();
+                }
+            }
             Debug.Log($"[FleetManager] Synced {allBuses.Count} buses from Server.");
             OnFleetUpdated?.Invoke();
         }

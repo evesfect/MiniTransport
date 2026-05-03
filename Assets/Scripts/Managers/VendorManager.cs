@@ -281,7 +281,7 @@ public class VendorManager : NetworkBehaviour
         activeOrders.Add(new ActiveOrder {
             OrderID = Guid.NewGuid().ToString().Substring(0, 6),
             VendorID = vendorID,
-            ItemID = generatedID,
+            ItemID = baseItemName,
             Category = vendor.Category,
             ExpectedArrivalHour = expectedTime,
             ActualArrivalHour = actualTime,

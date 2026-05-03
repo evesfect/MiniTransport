@@ -29,6 +29,7 @@ public class BusPartData
     public BusPartType PartType;
     public float Health = 100f;   // Current condition (0 = Breakdown)
     public float MaxLife = 100f;  // Maximum repairable condition (0 = Scrap)
+    public string PendingReplacementItemID = "";
 
     public BusPartData(BusPartType type)
     {
