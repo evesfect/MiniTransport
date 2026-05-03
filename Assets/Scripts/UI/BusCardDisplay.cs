@@ -33,11 +33,39 @@ public class BusCardDisplay : MonoBehaviour
         currentBus = bus;
         onInfoClickedCallback = onInfoClicked;
 
-        // 1. Calculate and Set Health
-        float avgHealth = bus.GetAverageHealth();
+        // Setup Button Listeners once
+        if (recallButton != null)
+        {
+            recallButton.onClick.RemoveAllListeners();
+            recallButton.onClick.AddListener(OnRecallPressed);
+        }
+
+        if (infoButton != null)
+        {
+            infoButton.onClick.RemoveAllListeners();
+            infoButton.onClick.AddListener(OnInfoPressed);
+        }
+
+        // Force an immediate visual update
+        UpdateVisuals();
+    }
+
+    // This ensures the card updates in real-time as health decays or status changes!
+    private void Update()
+    {
+        if (currentBus != null)
+        {
+            UpdateVisuals();
+        }
+    }
+
+    private void UpdateVisuals()
+    {
+        // 1. Calculate and Set Live Health
+        float avgHealth = currentBus.GetAverageHealth();
         if (healthText != null) healthText.text = $"Health: {avgHealth:F1}%";
 
-        // 2. Change the background color based on health
+        // 2. Change the background color dynamically
         if (cardBackgroundImage != null)
         {
             if (avgHealth < criticalThreshold)
@@ -54,40 +82,31 @@ public class BusCardDisplay : MonoBehaviour
             }
         }
 
-        // 3. Set Current Assignment Status
+        // 3. Set TRUE Current Assignment Status
         if (statusText != null)
         {
-            if (bus.Schedule != null && !string.IsNullOrEmpty(bus.Schedule.RouteID))
+            // Check the FleetManager to see if the bus is ACTUALLY spawned and driving
+            bool isDriving = FleetManager.Instance != null && FleetManager.Instance.IsBusActive(currentBus.BusID);
+
+            if (isDriving)
             {
-                statusText.text = $"Status: On Route {bus.Schedule.RouteID}";
+                statusText.text = $"Status: Active (Route {currentBus.Schedule.RouteID})";
             }
-            else if (!string.IsNullOrEmpty(bus.AssignedDepotID))
+            else if (!string.IsNullOrEmpty(currentBus.AssignedDepotID))
             {
-                statusText.text = $"Status: In Depot {bus.AssignedDepotID}";
+                statusText.text = $"Status: Parked ({currentBus.AssignedDepotID})";
             }
             else
             {
                 statusText.text = "Status: Unassigned";
             }
         }
-
-        // 4. Setup Button Listeners
-        if (recallButton != null)
-        {
-            recallButton.onClick.RemoveAllListeners();
-            recallButton.onClick.AddListener(OnRecallPressed);
-        }
-
-        if (infoButton != null)
-        {
-            infoButton.onClick.RemoveAllListeners();
-            infoButton.onClick.AddListener(OnInfoPressed);
-        }
     }
 
     private void OnRecallPressed()
     {
         Debug.Log($"Recalling Bus: {currentBus.BusID}");
+
     }
 
     private void OnInfoPressed()

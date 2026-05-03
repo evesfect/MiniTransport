@@ -14,6 +14,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Vehicles.unity
     guid: f3b18410dfce6924886eeecb920db487
+  - enabled: 1
+    path: Assets/Scenes/TransportationManagerDevScene.unity
+    guid: 44d2ff2ceb196634586b6355159b315e
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: e92338fa7c977fd45948c63b63f9f92f, type: 3}
   m_UseUCBPForAssetBundles: 0

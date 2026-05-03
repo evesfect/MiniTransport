@@ -213,7 +213,7 @@ public class CompanyManager : NetworkBehaviour
     public void ModifySatisfaction(float amount)
     {
         GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
-        Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        //Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
         OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
     }
 

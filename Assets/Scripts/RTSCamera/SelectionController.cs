@@ -38,6 +38,7 @@ public class SelectionBoxController : MonoBehaviour
     [Header("Object Tracking")]
     public bool autoTrackSingleSelection = true;
     public bool focusOnSelection = true;
+    [HideInInspector] public bool blockSelection = false;
     public Color outlineColor = Color.white;
 
     // --- 3D selection (normal) variables ---
@@ -164,6 +165,8 @@ public class SelectionBoxController : MonoBehaviour
 
     void HandleNormalSelection()
     {
+        if (blockSelection) return;
+
         // Start selection
         if (selectAction != null && selectAction.WasPressedThisFrame())
         {
