@@ -10,6 +10,7 @@ public class VendorDebugger : MonoBehaviour
     private Vector2 _scrollDeals, _scrollMarket, _scrollOrders;
 
     private Dictionary<string, int> _partSelections = new Dictionary<string, int>();
+    private Dictionary<string, float> _orderAmounts = new Dictionary<string, float>(); // Added to track slider quantities
 
     private void OnGUI()
     {
@@ -62,7 +63,6 @@ public class VendorDebugger : MonoBehaviour
                     GUILayout.BeginVertical("box", GUILayout.Width(190));
                     
                     GUILayout.Label($"<b>{vendor.Name}</b> (Lvl {vendor.LoyaltyLevel})");
-                    // Added Base Price Multiplier and Quality Range
                     GUILayout.Label($"Base Rel: {vendor.ReliabilityScore:F0}% | Spd: x{vendor.DeliverySpeedMultiplier:F1} | Price: x{vendor.PriceMultiplier:F1}");
                     GUILayout.Label($"Quality Range: {vendor.MinDurability:F0}-{vendor.MaxDurability:F0}");
                     
@@ -71,14 +71,13 @@ public class VendorDebugger : MonoBehaviour
                     GUILayout.Label(age >= 7 ? "Free to Cancel" : $"Fee: ${VendorManager.Instance.contractCancellationFine}");
                     GUI.color = Color.white;
 
-                    // Block Cancellation if there's an active order
                     bool hasActiveOrder = VendorManager.Instance.activeOrders.Any(o => o.VendorID == deal.VendorID);
                     GUI.enabled = !hasActiveOrder;
                     if (GUILayout.Button(hasActiveOrder ? "Cannot Cancel (Active Order)" : "Cancel Contract")) 
                     {
                         VendorManager.Instance.CancelDeal(deal.VendorID);
                     }
-                    GUI.enabled = true; // reset
+                    GUI.enabled = true; 
                     
                     GUILayout.Space(5);
                     
@@ -100,18 +99,29 @@ public class VendorDebugger : MonoBehaviour
                     }
                     GUILayout.EndHorizontal();
 
-                    // Retrieve dynamically generated stats specifically for this item!
+                    // --- Quantity Selector ---
+                    if (!_orderAmounts.ContainsKey(deal.VendorID)) _orderAmounts[deal.VendorID] = 1f;
+                    
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("Qty:", GUILayout.Width(25));
+                    _orderAmounts[deal.VendorID] = GUILayout.HorizontalSlider(_orderAmounts[deal.VendorID], 1f, 50f);
+                    int orderAmount = Mathf.RoundToInt(_orderAmounts[deal.VendorID]);
+                    GUILayout.Label(orderAmount.ToString(), GUILayout.Width(20));
+                    GUILayout.EndHorizontal();
+
                     var itemStats = VendorManager.Instance.GetItemStats(vendor.VendorID, parts[selectedIndex]);
                     float estTime = VendorManager.Instance.baseDeliveryHours * itemStats.SpeedMultiplier;
                     float delayProb = 100f - itemStats.Reliability;
-                    float exactPrice = 100f * itemStats.PriceMultiplier; // Actual price calculated
+                    
+                    // Multiply exact price by the quantity slider
+                    float exactPrice = 100f * itemStats.PriceMultiplier * orderAmount; 
                     
                     GUILayout.Label($"Est: {estTime:F1}h | Risk: {delayProb:F0}%", new GUIStyle(GUI.skin.label) { fontSize = 11 });
                     GUILayout.Label($"Price: ${exactPrice:F0} | Quality: {itemStats.Durability:F0}", new GUIStyle(GUI.skin.label) { fontSize = 11 });
 
                     if (GUILayout.Button("Place Order")) 
                     {
-                        VendorManager.Instance.PlaceOrder(vendor.VendorID, parts[selectedIndex]);
+                        VendorManager.Instance.PlaceOrder(vendor.VendorID, parts[selectedIndex], orderAmount);
                     }
 
                     GUILayout.EndVertical();
@@ -138,7 +148,9 @@ public class VendorDebugger : MonoBehaviour
         foreach(var order in VendorManager.Instance.activeOrders)
         {
             GUILayout.BeginHorizontal("box");
-            GUILayout.Label($"Item: {order.ItemID}", GUILayout.Width(150));
+            
+            // This will naturally display "Tire4-13" if it was a bulk order
+            GUILayout.Label($"Item: {order.ItemID}", GUILayout.Width(150)); 
             
             if (currentAbsHour < order.ExpectedArrivalHour)
             {

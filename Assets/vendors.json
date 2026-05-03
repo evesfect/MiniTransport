@@ -212,7 +212,7 @@
         },
         {
             "BaseName": "BusFrame",
-            "Count": 2
+            "Count": 6
         },
         {
             "BaseName": "DoorAssembly",
@@ -237,6 +237,10 @@
         {
             "BaseName": "HeavyDutyTire",
             "Count": 11
+        },
+        {
+            "BaseName": "Axle",
+            "Count": 5
         }
     ]
 }
