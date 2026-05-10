@@ -278,6 +278,7 @@ public class RecoveryVehicle : VehicleDriver
         // 2. Determine Repair Goal
         // We aim to get parts back to the "Operational Threshold" (e.g., 30%) so the bus can move.
         float targetHealth = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 30f;
+        float breakdownThreshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.breakdownThreshold : 5f;
 
         // 3. Find the most critical part needing repair
         // Logic: Find parts below threshold, prioritize the lowest health, then by importance (Enum order: Engine=0 is highest priority)

@@ -36,6 +36,10 @@ public class MaintenanceManager : NetworkBehaviour
 
     public IReadOnlyList<WorkItem> WorkQueue => _workItems;
     public event Action OnWorkQueueChanged;
+    public bool IsOnRouteBreakdown(string busID)
+    {
+        return _breakdownSet.Contains(busID);
+    }
 
 
     [Header("Capacity & Prioritization")]
@@ -296,13 +300,13 @@ public class MaintenanceManager : NetworkBehaviour
                         float capacityUsed = missingHealth / effectiveRepairRate;
                         assignedTeam.AvailableCapacity -= capacityUsed;
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.MaxLife);
-                        Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID} by {assignedTeam.TeamID}. {assignedTeam.AvailableCapacity:F1} left.");
+                        Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID} by +{potentialHeal:F1} HP using {assignedTeam.TeamID}. {assignedTeam.AvailableCapacity:F1} left.");
                     }
                     else
                     {
                         assignedTeam.AvailableCapacity -= allocatedCapacity;
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.Health + potentialHeal);
-                        Debug.Log($"[Maintenance] PARTIALLY REPAIRED {part.PartType} on {busData.BusID} by {assignedTeam.TeamID}. 0 left.");
+                        Debug.Log($"[Maintenance] PARTIALLY REPAIRED {part.PartType} on {busData.BusID} by +{potentialHeal:F1} HP using {assignedTeam.TeamID}. 0 capacity left.");
                     }
                 }
             }
@@ -440,35 +444,64 @@ public class MaintenanceManager : NetworkBehaviour
         OnWorkQueueChanged?.Invoke();
     }
 
+    public void ClearDepotWorkItemForActiveBus(string busID)
+    {
+        int removed = _workItems.RemoveAll(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        if (removed > 0)
+        {
+            OnWorkQueueChanged?.Invoke();
+        }
+    }
+
     // --- PRIVATE HELPERS ---
 
     private void UpsertDepotWorkItem(string busID, BusPartType partType, WorkItemStatus status, string techName)
     {
-        // One depot work item per bus (non-breakdown items)
-        var existing = _workItems.FirstOrDefault(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        string completionLabel = status switch
+        {
+            WorkItemStatus.AwaitingParts => "Pending Delivery",
+            WorkItemStatus.InRepair => "In Repair",
+            WorkItemStatus.AwaitingTechnician => "Awaiting Team",
+            _ => "No Mechanic Assigned"
+        };
+
+        // Allow updating existing breakdown items instead of ignoring them
+        var existing = _workItems.FirstOrDefault(w => w.BusID == busID);
         if (existing != null)
         {
             existing.IssuePartType = partType;
             existing.Status = status;
             existing.AssignedTechnicianName = techName;
-            existing.EstimatedCompletionLabel = status == WorkItemStatus.AwaitingParts ? "Pending Delivery" : "No Mechanic Assigned";
+            existing.EstimatedCompletionLabel = completionLabel;
         }
         else
         {
             var item = new WorkItem(busID, partType, status);
             item.Priority = _workItems.Count;
             item.AssignedTechnicianName = techName;
-            item.EstimatedCompletionLabel = status == WorkItemStatus.AwaitingParts ? "Pending Delivery" : "No Mechanic Assigned";
+            item.EstimatedCompletionLabel = completionLabel;
             _workItems.Add(item);
         }
+
         OnWorkQueueChanged?.Invoke();
     }
 
     private void RemoveDepotWorkItem(string busID)
     {
-        int removed = _workItems.RemoveAll(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        // Remove all work items for this bus since it is fully repaired
+        int removed = _workItems.RemoveAll(w => w.BusID == busID);
+
+        // Clear the bus from the breakdown tracking set so it doesn't block future maintenance checks
+        if (_breakdownSet.Contains(busID))
+        {
+            _breakdownSet.Remove(busID);
+            removed++;
+        }
+
         if (removed > 0)
+        {
             OnWorkQueueChanged?.Invoke();
+        }
     }
 
     private string GetAssignedMechanic(string depotID)

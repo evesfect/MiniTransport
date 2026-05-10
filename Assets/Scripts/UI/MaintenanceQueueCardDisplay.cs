@@ -13,6 +13,7 @@ public class MaintenanceQueueCardDisplay : MonoBehaviour
     public TMP_Text capacityCostText;
     public TMP_Text issueText;
 
+
     [Header("Buttons")]
     public Button infoButton; // Link your newly renamed 'Info' button here
 

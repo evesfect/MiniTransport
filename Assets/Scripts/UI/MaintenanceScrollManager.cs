@@ -38,11 +38,14 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
 
     private void Refresh()
     {
+        // 1. Fetch items, filtering out any buses currently broken down out on the road
         var queue = MaintenanceManager.Instance != null
             ? MaintenanceManager.Instance.WorkQueue
-            : (IReadOnlyList<WorkItem>)new List<WorkItem>();
+                .Where(w => !MaintenanceManager.Instance.IsOnRouteBreakdown(w.BusID))
+                .ToList()
+            : new List<WorkItem>();
 
-        // 1. Grow pool and subscribe to your existing Drag Handler
+        // 2. Grow pool and subscribe to your existing Drag Handler
         while (_pool.Count < queue.Count)
         {
             var go = Instantiate(maintenanceItemPrefab, contentContainer);
@@ -56,7 +59,7 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
             _pool.Add(go);
         }
 
-        // 2. Populate slots using the NEW card display
+        // 3. Populate slots using the card display
         for (int i = 0; i < queue.Count; i++)
         {
             _pool[i].SetActive(true);
@@ -69,7 +72,8 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
 
                 // Fetch the Capacity Demand
                 float totalCapacityCost = 0f;
-                // NEW: Calculate the TOTAL demand for the entire bus
+
+                // Calculate the TOTAL demand for the entire bus
                 if (MaintenanceManager.Instance != null && FleetManager.Instance != null)
                 {
                     var bus = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == workItem.BusID);
@@ -79,7 +83,7 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
 
                         foreach (var part in bus.Parts)
                         {
-                            // Check if the part actually needs repair (same logic as MaintenanceManager)
+                            // Check if the part actually needs repair
                             if (part.Health < part.MaxLife || part.MaxLife < replaceThreshold)
                             {
                                 totalCapacityCost += MaintenanceManager.Instance.GetMaxCapacityAllowance(part.PartType);
@@ -88,13 +92,15 @@ public class MaintenanceQueueScrollManager : MonoBehaviour
                     }
                 }
 
-                card.Setup(workItem, HandlePrioritize, HandleInfoClick ,totalCapacityCost);
+                card.Setup(workItem, HandlePrioritize, HandleInfoClick, totalCapacityCost);
             }
         }
 
-        // 3. Hide unused slots
+        // 4. Hide unused slots
         for (int i = queue.Count; i < _pool.Count; i++)
+        {
             _pool[i].SetActive(false);
+        }
     }
 
     private void HandleInfoClick(WorkItem item)
