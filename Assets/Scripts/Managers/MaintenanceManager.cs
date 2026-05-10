@@ -7,6 +7,16 @@ using UnityEngine;
 [DefaultExecutionOrder(-45)] // Run after TimeManager/FleetManager, before Depot
 public class MaintenanceManager : NetworkBehaviour
 {
+
+    private class TeamCapacity
+    {
+        public string TeamID;
+        public string DepotID;
+        public float AvailableCapacity;
+        public string LeadMechanicName;
+        public bool IsCurrentlyWorkingOnABus;
+    }
+
     public static MaintenanceManager Instance { get; private set; }
 
     [Header("Settings")]
@@ -34,7 +44,7 @@ public class MaintenanceManager : NetworkBehaviour
     {
         BusPartType.Engine,
         BusPartType.Transmission,
-        BusPartType.Wheels,
+        BusPartType.Tires,
         BusPartType.Body,
         BusPartType.Interior
     };
@@ -45,12 +55,13 @@ public class MaintenanceManager : NetworkBehaviour
         {
             BusPartType.Engine => 50f,
             BusPartType.Transmission => 40f,
-            BusPartType.Wheels => 20f,
+            BusPartType.Tires => 20f,
             BusPartType.Body => 20f,
             BusPartType.Interior => 10f,
             _ => 10f,
         };
     }
+
 
     private void Awake()
     {
@@ -144,21 +155,35 @@ public class MaintenanceManager : NetworkBehaviour
     {
         if (FleetManager.Instance == null || EmployeeManager.Instance == null) return;
 
-        // 1. Calculate repair power per depot
-        Dictionary<string, float> depotRepairPower = new Dictionary<string, float>();
+        // 1. Group active mechanics by their composite key: (DepotID + TeamID)
+        Dictionary<string, TeamCapacity> activeTeams = new Dictionary<string, TeamCapacity>();
+
         foreach (var emp in EmployeeManager.Instance.allEmployees)
         {
             if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
             {
-                if (!depotRepairPower.ContainsKey(emp.AssignedDepotID))
-                    depotRepairPower[emp.AssignedDepotID] = 0f;
-                depotRepairPower[emp.AssignedDepotID] += emp.SkillLevel;
+                string teamName = string.IsNullOrEmpty(emp.AssignedTeamID) ? "General Crew" : emp.AssignedTeamID;
+                string teamKey = $"{emp.AssignedDepotID}_{teamName}";
+
+                if (!activeTeams.ContainsKey(teamKey))
+                {
+                    activeTeams[teamKey] = new TeamCapacity
+                    {
+                        TeamID = teamName,
+                        DepotID = emp.AssignedDepotID,
+                        AvailableCapacity = 0f,
+                        LeadMechanicName = emp.FullName, // First mechanic acts as the team's lead/display name
+                        IsCurrentlyWorkingOnABus = false
+                    };
+                }
+                // Pool team skill levels together
+                activeTeams[teamKey].AvailableCapacity += emp.SkillLevel;
             }
         }
 
-        Debug.Log($"[Maintenance] Hour Tick. Found {depotRepairPower.Count} active depots with mechanics.");
+        Debug.Log($"[Maintenance] Hour Tick. Found {activeTeams.Count} distinct active teams across all depots.");
 
-        // 2. Repair inactive buses and update work items for depot-parked buses
+        // 2. Process parked buses needing repairs concurrently
         foreach (var busData in FleetManager.Instance.allBuses)
         {
             if (FleetManager.Instance.IsBusActive(busData.BusID)) continue;
@@ -167,36 +192,42 @@ public class MaintenanceManager : NetworkBehaviour
             string assignedDepot = busData.AssignedDepotID;
             if (string.IsNullOrEmpty(assignedDepot)) continue;
 
-            bool hasMechanic = depotRepairPower.ContainsKey(assignedDepot) && depotRepairPower[assignedDepot] > 0f;
-
-            if (!hasMechanic)
-            {
-                // Unchanged: Handle unassigned mechanic logic
-                bool needsRepair = busData.Parts.Any(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold);
-                if (needsRepair)
-                {
-                    var worstPart = busData.Parts.OrderBy(p => p.Health).First();
-                    UpsertDepotWorkItem(busData.BusID, worstPart.PartType, WorkItemStatus.AwaitingTechnician, "Unassigned");
-                    Debug.Log($"[Maintenance] Bus {busData.BusID} needs repair but Depot {assignedDepot} has no mechanics!");
-                }
-                continue;
-            }
-
-
-
-            // THE NEW BANDWIDTH LOGIC
-            float availableCapacity = depotRepairPower[assignedDepot];
-            string mechanicName = GetAssignedMechanic(assignedDepot);
-
-            BusPartType? blockingPart = null;
-            WorkItemStatus blockingStatus = WorkItemStatus.AwaitingParts;
-
+            // Ensure health values remain clamped securely
             foreach (var part in busData.Parts)
             {
                 if (part.Health > part.MaxLife) part.Health = part.MaxLife;
             }
 
-            // Filter to only parts that need work, then sort them by our Priority List
+            // Check if any parts require intervention
+            bool needsWork = busData.Parts.Any(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold);
+            if (!needsWork)
+            {
+                RemoveDepotWorkItem(busData.BusID);
+                continue;
+            }
+
+            // Find an available team within this depot that isn't already assigned to another bus this hour
+            TeamCapacity assignedTeam = activeTeams.Values.FirstOrDefault(t =>
+                t.DepotID == assignedDepot &&
+                !t.IsCurrentlyWorkingOnABus &&
+                t.AvailableCapacity > 0f);
+
+            if (assignedTeam == null)
+            {
+                // No unassigned teams remain available to process this bus right now
+                var worstPart = busData.Parts.OrderBy(p => p.Health).First();
+                UpsertDepotWorkItem(busData.BusID, worstPart.PartType, WorkItemStatus.AwaitingTechnician, "No Free Team");
+                continue;
+            }
+
+            // Lock this team onto this bus for the duration of the current hour tick
+            assignedTeam.IsCurrentlyWorkingOnABus = true;
+            string displayTeamLabel = $"{assignedTeam.TeamID} ({assignedTeam.LeadMechanicName})";
+
+            BusPartType? blockingPart = null;
+            WorkItemStatus blockingStatus = WorkItemStatus.AwaitingParts;
+
+            // Sort broken parts strictly by our defined repair priority sequence
             var partsNeedingWork = busData.Parts
                 .Where(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold)
                 .OrderBy(p => repairPriority.IndexOf(p.PartType))
@@ -204,62 +235,51 @@ public class MaintenanceManager : NetworkBehaviour
 
             if (partsNeedingWork.Count > 0)
             {
-                Debug.Log($"[Maintenance] Bus {busData.BusID} has {partsNeedingWork.Count} parts needing work. Depot Capacity available: {availableCapacity:F1}");
+                Debug.Log($"[Maintenance] Bus {busData.BusID} assigned to {assignedTeam.TeamID}. Available Capacity: {assignedTeam.AvailableCapacity:F1}");
             }
 
             foreach (var part in partsNeedingWork)
             {
-                // If the depot is out of bandwidth for this hour, stop working!
-                if (availableCapacity <= 0) break;
+                // If the assigned team exhausts its bandwidth for the hour, pause work
+                if (assignedTeam.AvailableCapacity <= 0) break;
 
-                // Apply the Bottleneck: How much effort can actually go into this part right now?
+                // Apply specialization modifiers to the capacity bottleneck allowance
+                
                 float maxAllowance = GetMaxCapacityAllowance(part.PartType);
-                float allocatedCapacity = Mathf.Min(availableCapacity, maxAllowance);
+
+                float allocatedCapacity = Mathf.Min(assignedTeam.AvailableCapacity, maxAllowance);
 
                 // A. REPLACEMENT LOGIC
                 if (part.MaxLife < replacePartThreshold)
                 {
-                    // 1. DIAGNOSIS: If the bus doesn't know what part it needs yet, roll a random one!
                     if (string.IsNullOrEmpty(part.PendingReplacementItemID))
                     {
                         string[] acceptableItemIDs = GetValidItemIDsForPart(part.PartType);
-
-                        // Pick a random index from the array
-                        int randomIndex = UnityEngine.Random.Range(0, acceptableItemIDs.Length);
-                        part.PendingReplacementItemID = acceptableItemIDs[randomIndex];
-
-                        Debug.Log($"[Maintenance] DIAGNOSIS: Bus {busData.BusID}'s {part.PartType} has failed. Mechanic demands a '{part.PendingReplacementItemID}' to fix it.");
-
-                        // Note: You may want to call a FleetManager RPC here to sync this new string to clients so the UI updates!
+                        part.PendingReplacementItemID = acceptableItemIDs[UnityEngine.Random.Range(0, acceptableItemIDs.Length)];
+                        Debug.Log($"[Maintenance] DIAGNOSIS: Bus {busData.BusID}'s {part.PartType} failed. {assignedTeam.TeamID} demands '{part.PendingReplacementItemID}'.");
                     }
 
                     string requiredItemID = part.PendingReplacementItemID;
-                    float consumedDurability = 0f;
 
-                    // 2. Try to consume that EXACT required part
-                    if (InventoryManager.Instance.TryConsumeItem(requiredItemID, out consumedDurability))
+                    if (InventoryManager.Instance.TryConsumeItem(requiredItemID, out float consumedDurability))
                     {
-                        // We found the exact part! Reset the stats
                         FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, consumedDurability);
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, consumedDurability);
-
-                        // CLEAR THE DIAGNOSIS so the next time it breaks, it can ask for something else
                         part.PendingReplacementItemID = "";
 
-                        availableCapacity -= allocatedCapacity;
-                        Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using the required '{requiredItemID}'. Consumed {allocatedCapacity:F1} capacity. {availableCapacity:F1} remaining.");
+                        assignedTeam.AvailableCapacity -= allocatedCapacity;
+                        Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using '{requiredItemID}'. {assignedTeam.AvailableCapacity:F1} capacity left.");
                         continue;
                     }
                     else
                     {
-                        // 3. We don't have the specific part in stock. Block the repair queue.
+                        // Parts out of stock isolate the bottleneck to this specific team only
                         if (blockingPart == null || repairPriority.IndexOf(part.PartType) < repairPriority.IndexOf(blockingPart.Value))
                         {
                             blockingPart = part.PartType;
                             blockingStatus = WorkItemStatus.AwaitingParts;
                         }
-
-                        Debug.Log($"[Maintenance] Blocked: Need to replace {part.PartType} on {busData.BusID}. Waiting for delivery of '{requiredItemID}'.");
+                        Debug.Log($"[Maintenance] Blocked: {assignedTeam.TeamID} waiting for delivery of '{requiredItemID}' for Bus {busData.BusID}.");
                         continue;
                     }
                 }
@@ -268,38 +288,42 @@ public class MaintenanceManager : NetworkBehaviour
                 if (part.Health < part.MaxLife)
                 {
                     float missingHealth = part.MaxLife - part.Health;
-                    float potentialHeal = allocatedCapacity * repairPerSkillPoint;
+                    float effectiveRepairRate = repairPerSkillPoint;
+                    float potentialHeal = allocatedCapacity * effectiveRepairRate;
 
                     if (potentialHeal >= missingHealth)
                     {
-                        // We have more than enough capacity to finish the job
-                        float capacityUsed = missingHealth / repairPerSkillPoint;
-                        availableCapacity -= capacityUsed; // Only consume what we actually used
-
+                        float capacityUsed = missingHealth / effectiveRepairRate;
+                        assignedTeam.AvailableCapacity -= capacityUsed;
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.MaxLife);
-                        Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID}. Healed {missingHealth:F1}. Consumed {capacityUsed:F1} capacity. {availableCapacity:F1} left.");
+                        Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID} by {assignedTeam.TeamID}. {assignedTeam.AvailableCapacity:F1} left.");
                     }
                     else
                     {
-                        // We maxed out our allowance for this hour, so it's a partial heal
-                        availableCapacity -= allocatedCapacity; // Consume the full allocated capacity
-
+                        assignedTeam.AvailableCapacity -= allocatedCapacity;
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.Health + potentialHeal);
-                        Debug.Log($"[Maintenance] PARTIALLY REPAIRED {part.PartType} on {busData.BusID}. Healed {potentialHeal:F1}. Consumed {allocatedCapacity:F1} capacity. 0 left.");
+                        Debug.Log($"[Maintenance] PARTIALLY REPAIRED {part.PartType} on {busData.BusID} by {assignedTeam.TeamID}. 0 left.");
                     }
                 }
             }
 
-            depotRepairPower[assignedDepot] = availableCapacity;
-
-            // Upsert a single work item for the most critical blocking part
+            // Update UI Work Item attributed directly to the active team
             if (blockingPart.HasValue)
-                UpsertDepotWorkItem(busData.BusID, blockingPart.Value, blockingStatus, mechanicName);
-
-            // Remove depot work item once all parts are healthy
-            bool allHealthy = busData.Parts.All(p => p.Health >= p.MaxLife && p.MaxLife >= replacePartThreshold);
-            if (allHealthy)
-                RemoveDepotWorkItem(busData.BusID);
+            {
+                UpsertDepotWorkItem(busData.BusID, blockingPart.Value, blockingStatus, displayTeamLabel);
+            }
+            else
+            {
+                bool allHealthy = busData.Parts.All(p => p.Health >= p.MaxLife && p.MaxLife >= replacePartThreshold);
+                if (allHealthy)
+                {
+                    RemoveDepotWorkItem(busData.BusID);
+                }
+                else
+                {
+                    UpsertDepotWorkItem(busData.BusID, partsNeedingWork.First().PartType, WorkItemStatus.InRepair, displayTeamLabel);
+                }
+            }
         }
     }
     private void TriggerBreakdown(string busID, BusPartType reason)
@@ -470,7 +494,7 @@ public class MaintenanceManager : NetworkBehaviour
         {
             BusPartType.Engine => new[] { "EngineBlock", "Piston", "Alternator" },
             BusPartType.Transmission => new[] { "Axle", "BusFrame" }, 
-            BusPartType.Wheels => new[] { "StandardTire", "WinterTire", "HeavyDutyTire" },
+            BusPartType.Tires => new[] { "StandardTire", "WinterTire", "HeavyDutyTire" },
             BusPartType.Body => new[] { "BusFrame", "DoorAssembly" },
             BusPartType.Interior => new[] { "Dashboard", "SensorArray", "WiringHarness" },
             _ => new[] { "generic_part" }
@@ -479,7 +503,7 @@ public class MaintenanceManager : NetworkBehaviour
 
     private bool IsCriticalPart(BusPartType type)
     {
-        return type == BusPartType.Engine || type == BusPartType.Transmission || type == BusPartType.Wheels;
+        return type == BusPartType.Engine || type == BusPartType.Transmission || type == BusPartType.Tires;
     }
 
 
@@ -487,7 +511,7 @@ public class MaintenanceManager : NetworkBehaviour
     {
         switch (type)
         {
-            case BusPartType.Wheels: return 1.2f; // Tires wear out fast
+            case BusPartType.Tires: return 1.2f; // Tires wear out fast
             case BusPartType.Body: return 0.2f;   // Body lasts long
             default: return 1.0f;
         }

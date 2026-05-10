@@ -80,6 +80,8 @@ public class EmployeeManager : NetworkBehaviour
 
             // Initial Population if empty
             if (candidates.Count == 0) RefreshCandidates();
+
+            AutoAssignMechanicsToTeams();
         }
         else
         {
@@ -287,6 +289,104 @@ public class EmployeeManager : NetworkBehaviour
         return baseWeeklyWage + (skill * wagePerSkillPoint);
     }
 
+    public void AutoAssignMechanicsToTeams()
+    {
+        if (!IsServer) return;
+
+        bool changed = false;
+        float targetCapacity = 50f;
+
+        string[] teamNames = new[] { "Team Alpha", "Team Beta", "Team Gamma", "Team Delta", "Team Echo", "Team Omega" };
+
+        // Group active mechanics by depot
+        var depotGroups = allEmployees
+            .Where(e => e.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(e.AssignedDepotID))
+            .GroupBy(e => e.AssignedDepotID);
+
+        foreach (var group in depotGroups)
+        {
+            var mechanicsInDepot = group.ToList();
+
+            // Check if this depot already has custom teams assigned from a saved game
+            bool hasCustomTeams = mechanicsInDepot.Any(m =>
+                !string.IsNullOrEmpty(m.AssignedTeamID) &&
+                m.AssignedTeamID != "General Crew"
+            );
+
+            // If custom teams already exist, leave this depot intact so we don't destroy manual edits
+            if (hasCustomTeams) continue;
+
+            // Sort descending by skill level to pack larger skill pools first
+            var sortedMechanics = mechanicsInDepot.OrderByDescending(e => e.SkillLevel).ToList();
+            List<List<EmployeeData>> teams = new List<List<EmployeeData>>();
+
+            foreach (var mechanic in sortedMechanics)
+            {
+                var targetTeam = teams.FirstOrDefault(t => t.Sum(m => m.SkillLevel) < targetCapacity);
+
+                if (targetTeam != null)
+                {
+                    targetTeam.Add(mechanic);
+                }
+                else
+                {
+                    teams.Add(new List<EmployeeData> { mechanic });
+                }
+            }
+
+            // Safety merge: if the final formed team failed to reach 50 capacity, merge it backward
+            if (teams.Count > 1)
+            {
+                var lastTeam = teams.Last();
+                if (lastTeam.Sum(m => m.SkillLevel) < targetCapacity)
+                {
+                    teams.RemoveAt(teams.Count - 1);
+                    teams.Last().AddRange(lastTeam);
+                }
+            }
+
+            // Apply assigned team names back to the serialized data
+            for (int i = 0; i < teams.Count; i++)
+            {
+                string teamName = i < teamNames.Length ? teamNames[i] : $"Team {i + 1}";
+                foreach (var mechanic in teams[i])
+                {
+                    if (mechanic.AssignedTeamID != teamName)
+                    {
+                        mechanic.AssignedTeamID = teamName;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if (changed)
+        {
+            SaveEmployees();
+            SyncEmployeesRpc(SerializeEmployees());
+            Debug.Log("[Auto-Assign] Initialized mechanic teams ensuring minimum engine repair capacity.");
+        }
+    }
+
+    public void AssignMechanicToTeam(string employeeID, string depotID, string teamID)
+    {
+        if (IsServer) AssignMechanicToTeamInternal(employeeID, depotID, teamID);
+        else RequestTeamAssignmentRpc(employeeID, depotID, teamID);
+    }
+
+    private void AssignMechanicToTeamInternal(string employeeID, string depotID, string teamID)
+    {
+        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
+        if (emp == null || emp.Role != EmployeeRole.Mechanic) return;
+
+        emp.AssignedDepotID = depotID;
+        emp.AssignedTeamID = string.IsNullOrEmpty(teamID) ? "General Crew" : teamID;
+
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
+        Debug.Log($"[Employee] Assigned {emp.FullName} to Depot: {depotID}, Team: {emp.AssignedTeamID}");
+    }
+
     // --- Internal Logic (Server) ---
 
     private void HireCandidateInternal(int index)
@@ -433,6 +533,12 @@ public class EmployeeManager : NetworkBehaviour
             allEmployees = container.Employees;
             candidates = container.Candidates;
         }
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestTeamAssignmentRpc(string employeeID, string depotID, string teamID)
+    {
+        AssignMechanicToTeamInternal(employeeID, depotID, teamID);
     }
 
     // --- Persistence ---

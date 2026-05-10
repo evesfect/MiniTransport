@@ -7,7 +7,8 @@
             "SkillLevel": 35.0,
             "WeeklySalary": 270.0,
             "AssignedBusID": "",
-            "AssignedDepotID": "Depot_Main"
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team Beta"
         },
         {
             "EmployeeID": "99f27f21",
@@ -16,7 +17,8 @@
             "SkillLevel": 55.5766487121582,
             "WeeklySalary": 311.1532897949219,
             "AssignedBusID": "02",
-            "AssignedDepotID": ""
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
         },
         {
             "EmployeeID": "29e04b36",
@@ -25,7 +27,8 @@
             "SkillLevel": 11.477323532104493,
             "WeeklySalary": 222.95465087890626,
             "AssignedBusID": "",
-            "AssignedDepotID": "Depot_North"
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team Alpha"
         },
         {
             "EmployeeID": "612f0889",
@@ -34,7 +37,8 @@
             "SkillLevel": 14.595304489135743,
             "WeeklySalary": 229.19061279296876,
             "AssignedBusID": "01",
-            "AssignedDepotID": ""
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
         },
         {
             "EmployeeID": "612f0823",
@@ -43,7 +47,8 @@
             "SkillLevel": 9.595304489135743,
             "WeeklySalary": 219.19061279296876,
             "AssignedBusID": "04",
-            "AssignedDepotID": ""
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
         },
         {
             "EmployeeID": "1f35b546",
@@ -52,7 +57,8 @@
             "SkillLevel": 41.14485549926758,
             "WeeklySalary": 282.2897033691406,
             "AssignedBusID": "03",
-            "AssignedDepotID": ""
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
         },
         {
             "EmployeeID": "80664ef2",
@@ -61,7 +67,8 @@
             "SkillLevel": 78.60816955566406,
             "WeeklySalary": 357.2163391113281,
             "AssignedBusID": "",
-            "AssignedDepotID": "Depot_Main"
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team Alpha"
         },
         {
             "EmployeeID": "fb076144",
@@ -70,7 +77,50 @@
             "SkillLevel": 17.09154510498047,
             "WeeklySalary": 234.18309020996095,
             "AssignedBusID": "",
-            "AssignedDepotID": "Depot_Main"
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team Beta"
+        }
+    ],
+    "Candidates": [
+        {
+            "EmployeeID": "232dc756",
+            "FullName": "Applicant 969",
+            "Role": 1,
+            "SkillLevel": 7.550620079040527,
+            "WeeklySalary": 215.1012420654297,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
+        },
+        {
+            "EmployeeID": "16040614",
+            "FullName": "Applicant 886",
+            "Role": 1,
+            "SkillLevel": 58.028282165527347,
+            "WeeklySalary": 316.05657958984377,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
+        },
+        {
+            "EmployeeID": "80be00a5",
+            "FullName": "Applicant 133",
+            "Role": 1,
+            "SkillLevel": 19.5163516998291,
+            "WeeklySalary": 239.03269958496095,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
+        },
+        {
+            "EmployeeID": "39a59368",
+            "FullName": "Applicant 260",
+            "Role": 0,
+            "SkillLevel": 64.500244140625,
+            "WeeklySalary": 329.00048828125,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
         }
     ]
 }

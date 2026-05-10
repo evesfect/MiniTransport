@@ -81,8 +81,19 @@ public class InventoryManager : NetworkBehaviour
     [ContextMenu("Load Inventory")]
     public void LoadInventory()
     {
-        InitializeInventory(); 
-        if (File.Exists(SavePath)) ApplyJsonToDatabase(File.ReadAllText(SavePath));
+        InitializeInventory();
+        if (File.Exists(SavePath))
+        {
+            ApplyJsonToDatabase(File.ReadAllText(SavePath));
+
+            // ADD THIS LOOP: Force the local Host UI to refresh visually after loading from disk
+            foreach (var kvp in inventoryDatabase)
+            {
+                OnItemQuantityChanged?.Invoke(kvp.Key, kvp.Value.Count);
+            }
+
+            Debug.Log($"[InventoryManager] Successfully loaded and refreshed {inventoryDatabase.Count} item stacks from JSON.");
+        }
     }
 
     public void AddPartWithDurability(string itemID, float durability)

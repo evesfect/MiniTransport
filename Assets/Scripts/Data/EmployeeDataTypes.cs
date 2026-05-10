@@ -26,6 +26,8 @@ public class EmployeeData
     [Header("Assignment")]
     public string AssignedBusID;
     public string AssignedDepotID;
+    [Header("Team Logistics")]
+    public string AssignedTeamID;
 }
 
 [Serializable]

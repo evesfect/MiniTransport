@@ -10,10 +10,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c4275922d959ef742a03a5cf4edc7855, type: 3}
-  m_Name: StandartTire
+  m_Name: StandardTire
   m_EditorClassIdentifier: Assembly-CSharp::InventoryItemData
-  ItemID: StandartTire
-  DisplayName: Standart Tire
+  ItemID: StandardTire
+  DisplayName: Standard Tire
   Description: A reliable all-season bus tire
   icon: {fileID: 0}
   Category: 0

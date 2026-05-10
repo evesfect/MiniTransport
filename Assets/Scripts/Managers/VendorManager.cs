@@ -121,11 +121,7 @@ public class VendorManager : NetworkBehaviour
 
                 for (int i = 0; i < actualAmount; i++)
                 {
-                    string specificID = (order.Amount > 0 && !string.IsNullOrEmpty(order.BaseItemName)) 
-                        ? $"{order.BaseItemName}{order.StartIndex + i}" 
-                        : order.ItemID;
-                        
-                    InventoryManager.Instance.AddPartWithDurability(specificID, order.DurabilityRoll);
+                   InventoryManager.Instance.AddPartWithDurability(order.ItemID, order.DurabilityRoll);
                 }
                 
                 if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived LATE from {order.VendorID}.");
@@ -301,7 +297,10 @@ public class VendorManager : NetworkBehaviour
             ExpectedArrivalHour = expectedTime,
             ActualArrivalHour = actualTime,
             IsDelayed = isDelayed,
-            DurabilityRoll = itemStats.Durability 
+            DurabilityRoll = itemStats.Durability,
+            Amount = amount,
+            BaseItemName = baseItemName,
+            StartIndex = startIdx
         });
         
         CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier * amount, TransactionCategory.PartPurchase, $"Ordered {generatedDisplayID}");
