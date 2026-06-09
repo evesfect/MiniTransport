@@ -12,32 +12,32 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 86.85075378417969,
-                    "MaxLife": 93.62950134277344,
+                    "Health": 85.46907806396485,
+                    "MaxLife": 91.61360931396485,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 81.85075378417969,
-                    "MaxLife": 93.62950134277344,
+                    "Health": 85.46907806396485,
+                    "MaxLife": 91.61360931396485,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 64.23265075683594,
-                    "MaxLife": 92.36512756347656,
+                    "Health": 63.72510528564453,
+                    "MaxLife": 89.94913482666016,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 98.31510925292969,
-                    "MaxLife": 98.73741149902344,
+                    "Health": 97.10879516601563,
+                    "MaxLife": 98.33731079101563,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 35.237064361572269,
-                    "MaxLife": 93.63849639892578,
+                    "Health": 14.811952590942383,
+                    "MaxLife": 91.62260437011719,
                     "PendingReplacementItemID": ""
                 }
             ],
@@ -47,7 +47,7 @@
             "BusID": "02",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
+                "RouteID": "66456769",
                 "StartTime": 7.0,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
@@ -55,32 +55,32 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 89.67276000976563,
-                    "MaxLife": 94.0032958984375,
+                    "Health": 87.17090606689453,
+                    "MaxLife": 92.1153335571289,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 84.67276000976563,
-                    "MaxLife": 94.0032958984375,
+                    "Health": 87.17090606689453,
+                    "MaxLife": 92.1153335571289,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 67.61833190917969,
-                    "MaxLife": 92.8131103515625,
+                    "Health": 60.95063781738281,
+                    "MaxLife": 90.5504379272461,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 98.63304901123047,
-                    "MaxLife": 98.81060791015625,
+                    "Health": 97.44732666015625,
+                    "MaxLife": 98.43589782714844,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 38.966156005859378,
-                    "MaxLife": 94.00729370117188,
+                    "Health": 16.740562438964845,
+                    "MaxLife": 92.11933135986328,
                     "PendingReplacementItemID": ""
                 }
             ],
@@ -98,32 +98,32 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 94.7698745727539,
-                    "MaxLife": 94.7698745727539,
+                    "Health": 89.69855499267578,
+                    "MaxLife": 93.0108413696289,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 94.7698745727539,
-                    "MaxLife": 94.7698745727539,
+                    "Health": 89.69855499267578,
+                    "MaxLife": 93.0108413696289,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 81.58995819091797,
-                    "MaxLife": 93.7318344116211,
+                    "Health": 87.6491470336914,
+                    "MaxLife": 91.6236801147461,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 98.96235656738281,
-                    "MaxLife": 98.96235656738281,
+                    "Health": 97.95098876953125,
+                    "MaxLife": 98.61323547363281,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 77.98555755615235,
-                    "MaxLife": 94.7718734741211,
+                    "Health": 78.88188934326172,
+                    "MaxLife": 93.0128402709961,
                     "PendingReplacementItemID": ""
                 }
             ],
@@ -133,7 +133,7 @@
             "BusID": "04",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
+                "RouteID": "66456769",
                 "StartTime": 12.149999618530274,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
@@ -141,32 +141,32 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 95.72335052490235,
-                    "MaxLife": 95.72335052490235,
+                    "Health": 94.52900695800781,
+                    "MaxLife": 94.52900695800781,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 94.67353057861328,
-                    "MaxLife": 95.72335052490235,
+                    "Health": 94.52900695800781,
+                    "MaxLife": 94.52900695800781,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 79.61610412597656,
-                    "MaxLife": 94.87454986572266,
+                    "Health": 93.44316101074219,
+                    "MaxLife": 93.44316101074219,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 99.15119934082031,
-                    "MaxLife": 99.15119934082031,
+                    "Health": 98.91415405273438,
+                    "MaxLife": 98.91415405273438,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 79.67353057861328,
-                    "MaxLife": 95.72335052490235,
+                    "Health": 88.22273254394531,
+                    "MaxLife": 94.52900695800781,
                     "PendingReplacementItemID": ""
                 }
             ],

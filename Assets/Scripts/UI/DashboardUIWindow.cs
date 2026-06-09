@@ -13,6 +13,7 @@ public class DashboardUIWindow : MonoBehaviour
 
     [Header("Company Text")]
     [SerializeField] private TextMeshProUGUI balanceText;
+    [SerializeField] private TextMeshProUGUI transferTripsText;
 
     [Header("Fleet & Maintenance Text")]
     [SerializeField] private TextMeshProUGUI busesText;
@@ -81,6 +82,9 @@ public class DashboardUIWindow : MonoBehaviour
     {
         if (balanceText != null)
             balanceText.text = $"Balance: ${data.currentBalance:N2}";
+
+        if (transferTripsText != null)
+            transferTripsText.text = $"Transfer Trips: {data.transferTripCount}";
     }
 
     private void UpdateFleetUI(FleetStatsData data)

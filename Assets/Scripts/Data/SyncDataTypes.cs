@@ -15,6 +15,7 @@ public enum SyncDataType
 public struct CompanyStatsData
 {
     public float currentBalance;
+    public int transferTripCount; // Global KPI: Number of Transfer Trips
 }
 
 [Serializable]
