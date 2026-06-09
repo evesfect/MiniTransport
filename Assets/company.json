@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 42004.9921875,
+    "CurrentBalance": 40458.015625,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -2027,20 +2027,148 @@
             "Count": 2
         },
         {
-            "Amount": -8526.658203125,
+            "Amount": -124795.375,
             "Type": 1,
             "Category": 5,
             "Description": "Simulated Random Repair",
             "Timestamp": 1,
-            "Count": 29
+            "Count": 472
         },
         {
-            "Amount": 7820.43212890625,
+            "Amount": 118033.7890625,
             "Type": 1,
             "Category": 2,
             "Description": "Simulated Passenger Fare",
             "Timestamp": 1,
-            "Count": 31
+            "Count": 463
+        },
+        {
+            "Amount": 143322.734375,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 2,
+            "Count": 564
+        },
+        {
+            "Amount": -151724.890625,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 2,
+            "Count": 576
+        },
+        {
+            "Amount": -106658.9375,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 3,
+            "Count": 430
+        },
+        {
+            "Amount": 108595.4765625,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 3,
+            "Count": 415
+        },
+        {
+            "Amount": -111036.453125,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 439
+        },
+        {
+            "Amount": 109069.78125,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 413
+        },
+        {
+            "Amount": -144160.59375,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 2,
+            "Count": 581
+        },
+        {
+            "Amount": 144656.53125,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 2,
+            "Count": 561
+        },
+        {
+            "Amount": -25857.94140625,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 3,
+            "Count": 99
+        },
+        {
+            "Amount": 28790.7578125,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 3,
+            "Count": 107
+        },
+        {
+            "Amount": -236761.25,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 931
+        },
+        {
+            "Amount": 238468.9375,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 939
+        },
+        {
+            "Amount": -54705.0234375,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 2,
+            "Count": 204
+        },
+        {
+            "Amount": 50400.0390625,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 2,
+            "Count": 201
+        },
+        {
+            "Amount": 120476.921875,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 466
+        },
+        {
+            "Amount": -108367.6328125,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 434
         }
     ]
 }
