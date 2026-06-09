@@ -228,8 +228,8 @@ public class CompanyManager : NetworkBehaviour
         if (NetworkSyncBroker.Instance != null)
             NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyStats);
 
-        OnTransferRecorded?.Invoke(); // let KPIManager refresh the transfer-trip report value
 
+        OnTransferRecorded?.Invoke(); // let KPIManager refresh the transfer-trip report value
         _needsSave = true;
     }
 
