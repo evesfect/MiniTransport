@@ -1,7 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 19320.982421875,
-    "TransferTripCount": 87,
+    "CurrentBalance": 41152.12109375,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -2028,19 +2027,31 @@
             "Count": 2
         },
         {
+<<<<<<< HEAD
             "Amount": -167774.890625,
+=======
+            "Amount": -39926.67578125,
+>>>>>>> 8a1cbb3e719e3e9fe1c73000eba05683ccf0edc3
             "Type": 1,
             "Category": 5,
             "Description": "Simulated Random Repair",
             "Timestamp": 1,
+<<<<<<< HEAD
             "Count": 644
         },
         {
             "Amount": 148688.421875,
+=======
+            "Count": 154
+        },
+        {
+            "Amount": 38367.578125,
+>>>>>>> 8a1cbb3e719e3e9fe1c73000eba05683ccf0edc3
             "Type": 1,
             "Category": 2,
             "Description": "Simulated Passenger Fare",
             "Timestamp": 1,
+<<<<<<< HEAD
             "Count": 595
         },
         {
@@ -2074,6 +2085,9 @@
             "Description": "Simulated Passenger Fare",
             "Timestamp": 1,
             "Count": 97
+=======
+            "Count": 142
+>>>>>>> 8a1cbb3e719e3e9fe1c73000eba05683ccf0edc3
         }
     ]
 }
