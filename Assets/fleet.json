@@ -47,7 +47,7 @@
             "BusID": "02",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
+                "RouteID": "66456769",
                 "StartTime": 7.0,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
@@ -133,7 +133,7 @@
             "BusID": "04",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
+                "RouteID": "66456769",
                 "StartTime": 12.149999618530274,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
@@ -141,8 +141,8 @@
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 95.72335052490235,
-                    "MaxLife": 95.72335052490235,
+                    "Health": 94.52900695800781,
+                    "MaxLife": 94.52900695800781,
                     "PendingReplacementItemID": ""
                 },
                 {
@@ -159,8 +159,8 @@
                 },
                 {
                     "PartType": 3,
-                    "Health": 99.15119934082031,
-                    "MaxLife": 99.15119934082031,
+                    "Health": 98.91415405273438,
+                    "MaxLife": 98.91415405273438,
                     "PendingReplacementItemID": ""
                 },
                 {
