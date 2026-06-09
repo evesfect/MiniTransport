@@ -36,6 +36,7 @@ public class CompanyManager : NetworkBehaviour
     public event Action<Transaction> OnTransactionAdded;
     public event Action OnWeeklyExpensesRequested;
     public event Action<float> OnSatisfactionChanged;
+    public event Action OnTransferRecorded; // raised when TransferTripCount changes (KPI report refresh)
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "company.json");
@@ -210,6 +211,28 @@ public class CompanyManager : NetworkBehaviour
         _needsSave = true;
     }
 
+    /// <summary>
+    /// Server-only. Records that <paramref name="count"/> passengers made a transfer,
+    /// feeding the global "Number of Transfer Trips" KPI.
+    /// </summary>
+    public void RecordTransfer(int count)
+    {
+        if (!IsServer || count <= 0) return;
+
+        _companyData.TransferTripCount += count;
+
+        // Company stats are surfaced to the local dashboard via OnBalanceChanged
+        // (the dashboard rebuilds the full stats snapshot); the balance value is unchanged.
+        OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
+
+        if (NetworkSyncBroker.Instance != null)
+            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyStats);
+
+        OnTransferRecorded?.Invoke(); // let KPIManager refresh the transfer-trip report value
+
+        _needsSave = true;
+    }
+
     public void ModifySatisfaction(float amount)
     {
         GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
@@ -219,7 +242,11 @@ public class CompanyManager : NetworkBehaviour
 
     private void PerformStatsSync(BaseRpcTarget target)
     {
-        var stats = new CompanyStatsData { currentBalance = _companyData.CurrentBalance };
+        var stats = new CompanyStatsData
+        {
+            currentBalance = _companyData.CurrentBalance,
+            transferTripCount = _companyData.TransferTripCount
+        };
         SyncStatsRpc(JsonUtility.ToJson(stats), target);
     }
 
@@ -246,7 +273,8 @@ public class CompanyManager : NetworkBehaviour
         
         var stats = JsonUtility.FromJson<CompanyStatsData>(json);
         _companyData.CurrentBalance = stats.currentBalance;
-        
+        _companyData.TransferTripCount = stats.transferTripCount;
+
         OnBalanceChanged?.Invoke(stats.currentBalance);
     }
 
@@ -300,6 +328,7 @@ public class CompanyData
 {
     public string CompanyName;
     public float CurrentBalance;
+    public int TransferTripCount; // Global KPI: cumulative number of passenger transfers
     public List<Transaction> History = new List<Transaction>();
 }
 

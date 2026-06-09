@@ -75,8 +75,9 @@ public class RoleReportUI : MonoBehaviour
     private void Subscribe(SyncDataType type)
     {
         if (type == SyncDataType.None) return;
+        // IsListening guards against firing an RPC before the NetworkManager has started.
         var nm = NetworkManager.Singleton;
-        if (nm != null && !nm.IsServer && NetworkSyncBroker.Instance != null)
+        if (nm != null && nm.IsListening && !nm.IsServer && NetworkSyncBroker.Instance != null)
             NetworkSyncBroker.Instance.SubscribeRpc(type);
     }
 
@@ -84,7 +85,7 @@ public class RoleReportUI : MonoBehaviour
     {
         if (type == SyncDataType.None) return;
         var nm = NetworkManager.Singleton;
-        if (nm != null && !nm.IsServer && NetworkSyncBroker.Instance != null)
+        if (nm != null && nm.IsListening && !nm.IsServer && NetworkSyncBroker.Instance != null)
             NetworkSyncBroker.Instance.UnsubscribeRpc(type);
     }
 

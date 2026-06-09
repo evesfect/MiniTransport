@@ -26,8 +26,9 @@ public class GeneralReportUI : MonoBehaviour
             KPIManager.Instance.OnReportsUpdated += Render;
 
         // Clients ask the server to start streaming this report (host reads locally).
+        // IsListening guards against firing an RPC before the NetworkManager has started.
         var nm = NetworkManager.Singleton;
-        if (nm != null && !nm.IsServer && NetworkSyncBroker.Instance != null)
+        if (nm != null && nm.IsListening && !nm.IsServer && NetworkSyncBroker.Instance != null)
             NetworkSyncBroker.Instance.SubscribeRpc(SyncDataType.GeneralReport);
 
         Render();
@@ -39,7 +40,7 @@ public class GeneralReportUI : MonoBehaviour
             KPIManager.Instance.OnReportsUpdated -= Render;
 
         var nm = NetworkManager.Singleton;
-        if (nm != null && !nm.IsServer && NetworkSyncBroker.Instance != null)
+        if (nm != null && nm.IsListening && !nm.IsServer && NetworkSyncBroker.Instance != null)
             NetworkSyncBroker.Instance.UnsubscribeRpc(SyncDataType.GeneralReport);
     }
 

@@ -18,9 +18,9 @@ public class PassengerManager : NetworkBehaviour
     // --- KPI collection hooks (server-side; consumed by KPIManager) ---
     public event Action<float, int> OnPassengersServed;   // waitHours, count (boarded before timeout)
     public event Action<int> OnPassengersTimedOut;        // count (gave up waiting)
-    // TODO (Number Of Transfers): passengers are anonymous WaitingPassengerGroups keyed by
-    // destination tile, so there is no journey identity to detect a route-to-route transfer.
-    // When persistent passenger journeys are added, raise an OnPassengerTransferred event here.
+    // Number Of Transfers is detected in BusDriver when a passenger alights at a connecting
+    // stop, counted in CompanyManager.TransferTripCount, and surfaced to the KPI report via
+    // CompanyManager.OnTransferRecorded.
 
     // Optimization: Only check timeouts every X frames to save performance
     private int _tickCounter = 0;

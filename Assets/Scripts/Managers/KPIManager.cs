@@ -68,6 +68,9 @@ public class KPIManager : NetworkBehaviour
             PassengerManager.Instance.OnPassengersTimedOut += OnPassengersTimedOut;
         }
 
+        if (CompanyManager.Instance != null)
+            CompanyManager.Instance.OnTransferRecorded += OnTransferRecorded;
+
         if (EmployeeManager.Instance != null)
             EmployeeManager.Instance.OnEmployeeHired += OnEmployeeHired;
 
@@ -97,6 +100,9 @@ public class KPIManager : NetworkBehaviour
             PassengerManager.Instance.OnPassengersServed -= OnPassengersServed;
             PassengerManager.Instance.OnPassengersTimedOut -= OnPassengersTimedOut;
         }
+
+        if (CompanyManager.Instance != null)
+            CompanyManager.Instance.OnTransferRecorded -= OnTransferRecorded;
 
         if (EmployeeManager.Instance != null)
             EmployeeManager.Instance.OnEmployeeHired -= OnEmployeeHired;
@@ -143,6 +149,13 @@ public class KPIManager : NetworkBehaviour
     private void OnPassengersTimedOut(int count)
     {
         _passengersTimedOut += count;
+        MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
+    }
+
+    // Transfers are counted in CompanyManager.TransferTripCount (see BusDriver); this just
+    // refreshes the reports that display it.
+    private void OnTransferRecorded()
+    {
         MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
     }
 
@@ -298,7 +311,7 @@ public class KPIManager : NetworkBehaviour
             customerSatisfaction = CompanyManager.Instance != null ? CompanyManager.Instance.GlobalSatisfaction : 0f,
             onTimePerformance = OnTimePerformance(),
             avgWaitMinutes = AvgWaitMinutes(),
-            transfers = 0, // stub (see PassengerManager TODO)
+            transfers = CompanyManager.Instance != null ? CompanyManager.Instance.GetCompanyData().TransferTripCount : 0,
             totalBreakdowns = _totalBreakdowns,
             fleetReliability = FleetReliability(),
             fleetUtilization = Utilization(),
@@ -313,7 +326,7 @@ public class KPIManager : NetworkBehaviour
         {
             onTimePerformance = OnTimePerformance(),
             avgWaitMinutes = AvgWaitMinutes(),
-            transfers = 0, // stub
+            transfers = CompanyManager.Instance != null ? CompanyManager.Instance.GetCompanyData().TransferTripCount : 0,
             fleetUtilization = Utilization(),
             passengersServed = _passengersServed,
             passengersMissed = _passengersTimedOut,

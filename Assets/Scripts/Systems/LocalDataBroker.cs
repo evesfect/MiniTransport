@@ -190,7 +190,11 @@ public class LocalDataBroker : MonoBehaviour, ILocalDataProvider
         {
             CompanyData realData = CompanyManager.Instance.GetCompanyData();
             if (realData != null)
-                dataCache.SetCompanyData(new CompanyStatsData { currentBalance = realData.CurrentBalance });
+                dataCache.SetCompanyData(new CompanyStatsData
+                {
+                    currentBalance = realData.CurrentBalance,
+                    transferTripCount = realData.TransferTripCount
+                });
         }
         else if (type == SyncDataType.FleetStats && FleetManager.Instance != null)
         {
