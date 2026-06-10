@@ -307,6 +307,12 @@ public class VendorManager : NetworkBehaviour
 
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());
+
+        // NEW: Tell Request Manager parts were ordered, passing the base item name.
+        if (RequestManager.Instance != null)
+        {
+            RequestManager.Instance.NotifyActionTaken(RequestType.BuyParts, amount, baseItemName);
+        }
     }
 
     [Rpc(SendTo.Server)] private void RequestSignDealRpc(string vID, BusPartCategory c) { SignDealInternal(vID, c); }

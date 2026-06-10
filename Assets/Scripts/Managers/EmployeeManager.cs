@@ -52,6 +52,8 @@ public class EmployeeManager : NetworkBehaviour
     public event Action<string> OnEmployeeFired;
     public event Action<string, float> OnEmployeeTrained; // ID, NewSkill
     public event Action OnCandidatesUpdated;
+    // [NEW] Event to tell UI panels (like the HR Request Panel) to refresh their lists
+    public event Action OnEmployeeDataUpdated;
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "employees.json");
@@ -467,6 +469,12 @@ public class EmployeeManager : NetworkBehaviour
             Debug.Log($"[HR] Hired {candidate.FullName}");
 
             
+
+            // NEW: Tell Request Manager a mechanic was hired, pass their skill level
+            if (candidate.Role == EmployeeRole.Mechanic && RequestManager.Instance != null)
+            {
+                RequestManager.Instance.NotifyActionTaken(RequestType.HireMechanic, 1, candidate.SkillLevel.ToString());
+            }
         }
     }
 
@@ -532,6 +540,12 @@ public class EmployeeManager : NetworkBehaviour
             SyncEmployeesRpc(SerializeEmployees());
             OnEmployeeTrained?.Invoke(id, emp.SkillLevel);
             Debug.Log($"[HR] Trained {emp.FullName}. New Skill: {emp.SkillLevel}");
+
+            // NEW FIX: Pass the 'id' of the trained mechanic as the specificCondition
+            if (emp.Role == EmployeeRole.Mechanic && RequestManager.Instance != null)
+            {
+                RequestManager.Instance.NotifyActionTaken(RequestType.TrainMechanic, 1, id); 
+            }
         }
     }
 
@@ -561,7 +575,12 @@ public class EmployeeManager : NetworkBehaviour
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncEmployeesRpc(string json, RpcParams rpcParams = default)
     {
-        if (IsServer) return;
+        // [NEW] If Host, data is already updated, we just need to fire the UI refresh event
+        if (IsServer) 
+        {
+            OnEmployeeDataUpdated?.Invoke();
+            return;
+        }
         var container = JsonUtility.FromJson<EmployeeContainer>(json);
         if (container != null)
         {
@@ -613,6 +632,8 @@ public class EmployeeManager : NetworkBehaviour
         }
 
         Debug.Log($"[EmployeeManager] Loaded {allEmployees.Count} employees from: {SavePath}");
+        // [NEW] Fire UI update event after initial file load
+        OnEmployeeDataUpdated?.Invoke();
     }
 
 }
