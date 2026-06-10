@@ -36,6 +36,7 @@ public class CompanyManager : NetworkBehaviour
     public event Action<Transaction> OnTransactionAdded;
     public event Action OnWeeklyExpensesRequested;
     public event Action<float> OnSatisfactionChanged;
+    public event Action OnLedgerUpdated;
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "company.json");
@@ -208,6 +209,7 @@ public class CompanyManager : NetworkBehaviour
         }
 
         _needsSave = true;
+        OnLedgerUpdated?.Invoke();
     }
 
     public void ModifySatisfaction(float amount)
@@ -256,6 +258,7 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer) return;
         var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
         _companyData.History = ledger.transactions;
+        OnLedgerUpdated?.Invoke();
     }
 
     [ContextMenu("Save Company")]
@@ -282,6 +285,7 @@ public class CompanyManager : NetworkBehaviour
             }
         }
         else ResetData();
+        OnLedgerUpdated?.Invoke();
     }
 
     private void ResetData()
