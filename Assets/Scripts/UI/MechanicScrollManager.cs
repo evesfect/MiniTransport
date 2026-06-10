@@ -1,12 +1,13 @@
 using UnityEngine;
 using System.Collections.Generic;
 using System.Collections;
+using System.Linq;
 
 public class MechanicScrollManager : MonoBehaviour
 {
     [Header("Hierarchy References")]
-    [SerializeField] private Transform scrollContentParent; 
-    [SerializeField] private MechanicDetailPanel detailPanel; 
+    [SerializeField] private Transform scrollContentParent;
+    [SerializeField] private MechanicDetailPanel detailPanel;
 
     [Header("Prefabs")]
     [SerializeField] private GameObject mechanicCardPrefab;
@@ -15,11 +16,7 @@ public class MechanicScrollManager : MonoBehaviour
 
     private void OnEnable()
     {
-        if (_refreshRoutine != null)
-        {
-            StopCoroutine(_refreshRoutine);
-        }
-
+        if (_refreshRoutine != null) StopCoroutine(_refreshRoutine);
         _refreshRoutine = StartCoroutine(WaitForEmployeeDataAndRefresh());
     }
 
@@ -34,7 +31,6 @@ public class MechanicScrollManager : MonoBehaviour
 
     private IEnumerator WaitForEmployeeDataAndRefresh()
     {
-        // Give network/load flow time to populate EmployeeManager on first open.
         const float timeout = 2f;
         float elapsed = 0f;
 
@@ -50,17 +46,7 @@ public class MechanicScrollManager : MonoBehaviour
 
     public void RefreshList()
     {
-        if (scrollContentParent == null)
-        {
-            Debug.LogError("[MechanicScrollManager] Scroll Content Parent is not assigned.");
-            return;
-        }
-
-        if (mechanicCardPrefab == null)
-        {
-            Debug.LogError("[MechanicScrollManager] Mechanic Card Prefab is not assigned.");
-            return;
-        }
+        if (scrollContentParent == null || mechanicCardPrefab == null) return;
 
         ClearList();
         PopulateMechanicsList();
@@ -76,49 +62,39 @@ public class MechanicScrollManager : MonoBehaviour
 
     private void PopulateMechanicsList()
     {
-        if (EmployeeManager.Instance == null || EmployeeManager.Instance.allEmployees == null)
-        {
-            Debug.LogError("EmployeeManager is missing or data is not loaded!");
-            return;
-        }
+        if (EmployeeManager.Instance == null || EmployeeManager.Instance.allEmployees == null) return;
 
         int shownCount = 0;
 
-        foreach (EmployeeData employee in EmployeeManager.Instance.allEmployees)
-        {
-            // Only spawn cards for Mechanics (Role == 1 in your enum)
-            if (employee.Role == EmployeeRole.Mechanic)
-            {
-                CreateMechanicCard(employee);
-                shownCount++;
-            }
-        }
+        // Sort by Depot first, then by NORMALIZED Team ID so crew members sit adjacent to one another
+        var sortedMechanics = EmployeeManager.Instance.allEmployees
+            .Where(e => e.Role == EmployeeRole.Mechanic)
+            .OrderBy(e => e.AssignedDepotID)
+            .ThenBy(e => string.IsNullOrEmpty(e.AssignedTeamID) ? "General Crew" : e.AssignedTeamID)
+            .ToList();
 
-        Debug.Log($"[MechanicScrollManager] Listed {shownCount} mechanics out of {EmployeeManager.Instance.allEmployees.Count} employees.");
+        foreach (EmployeeData employee in sortedMechanics)
+        {
+            CreateMechanicCard(employee);
+            shownCount++;
+        }
     }
 
     private void CreateMechanicCard(EmployeeData employeeData)
     {
         GameObject newCard = Instantiate(mechanicCardPrefab, scrollContentParent);
-        
+
         if (newCard.TryGetComponent(out MechanicCardDisplay cardDisplay))
         {
             cardDisplay.Populate(employeeData, OnMechanicInfoClicked);
-        }
-        else
-        {
-            Debug.LogError("MechanicCard prefab is missing MechanicCardDisplay script!");
         }
     }
 
     private void OnMechanicInfoClicked(EmployeeData selectedEmployee)
     {
-        if (detailPanel == null)
+        if (detailPanel != null)
         {
-            Debug.LogWarning("[MechanicScrollManager] Detail panel is not assigned.");
-            return;
+            detailPanel.PopulateDetailView(selectedEmployee);
         }
-
-        detailPanel.PopulateDetailView(selectedEmployee);
     }
 }

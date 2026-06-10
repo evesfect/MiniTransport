@@ -17,7 +17,7 @@ public enum BusPartType
 {
     Engine = 0,
     Transmission = 1,
-    Wheels = 2,
+    Tires = 2,
     Body = 3,
     Interior = 4,
     None = 255 // For when not broken
@@ -54,7 +54,7 @@ public class BusData
         {
             Parts.Add(new BusPartData(BusPartType.Engine));
             Parts.Add(new BusPartData(BusPartType.Transmission));
-            Parts.Add(new BusPartData(BusPartType.Wheels));
+            Parts.Add(new BusPartData(BusPartType.Tires));
             Parts.Add(new BusPartData(BusPartType.Body));
             Parts.Add(new BusPartData(BusPartType.Interior));
         }

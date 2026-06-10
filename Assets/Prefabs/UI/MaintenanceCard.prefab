@@ -511,6 +511,8 @@ MonoBehaviour:
   busIdText: {fileID: 6048235793856663031}
   statusText: {fileID: 3270310810973408600}
   capacityCostText: {fileID: 7794585561365630226}
+  issueText: {fileID: 2508529234562552669}
+  teamText: {fileID: 8546730694732915568}
   infoButton: {fileID: 7559131780096232119}
 --- !u!1 &4974460122403318348
 GameObject:

@@ -65,7 +65,7 @@ public class MaintenanceInfoPopup : MonoBehaviour
                     UpdateBar(transmissionBar, healthPct);
                     if (transmissionDemandText) transmissionDemandText.text = demandString;
                     break;
-                case BusPartType.Wheels:
+                case BusPartType.Tires:
                     UpdateBar(wheelsBar, healthPct);
                     if (wheelsDemandText) wheelsDemandText.text = demandString;
                     break;
@@ -80,7 +80,26 @@ public class MaintenanceInfoPopup : MonoBehaviour
             }
         }
 
-        popupIssueText.text = $"Primary Issue: {workItem.IssuePartType}";
+        var primaryPartData = bus.Parts.FirstOrDefault(p => p.PartType == workItem.IssuePartType);
+        string primaryIssueDisplay = FormatPartName(workItem.IssuePartType.ToString());
+
+        if (primaryPartData != null)
+        {
+            if (!string.IsNullOrEmpty(primaryPartData.PendingReplacementItemID))
+            {
+                primaryIssueDisplay = FormatPartName(primaryPartData.PendingReplacementItemID);
+            }
+            else if (primaryPartData.MaxLife < replaceThreshold)
+            {
+                primaryIssueDisplay = $"{FormatPartName(workItem.IssuePartType.ToString())} (Replacement)";
+            }
+            else if (primaryPartData.Health < primaryPartData.MaxLife)
+            {
+                primaryIssueDisplay = $"{FormatPartName(workItem.IssuePartType.ToString())} (Repair)";
+            }
+        }
+
+        popupIssueText.text = $"Primary Issue: {primaryIssueDisplay}";
 
         gameObject.SetActive(true);
     }
@@ -94,5 +113,11 @@ public class MaintenanceInfoPopup : MonoBehaviour
             else if (percentage > 0.2f) bar.color = Color.yellow;
             else bar.color = Color.red;
         }
+    }
+
+    private string FormatPartName(string rawName)
+    {
+        if (string.IsNullOrEmpty(rawName)) return "";
+        return string.Concat(rawName.Select((x, i) => i > 0 && char.IsUpper(x) ? " " + x : x.ToString()));
     }
 }

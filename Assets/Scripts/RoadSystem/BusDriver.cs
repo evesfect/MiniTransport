@@ -45,7 +45,7 @@ public class BusDriver : VehicleDriver
     private bool _hasNotifiedStop = false;
     private float _breakdownBuffer = 2.0f;
 
-    private float _currentDriverSkillMultiplier = 1.0f;
+    
 
     public float RemainingPathDistance => Mathf.Max(0f, m_ServerCurrentLegLength - m_ServerDistanceTraveled);
 
@@ -106,17 +106,7 @@ public class BusDriver : VehicleDriver
         };
         _netState.Value = initState;
 
-        if (EmployeeManager.Instance != null)
-        {
-            
-            var driver = EmployeeManager.Instance.GetDriverForBus(entry.BusID);
-            if (driver != null)
-            {
-                // Convert Skill (e.g., 1-5) to a Multiplier (e.g., 0.8 to 1.2)
-                // Skill 1 = 0.8x (Bad), Skill 3 = 1.0x (Normal), Skill 5 = 1.2x (Great)
-                _currentDriverSkillMultiplier = 0.7f + (driver.SkillLevel * 0.1f);
-            }
-        }
+        
     }
 
     private void Update()
@@ -337,9 +327,20 @@ public class BusDriver : VehicleDriver
         {
             float baseReward = totalInteractions * CompanyManager.Instance.baseRewardPerPassenger;
 
-            // Apply Driver Skill
-            // Better drivers make passengers happier
-            float finalReward = baseReward * _currentDriverSkillMultiplier;
+            // NEW SATISFACTION CALCULATION: Derived from the Bus's Interior Health condition
+            float interiorHealthPct = 1.0f;
+            if (_serverEntry != null && _serverEntry.Parts != null)
+            {
+                var interiorPart = _serverEntry.Parts.FirstOrDefault(p => p.PartType == BusPartType.Interior);
+                if (interiorPart != null)
+                {
+                    interiorHealthPct = Mathf.Clamp01(interiorPart.Health / 100f);
+                }
+            }
+
+            // Map interior health (0.0 to 1.0) to a satisfaction multiplier (0.7x to 1.2x)
+            float conditionMultiplier = 0.7f + (interiorHealthPct * 0.5f);
+            float finalReward = baseReward * conditionMultiplier;
 
             CompanyManager.Instance.ModifySatisfaction(finalReward);
         }

@@ -275,6 +275,14 @@ public class FleetManager : NetworkBehaviour
             {
                 part.Health = Mathf.Clamp(newHealth, 0f, 100f);
             }
+
+            OnFleetUpdated?.Invoke();
+
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.MaintenanceStats);
+            }
         }
     }
 

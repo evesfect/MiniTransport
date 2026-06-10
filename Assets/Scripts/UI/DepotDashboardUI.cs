@@ -90,28 +90,55 @@ public class DepotDashboardUI : MonoBehaviour
         // 1. Clean out the old mechanics list
         foreach (Transform child in mechanicsListContainer) Destroy(child.gameObject);
 
-        // 2. Calculate SUPPLY (Total Mechanic Skill)
+        // 2. Calculate SUPPLY (Total Mechanic Skill) and list mechanics grouped & labeled by their Team
         float totalSupply = 0f;
-        foreach (var emp in EmployeeManager.Instance.allEmployees)
+
+        var depotMechanics = EmployeeManager.Instance.allEmployees
+            .Where(e => e.Role == EmployeeRole.Mechanic && e.AssignedDepotID == depotID)
+            .OrderBy(e => string.IsNullOrEmpty(e.AssignedTeamID) ? "General Crew" : e.AssignedTeamID)
+            .ToList();
+
+        foreach (var emp in depotMechanics)
         {
-            if (emp.Role == EmployeeRole.Mechanic && emp.AssignedDepotID == depotID)
-            {
-                totalSupply += emp.SkillLevel;
-                GameObject newRow = Instantiate(mechanicRowPrefab, mechanicsListContainer);
-                newRow.GetComponent<MechanicUIRow>()?.Setup(emp.FullName, emp.SkillLevel);
-            }
+            totalSupply += emp.SkillLevel;
+            string teamName = string.IsNullOrEmpty(emp.AssignedTeamID) ? "General Crew" : emp.AssignedTeamID;
+
+            GameObject newRow = Instantiate(mechanicRowPrefab, mechanicsListContainer);
+            // Reusing your existing row component perfectly while appending the team name visually
+            newRow.GetComponent<MechanicUIRow>()?.Setup($"{emp.FullName} ({teamName})", emp.SkillLevel);
         }
 
         // 3. Calculate DEMAND (Total Workload for this Depot)
+        // Instead of relying on the single WorkItem per bus in WorkQueue, directly evaluate all broken parts
+        // across all buses assigned to this depot. This guarantees an accurate, real-time demand measurement.
         float totalDemand = 0f;
-        foreach (var workItem in MaintenanceManager.Instance.WorkQueue)
+        float replaceThreshold = MaintenanceManager.Instance.replacePartThreshold;
+        float repairRate = MaintenanceManager.Instance.repairPerSkillPoint;
+
+        foreach (var bus in FleetManager.Instance.allBuses)
         {
-            var bus = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == workItem.BusID);
-            if (bus != null && bus.AssignedDepotID == depotID)
+            // IGNORE buses that are currently out driving routes or unassigned
+            if (bus.AssignedDepotID != depotID || bus.Parts == null) continue;
+            if (FleetManager.Instance.IsBusActive(bus.BusID)) continue;
+
+            foreach (var part in bus.Parts)
             {
-                // Note: Ensure your MaintenanceManager has a method like GetMaxCapacityAllowance
-                // or just read the required capacity directly from the workItem.
-                totalDemand += MaintenanceManager.Instance.GetMaxCapacityAllowance(workItem.IssuePartType);
+                float maxAllowance = MaintenanceManager.Instance.GetMaxCapacityAllowance(part.PartType);
+
+                // A. REPLACEMENT: Needs full allocated capacity allowance to swap the part
+                if (part.MaxLife < replaceThreshold)
+                {
+                    totalDemand += maxAllowance;
+                }
+                // B. REPAIR: Only count the actual capacity required to top-up the health
+                else if (part.Health < part.MaxLife)
+                {
+                    float missingHealth = part.MaxLife - part.Health;
+                    float capacityNeededToHeal = missingHealth / (repairRate > 0 ? repairRate : 1f);
+
+                    // Clamp it so a repair demand never exceeds the hourly bottleneck allowance
+                    totalDemand += Mathf.Min(capacityNeededToHeal, maxAllowance);
+                }
             }
         }
 

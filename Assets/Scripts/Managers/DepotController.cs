@@ -91,7 +91,7 @@ public class DepotController : NetworkBehaviour
             {
                 if (IsBusConditionGoodEnough(busData, threshold))
                 {
-                    if (EmployeeManager.Instance != null && EmployeeManager.Instance.HasAssignedDriver(busData.BusID))
+                    if (EmployeeManager.Instance != null)
                     {
                         SpawnBus(busData);
                     }
@@ -198,6 +198,11 @@ public class DepotController : NetworkBehaviour
 
         FleetManager.Instance.RegisterSpawnedBus(data.BusID, newBusObj);
         Debug.Log($"[Depot] Spawned Bus {data.BusID} on Route {route.RouteName}");
+
+        if (MaintenanceManager.Instance != null)
+        {
+            MaintenanceManager.Instance.ClearDepotWorkItemForActiveBus(data.BusID);
+        }
     }
 
     public void ReturnBusToDepot(string busID)

@@ -11,6 +11,8 @@ public class MaintenanceQueueCardDisplay : MonoBehaviour
     public TMP_Text busIdText;
     public TMP_Text statusText;
     public TMP_Text capacityCostText;
+    public TMP_Text issueText;
+
 
     [Header("Buttons")]
     public Button infoButton; // Link your newly renamed 'Info' button here
@@ -30,6 +32,11 @@ public class MaintenanceQueueCardDisplay : MonoBehaviour
         if (capacityCostText != null)
         {
             capacityCostText.text = $"Demand: {capacityCost:F0} Cap/hr";
+        }
+
+        if (issueText != null)
+        {
+            issueText.text = $"{item.IssuePartType}";
         }
 
         // Ensure listeners are clean, then add the new one
