@@ -306,6 +306,43 @@ public class TransportManager : NetworkBehaviour
         return ActiveRoutes.FirstOrDefault(r => r.RouteID == routeID);
     }
 
+    // KPI: % of registered stops served by at least one active route. -1 if no stops exist.
+    public float StopCoveragePercent()
+    {
+        if (_stopRegistry == null || _stopRegistry.Count == 0) return -1f;
+        return (ServedRegisteredStops() / (float)_stopRegistry.Count) * 100f;
+    }
+
+    // KPI: number of registered stops not served by any active route.
+    public int StopsNotCovered()
+    {
+        if (_stopRegistry == null) return 0;
+        return Mathf.Max(0, _stopRegistry.Count - ServedRegisteredStops());
+    }
+
+    // KPI: highest stop count on any single active route (0 if no routes).
+    public int LongestRouteStopCount()
+    {
+        int max = 0;
+        foreach (var route in ActiveRoutes)
+            if (route?.StopIDs != null && route.StopIDs.Count > max)
+                max = route.StopIDs.Count;
+        return max;
+    }
+
+    // Count of registered stops that appear on at least one active route.
+    private int ServedRegisteredStops()
+    {
+        var served = new HashSet<string>();
+        foreach (var route in ActiveRoutes)
+        {
+            if (route?.StopIDs == null) continue;
+            foreach (var stopID in route.StopIDs)
+                if (_stopRegistry.ContainsKey(stopID)) served.Add(stopID);
+        }
+        return served.Count;
+    }
+
     private string SerializeRoutes()
     {
         RouteContainer container = new RouteContainer { Routes = ActiveRoutes };

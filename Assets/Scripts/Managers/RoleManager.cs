@@ -39,6 +39,18 @@ public class RoleManager : NetworkBehaviour
         return _playerRoles.ContainsValue(role);
     }
 
+    // Maps a player role to the end-of-game report (SyncDataType) it should see.
+    // Vendor KPIs have no dedicated role; the Finance manager surfaces them separately.
+    public static SyncDataType RoleToReport(PlayerRole role) => role switch
+    {
+        PlayerRole.GeneralManager     => SyncDataType.GeneralReport,
+        PlayerRole.TransportManager   => SyncDataType.OperationsReport,
+        PlayerRole.MaintenanceManager => SyncDataType.MaintenanceReport,
+        PlayerRole.HRManager          => SyncDataType.HrReport,
+        PlayerRole.FinanceManager     => SyncDataType.FinanceReport,
+        _                             => SyncDataType.GeneralReport
+    };
+
     private void ClaimRoleInternal(ulong clientId, PlayerRole requestedRole)
     {
         if (requestedRole != PlayerRole.None && IsRoleTaken(requestedRole))
