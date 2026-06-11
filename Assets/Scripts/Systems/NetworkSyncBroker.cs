@@ -14,6 +14,25 @@ public class NetworkSyncBroker : NetworkBehaviour
     public float companyLedgerRate = 1.0f;
     public float fleetStatsRate = 2.0f;
     public float maintenanceStatsRate = 1.0f;
+    [Tooltip("Shared rate limit for all end-of-game report snapshots (infrequent).")]
+    public float reportRate = 5.0f;
+
+    // Report snapshots all behave identically (slow rate, server builds a small struct,
+    // sends to subscribers), so they share one event keyed by type instead of six.
+    public static readonly SyncDataType[] ReportTypes =
+    {
+        SyncDataType.GeneralReport,
+        SyncDataType.OperationsReport,
+        SyncDataType.MaintenanceReport,
+        SyncDataType.HrReport,
+        SyncDataType.FinanceReport,
+        SyncDataType.VendorReport
+    };
+
+    private static bool IsReportType(SyncDataType type)
+    {
+        return Array.IndexOf(ReportTypes, type) >= 0;
+    }
 
     private Dictionary<SyncDataType, bool> _dirtyFlags = new Dictionary<SyncDataType, bool>();
     private Dictionary<SyncDataType, float> _timers = new Dictionary<SyncDataType, float>();
@@ -24,6 +43,8 @@ public class NetworkSyncBroker : NetworkBehaviour
     public event Action<BaseRpcTarget> OnCompanyLedgerSyncTriggered;
     public event Action<BaseRpcTarget> OnFleetSyncTriggered;
     public event Action<BaseRpcTarget> OnMaintenanceSyncTriggered;
+    // Fired for any report type; the (type, target) pair tells KPIManager what to build/send.
+    public event Action<SyncDataType, BaseRpcTarget> OnReportSyncTriggered;
 
     private void Awake()
     {
@@ -61,6 +82,27 @@ public class NetworkSyncBroker : NetworkBehaviour
         ProcessSync(SyncDataType.CompanyLedger, companyLedgerRate, OnCompanyLedgerSyncTriggered);
         ProcessSync(SyncDataType.FleetStats, fleetStatsRate, OnFleetSyncTriggered);
         ProcessSync(SyncDataType.MaintenanceStats, maintenanceStatsRate, OnMaintenanceSyncTriggered);
+
+        foreach (var reportType in ReportTypes)
+            ProcessReportSync(reportType);
+    }
+
+    private void ProcessReportSync(SyncDataType type)
+    {
+        _timers[type] += Time.deltaTime;
+
+        if (_dirtyFlags[type] && _timers[type] >= reportRate)
+        {
+            var targetClients = _subscribers[type].ToArray();
+            if (targetClients.Length > 0)
+            {
+                BaseRpcTarget target = RpcTarget.Group(targetClients, RpcTargetUse.Temp);
+                OnReportSyncTriggered?.Invoke(type, target);
+            }
+
+            _dirtyFlags[type] = false;
+            _timers[type] = 0f;
+        }
     }
 
     private void ProcessSync(SyncDataType type, float rateLimit, Action<BaseRpcTarget> syncAction)
@@ -97,6 +139,7 @@ public class NetworkSyncBroker : NetworkBehaviour
         if (type == SyncDataType.CompanyLedger) OnCompanyLedgerSyncTriggered?.Invoke(target);
         if (type == SyncDataType.FleetStats) OnFleetSyncTriggered?.Invoke(target);
         if (type == SyncDataType.MaintenanceStats) OnMaintenanceSyncTriggered?.Invoke(target);
+        if (IsReportType(type)) OnReportSyncTriggered?.Invoke(type, target);
     }
 
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
