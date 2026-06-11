@@ -30,6 +30,9 @@ public class RoleManager : NetworkBehaviour
 
     public PlayerRole GetMyRole()
     {
+        // Network may not be running yet (e.g. a panel activated in the editor before host start).
+        if (NetworkManager.Singleton == null) return PlayerRole.None;
+
         ulong myId = NetworkManager.Singleton.LocalClientId;
         return _playerRoles.ContainsKey(myId) ? _playerRoles[myId] : PlayerRole.None;
     }

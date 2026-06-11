@@ -91,19 +91,24 @@ public class CompanyManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer && _needsSave)
+        if (!IsServer || !_needsSave) return;
+
+        _saveTimer += Time.deltaTime;
+        if (_saveTimer < 5f) return;
+
+        // Reset the timer up front, regardless of outcome. If the write fails (e.g. the file is
+        // briefly locked by OneDrive sync), we retry on the NEXT 5s interval instead of hammering
+        // the locked file every frame — which is what turned a single transient lock into an
+        // endless IOException storm.
+        _saveTimer = 0f;
+
+        if (TrySaveCompanyData())
         {
-            _saveTimer += Time.deltaTime;
-            if (_saveTimer >= 5f) 
+            _needsSave = false;
+
+            if (NetworkSyncBroker.Instance != null)
             {
-                SaveCompanyData();
-                _needsSave = false;
-                _saveTimer = 0f;
-                
-                if (NetworkSyncBroker.Instance != null)
-                {
-                    NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
-                }
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
             }
         }
     }
@@ -291,10 +296,23 @@ public class CompanyManager : NetworkBehaviour
     }
 
     [ContextMenu("Save Company")]
-    public void SaveCompanyData()
+    public void SaveCompanyData() => TrySaveCompanyData();
+
+    // Returns true on success. Failures are swallowed and logged once so a transient file lock
+    // (OneDrive sync touching the Assets copy) doesn't throw an unhandled exception every frame.
+    private bool TrySaveCompanyData()
     {
-        string json = JsonUtility.ToJson(_companyData, true);
-        File.WriteAllText(SavePath, json);
+        try
+        {
+            string json = JsonUtility.ToJson(_companyData, true);
+            File.WriteAllText(SavePath, json);
+            return true;
+        }
+        catch (IOException e)
+        {
+            Debug.LogWarning($"[CompanyManager] Save deferred (file busy), will retry next interval: {e.Message}");
+            return false;
+        }
     }
 
     [ContextMenu("Load Company")]
