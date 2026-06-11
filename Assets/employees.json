@@ -109,6 +109,16 @@
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": ""
+        },
+        {
+            "EmployeeID": "3257ced5",
+            "FullName": "Applicant 501",
+            "Role": 0,
+            "SkillLevel": 69.15321350097656,
+            "WeeklySalary": 338.3064270019531,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": ""
         }
     ],
     "Candidates": [
@@ -121,16 +131,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": ""
-        },
-        {
-            "EmployeeID": "3257ced5",
-            "FullName": "Applicant 501",
-            "Role": 0,
-            "SkillLevel": 69.15321350097656,
-            "WeeklySalary": 338.3064270019531,
-            "AssignedBusID": "",
-            "AssignedDepotID": "",
-            "AssignedTeamID": ""
         }
-    ]
+    ],
+    "AdCampaignActive": false,
+    "PendingAdTier": 0
 }

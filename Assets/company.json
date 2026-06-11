@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 47500.22265625,
+    "CurrentBalance": 50106.19140625,
     "TransferTripCount": 167,
     "History": [
         {
@@ -2044,13 +2044,28 @@
             "Count": 132
         },
         {
-            "Amount": -25597.060546875,
+            "Amount": -64516.234375,
             "Type": 1,
             "Category": 5,
             "Description": "Simulated Random Repair",
             "Timestamp": 1,
-            "Count": 97
+            "Count": 258
+        },
+        {
+            "Amount": 41963.44921875,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 173
+        },
+        {
+            "Amount": -438.3064270019531,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 501",
+            "Timestamp": 1,
+            "Count": 1
         }
-        
     ]
 }
