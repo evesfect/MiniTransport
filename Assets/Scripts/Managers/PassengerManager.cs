@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
@@ -13,6 +14,13 @@ public class PassengerManager : NetworkBehaviour
     [Header("Patience Settings")]
     [Tooltip("How many game-hours a passenger waits before leaving angry.")]
     public float maxWaitTimeHours = 2.5f;
+
+    // --- KPI collection hooks (server-side; consumed by KPIManager) ---
+    public event Action<float, int> OnPassengersServed;   // waitHours, count (boarded before timeout)
+    public event Action<int> OnPassengersTimedOut;        // count (gave up waiting)
+    // Number Of Transfers is detected in BusDriver when a passenger alights at a connecting
+    // stop, counted in CompanyManager.TransferTripCount, and surfaced to the KPI report via
+    // CompanyManager.OnTransferRecorded.
 
     // Optimization: Only check timeouts every X frames to save performance
     private int _tickCounter = 0;
@@ -91,6 +99,16 @@ public class PassengerManager : NetworkBehaviour
             if (groups[i].DestinationTileIndex == destinationTile)
             {
                 var g = groups[i];
+                int boarded = Mathf.Min(count, g.PassengerCount);
+
+                // KPI: these passengers boarded a bus, so record how long they waited.
+                if (boarded > 0 && SimulationTimeManager.Instance != null)
+                {
+                    float waitHours = SimulationTimeManager.Instance.CurrentTimeOfDay - g.SpawnTime;
+                    if (waitHours < 0) waitHours += 24f; // day wrap-around
+                    OnPassengersServed?.Invoke(waitHours, boarded);
+                }
+
                 if (g.PassengerCount <= count)
                 {
                     groups.RemoveAt(i);
@@ -103,7 +121,7 @@ public class PassengerManager : NetworkBehaviour
                 break;
             }
         }
-        
+
         SyncStopPassengersClientRpc(stopID, groups.ToArray());
     }
 
@@ -145,6 +163,8 @@ public class PassengerManager : NetworkBehaviour
                     float penalty = -(leavingCount * 0.1f * CompanyManager.Instance.satisfactionPenaltyPertimeout);
 
                     CompanyManager.Instance.ModifySatisfaction(penalty);
+
+                    OnPassengersTimedOut?.Invoke(leavingCount); // KPI: missed passengers
 
                     
                     //Debug.Log($"[PassengerManager] {leavingCount} passengers gave up at Stop {stopID}. Penalty: {penalty}");

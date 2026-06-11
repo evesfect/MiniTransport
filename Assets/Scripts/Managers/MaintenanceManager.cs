@@ -36,6 +36,11 @@ public class MaintenanceManager : NetworkBehaviour
 
     public IReadOnlyList<WorkItem> WorkQueue => _workItems;
     public event Action OnWorkQueueChanged;
+
+    // --- KPI collection hooks (server-side; consumed by KPIManager) ---
+    public event Action<string, BusPartType> OnBreakdownOccurred; // busID, failed part
+    public event Action OnRepairCompleted;                        // a part fully repaired
+    public event Action OnPartReplaced;                           // a part swapped from inventory
     public bool IsOnRouteBreakdown(string busID)
     {
         return _breakdownSet.Contains(busID);
@@ -273,6 +278,7 @@ public class MaintenanceManager : NetworkBehaviour
 
                         assignedTeam.AvailableCapacity -= allocatedCapacity;
                         Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using '{requiredItemID}'. {assignedTeam.AvailableCapacity:F1} capacity left.");
+                        OnPartReplaced?.Invoke(); // KPI: count parts replaced
                         continue;
                     }
                     else
@@ -301,6 +307,7 @@ public class MaintenanceManager : NetworkBehaviour
                         assignedTeam.AvailableCapacity -= capacityUsed;
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.MaxLife);
                         Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID} by +{potentialHeal:F1} HP using {assignedTeam.TeamID}. {assignedTeam.AvailableCapacity:F1} left.");
+                        OnRepairCompleted?.Invoke(); // KPI: count repairs completed
                     }
                     else
                     {
@@ -348,6 +355,7 @@ public class MaintenanceManager : NetworkBehaviour
             item.Priority = _workItems.Count;
             _workItems.Add(item);
             OnWorkQueueChanged?.Invoke();
+            OnBreakdownOccurred?.Invoke(busID, reason); // KPI: count lifetime breakdowns
             TryDispatchJobs();
         }
     }
