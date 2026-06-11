@@ -9,35 +9,36 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 91.69644165039063,
-                    "MaxLife": 91.88845825195313,
+                    "Health": 89.13829040527344,
+                    "MaxLife": 91.77851867675781,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 91.69644165039063,
-                    "MaxLife": 91.88845825195313,
+                    "Health": 89.13829040527344,
+                    "MaxLife": 91.77851867675781,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 69.46756744384766,
-                    "MaxLife": 90.27853393554688,
+                    "Health": 76.1677017211914,
+                    "MaxLife": 90.14677429199219,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 98.35346984863281,
-                    "MaxLife": 98.39186096191406,
+                    "Health": 97.8421630859375,
+                    "MaxLife": 98.37004089355469,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 21.685956954956056,
-                    "MaxLife": 91.89745330810547,
+                    "Health": 23.935998916625978,
+                    "MaxLife": 91.78751373291016,
                     "PendingReplacementItemID": ""
                 }
             ],
@@ -52,35 +53,36 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 92.47313690185547,
-                    "MaxLife": 92.47313690185547,
+                    "Health": 90.998046875,
+                    "MaxLife": 92.41416931152344,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 92.47313690185547,
-                    "MaxLife": 92.47313690185547,
+                    "Health": 90.998046875,
+                    "MaxLife": 92.41416931152344,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 73.33639526367188,
-                    "MaxLife": 90.97925567626953,
+                    "Health": 81.56646728515625,
+                    "MaxLife": 90.90858459472656,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 98.50691223144531,
-                    "MaxLife": 98.50691223144531,
+                    "Health": 98.21207427978516,
+                    "MaxLife": 98.49520874023438,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 30.689302444458009,
-                    "MaxLife": 92.47713470458985,
+                    "Health": 34.214210510253909,
+                    "MaxLife": 92.41816711425781,
                     "PendingReplacementItemID": ""
                 }
             ],
@@ -95,6 +97,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
@@ -110,7 +113,7 @@
                 },
                 {
                     "PartType": 2,
-                    "Health": 90.96739959716797,
+                    "Health": 92.22857666015625,
                     "MaxLife": 92.22857666015625,
                     "PendingReplacementItemID": ""
                 },
@@ -122,7 +125,7 @@
                 },
                 {
                     "PartType": 4,
-                    "Health": 85.45913696289063,
+                    "Health": 93.51756286621094,
                     "MaxLife": 93.51756286621094,
                     "PendingReplacementItemID": ""
                 }
@@ -138,6 +141,7 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
@@ -147,25 +151,25 @@
                 },
                 {
                     "PartType": 1,
-                    "Health": 91.33441162109375,
+                    "Health": 95.03073120117188,
                     "MaxLife": 95.03073120117188,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 89.60911560058594,
+                    "Health": 94.04446411132813,
                     "MaxLife": 94.04446411132813,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 98.03765869140625,
+                    "Health": 98.77668762207031,
                     "MaxLife": 98.77668762207031,
                     "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 91.33441162109375,
+                    "Health": 95.03073120117188,
                     "MaxLife": 95.03073120117188,
                     "PendingReplacementItemID": ""
                 }
