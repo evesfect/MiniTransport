@@ -21,6 +21,39 @@ public class RoleManager : NetworkBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    public override void OnNetworkSpawn()
+    {
+        if (IsServer)
+        {
+            // Add this listener
+            NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnect;
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (IsServer && NetworkManager.Singleton != null)
+        {
+            // Clean up the listener
+            NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnect;
+        }
+    }
+
+    private void HandleClientDisconnect(ulong clientId)
+    {
+        // Find which role this disconnected client was holding
+        foreach (var kvp in _playerRoles)
+        {
+            if (kvp.Key == clientId)
+            {
+                // Free up the role
+                _playerRoles[kvp.Key] = PlayerRole.None;
+                SyncRolesClientRpc(SerializeRoles());
+                break;
+            }
+        }
+    }
+
     // Call this from your pre-game UI
     public void SelectRole(PlayerRole requestedRole)
     {

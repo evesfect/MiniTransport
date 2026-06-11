@@ -302,6 +302,24 @@ public class BusDriver : VehicleDriver
 
     private void DespawnBus()
     {
+        // Check if the bus was flagged for sale while it was out driving
+        if (_serverEntry != null && _serverEntry.PendingSale)
+        {
+            Debug.Log($"[BusDriver] Bus {_serverEntry.BusID} returned to depot and is now being sold!");
+            
+            // Trigger the actual sale/removal
+            FleetManager.Instance.RequestFleetOperationRpc(JsonUtility.ToJson(new BusData { BusID = _serverEntry.BusID }), FleetManager.FleetOperation.Remove);
+            
+            // Grant the income now that the shift is over
+            if (CompanyManager.Instance != null)
+            {
+                CompanyManager.Instance.AddIncome(8000f, TransactionCategory.VehiclePurchase, $"Sold bus {_serverEntry.BusID} (Delayed)");
+            }
+            
+            return; // Stop here, do not return it to the normal depot cycle
+        }
+
+        // Normal behavior: park the bus
         if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry.BusID);
     }
 

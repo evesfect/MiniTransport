@@ -45,6 +45,7 @@ public class BusData
     public string BusID;
     public string AssignedDepotID;
     public BusSchedule Schedule;
+    public bool PendingSale = false;
     public List<BusPartData> Parts = new List<BusPartData>();
     public ushort Capacity;
 

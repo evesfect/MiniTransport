@@ -19,10 +19,10 @@ public class BuyBusApprovalCardUI : MonoBehaviour
         
         summaryText.text = $"{request.Requester} requests the purchase of {request.TargetAmount} new buses.";
 
-        // Setup dynamic slider constraints
-        approveSlider.minValue = 0;
-        approveSlider.maxValue = request.TargetAmount;
-        approveSlider.value = request.TargetAmount; // Default to full approval
+        // Force slider to start at 1, max is the requested amount
+        approveSlider.minValue = 1;
+        approveSlider.maxValue = Mathf.Max(1, request.TargetAmount); 
+        approveSlider.value = 1; 
 
         approveSlider.onValueChanged.RemoveAllListeners();
         approveSlider.onValueChanged.AddListener(val => sliderValueText.text = val.ToString("0"));
@@ -32,19 +32,17 @@ public class BuyBusApprovalCardUI : MonoBehaviour
         approveButton.onClick.AddListener(OnApprove);
 
         rejectButton.onClick.RemoveAllListeners();
-        rejectButton.onClick.AddListener(() => RequestManager.Instance.RejectRequest(_request.RequestID, "Purchase Denied"));
+        rejectButton.onClick.AddListener(OnReject);
     }
 
     private void OnApprove()
     {
         int approvedAmount = Mathf.RoundToInt(approveSlider.value);
-        if (approvedAmount == 0)
-        {
-            RequestManager.Instance.RejectRequest(_request.RequestID, "0 Buses Approved");
-        }
-        else
-        {
-            RequestManager.Instance.ApproveForwardRequest(_request.RequestID, approvedAmount);
-        }
+        RequestManager.Instance.ApproveForwardRequest(_request.RequestID, approvedAmount);
+    }
+
+    private void OnReject()
+    {
+        RequestManager.Instance.RejectRequest(_request.RequestID, "Purchase Denied by Finance");
     }
 }

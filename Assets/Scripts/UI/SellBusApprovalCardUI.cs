@@ -32,7 +32,7 @@ public class SellBusApprovalCardUI : MonoBehaviour
             if (i < requestedBuses.Length && !string.IsNullOrEmpty(requestedBuses[i]))
             {
                 busToggles[i].gameObject.SetActive(true);
-                busToggles[i].isOn = true; // Default to checked
+                busToggles[i].isOn = false; // Default to checked
                 busToggleTexts[i].text = requestedBuses[i].Trim();
             }
             else
