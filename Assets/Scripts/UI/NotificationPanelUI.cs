@@ -17,6 +17,12 @@ public class NotificationPanelUI : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        // Force a draw on startup to catch data that loaded before the UI opened
+        RefreshNotifications();
+    }
+
     private void OnDisable()
     {
         if (RequestManager.Instance != null)

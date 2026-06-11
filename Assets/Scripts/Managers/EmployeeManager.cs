@@ -586,6 +586,8 @@ public class EmployeeManager : NetworkBehaviour
         {
             allEmployees = container.Employees;
             candidates = container.Candidates;
+            
+            OnEmployeeDataUpdated?.Invoke();
         }
     }
 

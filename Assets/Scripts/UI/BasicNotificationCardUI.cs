@@ -1,6 +1,9 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Linq;
+using System.Collections.Generic;
+
 
 public class BasicNotificationCardUI : MonoBehaviour
 {
@@ -54,12 +57,47 @@ public class BasicNotificationCardUI : MonoBehaviour
     {
         switch (r.Type)
         {
-            case RequestType.HireMechanic: return $"Hire {r.TargetAmount} Mechanics (Min Skill: {r.Payload})";
-            case RequestType.TrainMechanic: return $"Train {r.TargetAmount} Mechanics";
-            case RequestType.BuyParts: return $"Purchase {r.TargetAmount}x {r.Payload}";
-            case RequestType.BuyBus: return $"Purchase {r.TargetAmount} New Buses";
-            case RequestType.SellBus: return $"Sell {r.TargetAmount} Buses ({r.Payload})";
-            default: return "Unknown Request";
+            case RequestType.HireMechanic: 
+                return $"Hire {r.TargetAmount} Mechanics (Min Skill: {r.Payload})";
+                
+            case RequestType.TrainMechanic:
+                string employeeDisplay = "Unknown";
+                
+                // Decode the IDs from the payload back into numeric names
+                if (!string.IsNullOrEmpty(r.Payload) && EmployeeManager.Instance != null)
+                {
+                    string[] ids = r.Payload.Split(',');
+                    List<string> mechanicNumbers = new List<string>();
+                    
+                    foreach (string id in ids)
+                    {
+                        var emp = EmployeeManager.Instance.allEmployees.FirstOrDefault(e => e.EmployeeID == id.Trim());
+                        if (emp != null)
+                        {
+                            // Extract only the numbers
+                            string numberOnly = new string(emp.FullName.Where(char.IsDigit).ToArray());
+                            mechanicNumbers.Add(string.IsNullOrEmpty(numberOnly) ? emp.FullName : numberOnly);
+                        }
+                    }
+                    
+                    if (mechanicNumbers.Count > 0)
+                    {
+                        employeeDisplay = string.Join(", ", mechanicNumbers);
+                    }
+                }
+                return $"Train {r.TargetAmount} Mechanics\nMechanic(s): {employeeDisplay}";
+                
+            case RequestType.BuyParts: 
+                return $"Purchase {r.TargetAmount}x {r.Payload}";
+                
+            case RequestType.BuyBus: 
+                return $"Purchase {r.TargetAmount} New Buses";
+                
+            case RequestType.SellBus: 
+                return $"Sell {r.TargetAmount} Buses ({r.Payload})";
+                
+            default: 
+                return "Unknown Request";
         }
     }
 

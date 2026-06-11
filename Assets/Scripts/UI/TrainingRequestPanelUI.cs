@@ -110,20 +110,31 @@ public class TrainingRequestPanelUI : MonoBehaviour
 
     private void UpdateInteractivity()
     {
-        // If at least one mechanic selected for training, disable hiring group
         if (_selectedMechanicIDs.Count > 0)
         {
             hiringGroup.interactable = false;
             
-            // Set summary for Training request
-            requestOverviewText.text = $"Summary:\nRequesting training course for {_selectedMechanicIDs.Count} specified Mechanics.";
+            // Extract the numbers from the full names of the selected mechanics
+            List<string> mechanicNumbers = new List<string>();
+            foreach (string id in _selectedMechanicIDs)
+            {
+                var emp = EmployeeManager.Instance.allEmployees.FirstOrDefault(e => e.EmployeeID == id);
+                if (emp != null)
+                {
+                    // Extracts only the digits from a string like "Applicant 123" or "Employee 12"
+                    string numberOnly = new string(emp.FullName.Where(char.IsDigit).ToArray());
+                    
+                    // Fallback to full name just in case the name has no numbers
+                    mechanicNumbers.Add(string.IsNullOrEmpty(numberOnly) ? emp.FullName : numberOnly);
+                }
+            }
+            
+            string displayNames = string.Join(", ", mechanicNumbers);
+            requestOverviewText.text = $"Summary:\nRequesting training course for {_selectedMechanicIDs.Count} specified Mechanics.\nMechanic(s): {displayNames}";
         }
         else
         {
-            // No mechanics selected, allow hiring
             hiringGroup.interactable = true;
-            
-            // Re-update hiring UI summary which might have been overridden
             UpdateHiringUI(hireMechanicSlider.value);
         }
     }

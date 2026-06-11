@@ -165,19 +165,45 @@ public void NotifyActionTaken(RequestType type, int amountAdded, string specific
         {
             // This now safely reads the potentially filtered list from Finance
             string[] busIds = req.Payload.Split(',');
-            int sold = 0;
+            int soldCount = 0;
+
             foreach (var id in busIds)
             {
                 // Clean up any accidental spaces
                 string cleanId = id.Trim();
                 if (string.IsNullOrEmpty(cleanId)) continue;
-                if (sold >= req.TargetAmount) break;
-                
-                FleetManager.Instance.RequestFleetOperationRpc(JsonUtility.ToJson(new BusData { BusID = cleanId }), FleetManager.FleetOperation.Remove);
-                sold++;
+                if (soldCount >= req.TargetAmount) break;
+
+                // Find the bus in the fleet
+                var bus = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == cleanId);
+                if (bus != null)
+                {
+                        bool isBusActive = FleetManager.Instance != null && FleetManager.Instance.IsBusActive(bus.BusID);
+
+                        // Only delay sale if the bus is actively out on a route.
+                        // Parked buses can be sold immediately, whether they are assigned to a depot or not.
+                        if (!isBusActive)
+                    {
+                        // If it's already parked in a depot, sell it immediately
+                        FleetManager.Instance.RequestFleetOperationRpc(JsonUtility.ToJson(new BusData { BusID = cleanId }), FleetManager.FleetOperation.Remove);
+                        CompanyManager.Instance.AddIncome(8000f, TransactionCategory.VehiclePurchase, $"Sold bus {cleanId}");
+                    }
+                    else
+                    {
+                        // If it is out driving, flag it for later
+                        bus.PendingSale = true;
+                        
+                        // Ensure this flag is saved/synced! 
+                        // [NEW UPDATE HERE] Save locally and flag for network sync
+                        FleetManager.Instance.SaveFleet();
+                        if (NetworkSyncBroker.Instance != null)
+                        {
+                            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                        }
+                    }
+                }
+                soldCount++;
             }
-            float income = sold * 8000f; // Placeholder fixed income
-            CompanyManager.Instance.AddIncome(income, TransactionCategory.VehiclePurchase, "Sold requested buses");
         }
     }
 
