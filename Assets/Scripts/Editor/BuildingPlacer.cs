@@ -21,6 +21,14 @@ public class MassBuildingPlacer : EditorWindow
 
     public int previewLimit = 2000;
 
+    // SCALE RANDOMIZATION
+    public bool randomizeScale = true;
+    public bool uniformScale = true;
+    public Vector2 scaleRange = new Vector2(0.8f, 1.2f);
+    public Vector2 scaleRangeX = new Vector2(0.8f, 1.2f);
+    public Vector2 scaleRangeY = new Vector2(0.8f, 1.2f);
+    public Vector2 scaleRangeZ = new Vector2(0.8f, 1.2f);
+
     private const string GENERATED_NAME = "Generated_Building";
     
     private List<PreviewInstance> cachedPreview = new List<PreviewInstance>();
@@ -37,6 +45,7 @@ public class MassBuildingPlacer : EditorWindow
         public Vector3 position;
         public Quaternion rotation;
         public Vector3 size;
+        public Vector3 scale;
     }
 
     // PREFS
@@ -50,6 +59,16 @@ public class MassBuildingPlacer : EditorWindow
     private const string KEY_CLEARANCE = "MBP_Clearance";
     private const string KEY_RAYHEIGHT = "MBP_RayHeight";
     private const string KEY_LIMIT = "MBP_PreviewLimit";
+    private const string KEY_RANDSCALE = "MBP_RandomizeScale";
+    private const string KEY_UNIFORMSCALE = "MBP_UniformScale";
+    private const string KEY_SCALEMIN = "MBP_ScaleMin";
+    private const string KEY_SCALEMAX = "MBP_ScaleMax";
+    private const string KEY_SCALEXMIN = "MBP_ScaleXMin";
+    private const string KEY_SCALEXMAX = "MBP_ScaleXMax";
+    private const string KEY_SCALEYMIN = "MBP_ScaleYMin";
+    private const string KEY_SCALEYMAX = "MBP_ScaleYMax";
+    private const string KEY_SCALEZMIN = "MBP_ScaleZMin";
+    private const string KEY_SCALEZMAX = "MBP_ScaleZMax";
 
     [MenuItem("Tools/Mass Building Placer")]
     public static void ShowWindow() => GetWindow<MassBuildingPlacer>("Building Placer");
@@ -91,6 +110,21 @@ public class MassBuildingPlacer : EditorWindow
         
         previewLimit = EditorGUILayout.IntSlider("Preview Limit", previewLimit, 0, 10000);
 
+        EditorGUILayout.Space();
+        randomizeScale = EditorGUILayout.Toggle("Randomize Scale", randomizeScale);
+        if (randomizeScale) {
+            EditorGUI.indentLevel++;
+            uniformScale = EditorGUILayout.Toggle("Uniform Scale", uniformScale);
+            if (uniformScale) {
+                scaleRange = DrawMinMax("Scale Range", scaleRange);
+            } else {
+                scaleRangeX = DrawMinMax("Scale X", scaleRangeX);
+                scaleRangeY = DrawMinMax("Scale Y", scaleRangeY);
+                scaleRangeZ = DrawMinMax("Scale Z", scaleRangeZ);
+            }
+            EditorGUI.indentLevel--;
+        }
+
         if (EditorGUI.EndChangeCheck()) SaveSettings();
 
         EditorGUILayout.Space(10);
@@ -108,6 +142,30 @@ public class MassBuildingPlacer : EditorWindow
         GUI.enabled = true;
 
         if (GUILayout.Button("CLEANUP ALL", GUILayout.Height(20))) CleanupBuildings();
+    }
+
+    private Vector2 DrawMinMax(string label, Vector2 range) {
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.PrefixLabel(label);
+        float min = EditorGUILayout.FloatField(range.x, GUILayout.MinWidth(40));
+        float max = EditorGUILayout.FloatField(range.y, GUILayout.MinWidth(40));
+        EditorGUILayout.EndHorizontal();
+        min = Mathf.Max(0.01f, min);
+        max = Mathf.Max(min, max);
+        return new Vector2(min, max);
+    }
+
+    private Vector3 GenerateRandomScale() {
+        if (!randomizeScale) return Vector3.one;
+        if (uniformScale) {
+            float s = UnityEngine.Random.Range(scaleRange.x, scaleRange.y);
+            return new Vector3(s, s, s);
+        }
+        return new Vector3(
+            UnityEngine.Random.Range(scaleRangeX.x, scaleRangeX.y),
+            UnityEngine.Random.Range(scaleRangeY.x, scaleRangeY.y),
+            UnityEngine.Random.Range(scaleRangeZ.x, scaleRangeZ.y)
+        );
     }
 
     private void CalculatePreview() {
@@ -138,12 +196,14 @@ public class MassBuildingPlacer : EditorWindow
                     Vector3 wPos = road.container.transform.TransformPoint((Vector3)spline.EvaluatePosition(t));
                     Vector3 wTan = road.container.transform.TransformDirection((Vector3)spline.EvaluateTangent(t));
 
-                    if (TryCalculatePoint(wPos, wTan, true, bSize, out PreviewInstance p1)) {
+                    Vector3 scaleR = GenerateRandomScale();
+                    if (TryCalculatePoint(wPos, wTan, true, Vector3.Scale(bSize, scaleR), scaleR, out PreviewInstance p1)) {
                         cachedPreview.Add(p1);
                         calculatedCount++;
                     }
 
-                    if (calculatedCount < previewLimit && TryCalculatePoint(wPos, wTan, false, bSize, out PreviewInstance p2)) {
+                    Vector3 scaleL = GenerateRandomScale();
+                    if (calculatedCount < previewLimit && TryCalculatePoint(wPos, wTan, false, Vector3.Scale(bSize, scaleL), scaleL, out PreviewInstance p2)) {
                         cachedPreview.Add(p2);
                         calculatedCount++;
                     }
@@ -155,7 +215,7 @@ public class MassBuildingPlacer : EditorWindow
         Debug.Log($"Calculated {cachedPreview.Count} points.");
     }
 
-    private bool TryCalculatePoint(Vector3 roadPos, Vector3 tangent, bool isRight, Vector3 bSize, out PreviewInstance result) {
+    private bool TryCalculatePoint(Vector3 roadPos, Vector3 tangent, bool isRight, Vector3 bSize, Vector3 scale, out PreviewInstance result) {
         result = default;
         
         Vector3 sideDir = Vector3.Cross(Vector3.up, tangent).normalized;
@@ -201,7 +261,7 @@ public class MassBuildingPlacer : EditorWindow
         if (Physics.CheckBox(boxCenter, bSize * 0.45f, rotation, obstacleMask)) return false;
 
         RegisterGridOccupancy(gridCoord);
-        result = new PreviewInstance { position = finalPos, rotation = rotation, size = bSize };
+        result = new PreviewInstance { position = finalPos, rotation = rotation, size = bSize, scale = scale };
         return true;
     }
 
@@ -243,7 +303,8 @@ public class MassBuildingPlacer : EditorWindow
             GameObject house = (GameObject)PrefabUtility.InstantiatePrefab(buildingPrefab);
             house.transform.position = p.position;
             house.transform.rotation = p.rotation;
-            house.transform.SetParent(parent.transform);
+            house.transform.localScale = Vector3.Scale(house.transform.localScale, p.scale);
+            house.transform.SetParent(parent.transform, true);
             house.name = GENERATED_NAME;
             
             // Set Layer
@@ -299,6 +360,16 @@ public class MassBuildingPlacer : EditorWindow
         EditorPrefs.SetFloat(KEY_CLEARANCE, roadClearanceThreshold);
         EditorPrefs.SetFloat(KEY_RAYHEIGHT, raycastHeight);
         EditorPrefs.SetInt(KEY_LIMIT, previewLimit);
+        EditorPrefs.SetBool(KEY_RANDSCALE, randomizeScale);
+        EditorPrefs.SetBool(KEY_UNIFORMSCALE, uniformScale);
+        EditorPrefs.SetFloat(KEY_SCALEMIN, scaleRange.x);
+        EditorPrefs.SetFloat(KEY_SCALEMAX, scaleRange.y);
+        EditorPrefs.SetFloat(KEY_SCALEXMIN, scaleRangeX.x);
+        EditorPrefs.SetFloat(KEY_SCALEXMAX, scaleRangeX.y);
+        EditorPrefs.SetFloat(KEY_SCALEYMIN, scaleRangeY.x);
+        EditorPrefs.SetFloat(KEY_SCALEYMAX, scaleRangeY.y);
+        EditorPrefs.SetFloat(KEY_SCALEZMIN, scaleRangeZ.x);
+        EditorPrefs.SetFloat(KEY_SCALEZMAX, scaleRangeZ.y);
     }
 
     private void LoadSettings() {
@@ -313,6 +384,12 @@ public class MassBuildingPlacer : EditorWindow
         roadClearanceThreshold = EditorPrefs.GetFloat(KEY_CLEARANCE, 7f);
         raycastHeight = EditorPrefs.GetFloat(KEY_RAYHEIGHT, 2000f);
         previewLimit = EditorPrefs.GetInt(KEY_LIMIT, 2000);
+        randomizeScale = EditorPrefs.GetBool(KEY_RANDSCALE, true);
+        uniformScale = EditorPrefs.GetBool(KEY_UNIFORMSCALE, true);
+        scaleRange = new Vector2(EditorPrefs.GetFloat(KEY_SCALEMIN, 0.8f), EditorPrefs.GetFloat(KEY_SCALEMAX, 1.2f));
+        scaleRangeX = new Vector2(EditorPrefs.GetFloat(KEY_SCALEXMIN, 0.8f), EditorPrefs.GetFloat(KEY_SCALEXMAX, 1.2f));
+        scaleRangeY = new Vector2(EditorPrefs.GetFloat(KEY_SCALEYMIN, 0.8f), EditorPrefs.GetFloat(KEY_SCALEYMAX, 1.2f));
+        scaleRangeZ = new Vector2(EditorPrefs.GetFloat(KEY_SCALEZMIN, 0.8f), EditorPrefs.GetFloat(KEY_SCALEZMAX, 1.2f));
     }
 
     private void CleanupBuildings() {
