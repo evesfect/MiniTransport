@@ -63,6 +63,9 @@ public class RoleManager : NetworkBehaviour
 
     public PlayerRole GetMyRole()
     {
+        // Network may not be running yet (e.g. a panel activated in the editor before host start).
+        if (NetworkManager.Singleton == null) return PlayerRole.None;
+
         ulong myId = NetworkManager.Singleton.LocalClientId;
         return _playerRoles.ContainsKey(myId) ? _playerRoles[myId] : PlayerRole.None;
     }
@@ -71,6 +74,18 @@ public class RoleManager : NetworkBehaviour
     {
         return _playerRoles.ContainsValue(role);
     }
+
+    // Maps a player role to the end-of-game report (SyncDataType) it should see.
+    // Vendor KPIs have no dedicated role; the Finance manager surfaces them separately.
+    public static SyncDataType RoleToReport(PlayerRole role) => role switch
+    {
+        PlayerRole.GeneralManager     => SyncDataType.GeneralReport,
+        PlayerRole.TransportManager   => SyncDataType.OperationsReport,
+        PlayerRole.MaintenanceManager => SyncDataType.MaintenanceReport,
+        PlayerRole.HRManager          => SyncDataType.HrReport,
+        PlayerRole.FinanceManager     => SyncDataType.FinanceReport,
+        _                             => SyncDataType.GeneralReport
+    };
 
     private void ClaimRoleInternal(ulong clientId, PlayerRole requestedRole)
     {

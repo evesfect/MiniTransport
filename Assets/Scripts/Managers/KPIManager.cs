@@ -331,12 +331,24 @@ public class KPIManager : NetworkBehaviour
             passengersServed = _passengersServed,
             passengersMissed = _passengersTimedOut,
             availableBuses = AvailableBuses(),
-            stopCoverage = -1f // TODO: % of stops served by >=1 route (needs TransportManager route/stop analysis)
+            stopCoverage = TransportManager.Instance != null ? TransportManager.Instance.StopCoveragePercent() : -1f,
+            longestRouteStops = TransportManager.Instance != null ? TransportManager.Instance.LongestRouteStopCount() : 0,
+            stopsNotCovered = TransportManager.Instance != null ? TransportManager.Instance.StopsNotCovered() : 0
         };
     }
 
     private MaintenanceReportData BuildMaintenanceReport()
     {
+        var mm = MaintenanceManager.Instance;
+
+        // Breakdown frequency = breakdowns per elapsed day.
+        int day = SimulationTimeManager.Instance != null ? SimulationTimeManager.Instance.CurrentDay : 1;
+        float breakdownFrequency = _totalBreakdowns / (float)Mathf.Max(1, day);
+
+        // Repair completion rate = breakdowns returned to service / breakdowns occurred.
+        int resolved = mm != null ? mm.BreakdownsResolved : 0;
+        float repairCompletionRate = _totalBreakdowns > 0 ? (resolved / (float)_totalBreakdowns) * 100f : -1f;
+
         return new MaintenanceReportData
         {
             totalBreakdowns = _totalBreakdowns,
@@ -346,8 +358,11 @@ public class KPIManager : NetworkBehaviour
             avgFleetHealth = AvgFleetHealth(),
             busesNeedingRepair = BusesNeedingRepair(),
             availableBuses = AvailableBuses(),
-            mttrHours = -1f,            // TODO: timestamp breakdown -> return-to-service to compute Mean Time To Repair
-            technicianUtilization = -1f // TODO: reuse DepotDashboardUI supply/demand (crew workload vs capacity)
+            mttrHours = mm != null ? mm.AverageRepairHours : -1f,
+            technicianUtilization = mm != null ? mm.TechnicianUtilization : -1f,
+            breakdownFrequency = breakdownFrequency,
+            repairCompletionRate = repairCompletionRate,
+            sparePartDelays = mm != null ? mm.SparePartDelays : 0
         };
     }
 
@@ -385,10 +400,6 @@ public class KPIManager : NetworkBehaviour
         var company = CompanyManager.Instance.GetCompanyData();
         data.cashBalance = company.CurrentBalance;
 
-        int currentDay = SimulationTimeManager.Instance != null ? SimulationTimeManager.Instance.CurrentDay : 0;
-        int weekStart = currentDay - 6; // inclusive trailing 7 days
-        float weeklyRevenue = 0f, weeklyExpenses = 0f;
-
         if (company.History != null)
         {
             foreach (var tx in company.History)
@@ -396,26 +407,30 @@ public class KPIManager : NetworkBehaviour
                 if (tx.Amount >= 0)
                 {
                     data.totalRevenue += tx.Amount;
-                    if (tx.Timestamp >= weekStart) weeklyRevenue += tx.Amount;
                 }
                 else
                 {
                     float spend = -tx.Amount;
                     data.totalExpenses += spend;
-                    if (tx.Timestamp >= weekStart) weeklyExpenses += spend;
-                    switch (tx.Category)
-                    {
-                        case TransactionCategory.Maintenance: data.maintenanceSpend += spend; break;
-                        case TransactionCategory.StaffSalary:
-                        case TransactionCategory.StaffUpkeep: data.payrollSpend += spend; break;
-                        case TransactionCategory.PartPurchase: data.partsSpend += spend; break;
-                    }
+                    if (tx.Category == TransactionCategory.StaffSalary || tx.Category == TransactionCategory.StaffUpkeep)
+                        data.payrollSpend += spend;
+                    else if (tx.Category == TransactionCategory.PartPurchase)
+                        data.partsSpend += spend;
                 }
             }
         }
 
-        data.weeklyNetProfit = weeklyRevenue - weeklyExpenses;
-        data.weeklyCashBurn = weeklyExpenses;
+        // Procurement / vendor KPIs (orders are the Finance Manager's responsibility).
+        var vm = VendorManager.Instance;
+        if (vm != null)
+        {
+            data.ordersPlaced = vm.lifetimeOrdersPlaced;
+            data.onTimeDeliveryRate = vm.lifetimeOrdersDelivered > 0
+                ? (vm.lifetimeOnTimeDeliveries / (float)vm.lifetimeOrdersDelivered) * 100f : 0f;
+            data.avgPartQuality = vm.lifetimeOrdersDelivered > 0
+                ? vm.lifetimeQualitySum / vm.lifetimeOrdersDelivered : 0f;
+        }
+
         return data;
     }
 

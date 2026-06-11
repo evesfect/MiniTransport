@@ -37,11 +37,13 @@ public class HRDashboardUI : MonoBehaviour
 
         if (EmployeeManager.Instance != null)
         {
-            // Unsubscribe safely
-            EmployeeManager.Instance.OnEmployeeHired -= (id) => RefreshUI();
-            EmployeeManager.Instance.OnEmployeeFired -= (id) => RefreshUI();
-            EmployeeManager.Instance.OnEmployeeTrained -= (id, skill) => RefreshUI();
+            // Unsubscribe with the same named handlers used to subscribe, otherwise the
+            // delegates never detach (new lambdas would not match the originals).
+            EmployeeManager.Instance.OnEmployeeHired -= RefreshAll;
+            EmployeeManager.Instance.OnEmployeeFired -= RefreshAll;
+            EmployeeManager.Instance.OnEmployeeTrained -= RefreshOnTrained;
             EmployeeManager.Instance.OnCandidatesUpdated -= RefreshUI;
+            EmployeeManager.Instance.OnEmployeeDataUpdated -= RefreshUI;
         }
     }
 
@@ -49,13 +51,18 @@ public class HRDashboardUI : MonoBehaviour
     {
         while (EmployeeManager.Instance == null) yield return null;
 
-        // Register HR listeners securely using lambda expressions to ignore unused parameters
-        EmployeeManager.Instance.OnEmployeeHired += (id) => RefreshUI();
-        EmployeeManager.Instance.OnEmployeeFired += (id) => RefreshUI();
-        EmployeeManager.Instance.OnEmployeeTrained += (id, skill) => RefreshUI();
+        // Register HR listeners with named handlers so they can be unsubscribed later.
+        EmployeeManager.Instance.OnEmployeeHired += RefreshAll;
+        EmployeeManager.Instance.OnEmployeeFired += RefreshAll;
+        EmployeeManager.Instance.OnEmployeeTrained += RefreshOnTrained;
 
         // OnCandidatesUpdated is an Action (0 parameters), so it matches RefreshUI directly
         EmployeeManager.Instance.OnCandidatesUpdated += RefreshUI;
+
+        // Fires on host AND clients whenever the synced employee snapshot changes. This is
+        // the only signal clients get after a server-side hire/fire/train, so it drives the
+        // client-side dashboard refresh (the specific events above only fire on the server).
+        EmployeeManager.Instance.OnEmployeeDataUpdated += RefreshUI;
 
         // Setup marketing buttons
         if (flyersCampaignBtn != null)

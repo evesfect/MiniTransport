@@ -34,4 +34,8 @@ public class EmployeeContainer
 {
     public List<EmployeeData> Employees;
     public List<EmployeeData> Candidates;
+
+    // Recruitment campaign state, synced to clients so the HR banner is correct on all peers.
+    public bool AdCampaignActive;
+    public AdTier PendingAdTier;
 }

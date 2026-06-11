@@ -84,7 +84,9 @@ public struct OperationsReportData
     public int passengersServed;
     public int passengersMissed;       // gave up waiting (timed out)
     public int availableBuses;         // buses ready for service (not broken / above op threshold)
-    public float stopCoverage;         // STUB (-1 = not tracked): % of stops served by >=1 route
+    public float stopCoverage;         // % of stops served by >=1 route (-1 = no stops)
+    public int longestRouteStops;      // highest stop count on any single active route
+    public int stopsNotCovered;        // registered stops served by no route
 }
 
 [Serializable]
@@ -97,8 +99,11 @@ public struct MaintenanceReportData
     public float avgFleetHealth;
     public int busesNeedingRepair;
     public int availableBuses;         // doc: usable buses ready for service
-    public float mttrHours;            // STUB (-1): Mean Time To Repair (breakdown -> return-to-service)
-    public float technicianUtilization;// STUB (-1): crew workload vs capacity
+    public float mttrHours;            // Mean Time To Repair = Bus Return-to-Service performance (hours; -1 = no data)
+    public float technicianUtilization;// crew workload vs capacity (0-100; -1 = no crews)
+    public float breakdownFrequency;   // breakdowns per day
+    public float repairCompletionRate; // % of breakdowns fully resolved (-1 = no breakdowns yet)
+    public int sparePartDelays;        // spare-part delay frequency: count of "waiting for parts" stall episodes
 }
 
 [Serializable]
@@ -119,11 +124,12 @@ public struct FinanceReportData
     public float cashBalance;
     public float totalRevenue;
     public float totalExpenses;
-    public float maintenanceSpend;
     public float payrollSpend;
     public float partsSpend;
-    public float weeklyNetProfit;      // revenue - expenses over the last 7 days
-    public float weeklyCashBurn;       // expenses over the last 7 days
+    // Procurement / vendor KPIs (orders are the Finance Manager's responsibility).
+    public int ordersPlaced;
+    public float onTimeDeliveryRate;   // 0-100
+    public float avgPartQuality;       // 0-100 (avg durability of delivered parts)
 }
 
 [Serializable]

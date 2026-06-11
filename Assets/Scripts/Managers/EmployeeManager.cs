@@ -164,6 +164,8 @@ public class EmployeeManager : NetworkBehaviour
             _pendingAdTier = tier;
             _adCampaignActive = true;
             Debug.Log($"[HR] Successfully launched {tier} ad campaign. Applicants arriving tomorrow.");
+            // Push the new campaign state to clients so their HR banner updates immediately.
+            SyncEmployeesRpc(SerializeEmployees());
             OnCandidatesUpdated?.Invoke();
         }
     }
@@ -178,10 +180,13 @@ public class EmployeeManager : NetworkBehaviour
     {
         if (!_adCampaignActive || _pendingAdTier == AdTier.None) return;
 
-        DeliverCandidates(_pendingAdTier);
-
+        // Clear the campaign state BEFORE delivering, so the snapshot DeliverCandidates
+        // syncs to clients already reflects the campaign as resolved (banner clears).
+        AdTier resolvedTier = _pendingAdTier;
         _adCampaignActive = false;
         _pendingAdTier = AdTier.None;
+
+        DeliverCandidates(resolvedTier);
 
         Debug.Log("[HR] Morning arrival: Ad campaign applicants have entered the lobby!");
         OnCandidatesUpdated?.Invoke();
@@ -448,7 +453,9 @@ public class EmployeeManager : NetworkBehaviour
 
         EmployeeData candidate = candidates[index];
 
-       float cost = hiringFee + CalculateWageForSkill((int)candidate.SkillLevel);
+        // Charge the candidate's actual demanded wage (what the HR card displays),
+        // not a recomputed/truncated value, so the quote and the charge always match.
+        float cost = hiringFee + candidate.WeeklySalary;
 
         // 1. Pay Hiring Fee
         bool success = CompanyManager.Instance.TryExecuteActionableTransaction(
@@ -520,7 +527,8 @@ public class EmployeeManager : NetworkBehaviour
         if (emp == null) return;
         if (emp.SkillLevel >= 100f) return; // Maxed out
 
-        float cost = trainingCostBase + (emp.SkillLevel * 10f);
+        // Use the same formula the UI quotes (GetTrainingCost) so the charge matches the display.
+        float cost = GetTrainingCost(id);
 
         bool paid = CompanyManager.Instance.TryExecuteActionableTransaction(
             cost,
@@ -575,20 +583,22 @@ public class EmployeeManager : NetworkBehaviour
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncEmployeesRpc(string json, RpcParams rpcParams = default)
     {
-        // [NEW] If Host, data is already updated, we just need to fire the UI refresh event
-        if (IsServer) 
+        // Host already holds the authoritative lists; clients apply the synced snapshot.
+        if (!IsServer)
         {
-            OnEmployeeDataUpdated?.Invoke();
-            return;
+            var container = JsonUtility.FromJson<EmployeeContainer>(json);
+            if (container != null)
+            {
+                allEmployees = container.Employees;
+                candidates = container.Candidates;
+                _adCampaignActive = container.AdCampaignActive;
+                _pendingAdTier = container.PendingAdTier;
+            }
         }
-        var container = JsonUtility.FromJson<EmployeeContainer>(json);
-        if (container != null)
-        {
-            allEmployees = container.Employees;
-            candidates = container.Candidates;
-            
-            OnEmployeeDataUpdated?.Invoke();
-        }
+
+        // Notify UI on BOTH host and clients that employee data changed, so panels
+        // refresh after a server-side hire/fire/train (clients only learn via this sync).
+        OnEmployeeDataUpdated?.Invoke();
     }
 
     [Rpc(SendTo.Server)]
@@ -604,7 +614,9 @@ public class EmployeeManager : NetworkBehaviour
         return JsonUtility.ToJson(new EmployeeContainer
         {
             Employees = allEmployees,
-            Candidates = candidates
+            Candidates = candidates,
+            AdCampaignActive = _adCampaignActive,
+            PendingAdTier = _pendingAdTier
         }, true);
     }
 
