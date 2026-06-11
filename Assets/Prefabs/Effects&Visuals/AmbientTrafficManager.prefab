@@ -1,0 +1,71 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &2899338631671672975
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8127108851014625584}
+  - component: {fileID: 2301508904233492062}
+  m_Layer: 0
+  m_Name: AmbientTrafficManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8127108851014625584
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2899338631671672975}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 187.164, y: 20.35732, z: 117.86591}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2301508904233492062
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2899338631671672975}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6b4675451cd4df942a30274dde9da565, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AmbientTrafficManager
+  vehicleTypes:
+  - vehiclePrefab: {fileID: 7437288712360106986, guid: d1c5a6337c6fe9e44b44f3c672b3bef5, type: 3}
+    spawnWeight: 20
+  - vehiclePrefab: {fileID: 7437288712360106986, guid: 1abd44de838a11f438696bcb4422d6d8, type: 3}
+    spawnWeight: 20
+  - vehiclePrefab: {fileID: 7437288712360106986, guid: ebb76a2a4a1bf7b47a8c2d60dcadd793, type: 3}
+    spawnWeight: 20
+  - vehiclePrefab: {fileID: 7437288712360106986, guid: b3d4d5a718308fc479a8bff11553631a, type: 3}
+    spawnWeight: 20
+  - vehiclePrefab: {fileID: 7437288712360106986, guid: 32d28225ec646544c9bb27eb1bea8e74, type: 3}
+    spawnWeight: 20
+  maxVehicles: 100
+  balanceInterval: 0.25
+  trafficUpdateInterval: 2
+  cameraMoveThreshold: 1
+  cameraAngleThreshold: 2
+  frustumBuffer: 10
+  minCarsPerActiveTile: 1
+  maxCarsPer100Units: 10
+  totalAliveCars: 0
+  activeSectorsCount: 0
+  showGizmos: 1
+  activeTileColor: {r: 0, g: 1, b: 0, a: 0.2}
+  bufferedTileColor: {r: 1, g: 1, b: 0, a: 0.2}
+  gizmoTextHeight: 2
