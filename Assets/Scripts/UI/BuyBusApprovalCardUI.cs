@@ -20,7 +20,7 @@ public class BuyBusApprovalCardUI : MonoBehaviour
         summaryText.text = $"{request.Requester} requests the purchase of {request.TargetAmount} new buses.";
 
         // Setup dynamic slider constraints
-        approveSlider.minValue = 0;
+        approveSlider.minValue = 1;
         approveSlider.maxValue = request.TargetAmount;
         approveSlider.value = request.TargetAmount; // Default to full approval
 
