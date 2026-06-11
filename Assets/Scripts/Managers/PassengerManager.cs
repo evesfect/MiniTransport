@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
@@ -9,11 +10,39 @@ public class PassengerManager : NetworkBehaviour
 
     // Key: BusStop.stopID, Value: List of passenger groups waiting there
     private Dictionary<string, List<WaitingPassengerGroup>> _stopWaitingData = new Dictionary<string, List<WaitingPassengerGroup>>();
+    
+    [Header("Patience Settings")]
+    [Tooltip("How many game-hours a passenger waits before leaving angry.")]
+    public float maxWaitTimeHours = 2.5f;
 
+    // --- KPI collection hooks (server-side; consumed by KPIManager) ---
+    public event Action<float, int> OnPassengersServed;   // waitHours, count (boarded before timeout)
+    public event Action<int> OnPassengersTimedOut;        // count (gave up waiting)
+    // Number Of Transfers is detected in BusDriver when a passenger alights at a connecting
+    // stop, counted in CompanyManager.TransferTripCount, and surfaced to the KPI report via
+    // CompanyManager.OnTransferRecorded.
+
+    // Optimization: Only check timeouts every X frames to save performance
+    private int _tickCounter = 0;
+    private const int CHECK_INTERVAL_FRAMES = 600; // Approx every 10-20 seconds depending on FPS
+    
     private void Awake()
     {
         if (Instance != null && Instance != this) Destroy(gameObject);
         else Instance = this;
+    }
+
+    private void Update()
+    {
+        if (!IsServer) return;
+
+        // Periodically check for unhappy passengers
+        _tickCounter++;
+        if (_tickCounter >= CHECK_INTERVAL_FRAMES)
+        {
+            _tickCounter = 0;
+            CheckPassengerTimeouts();
+        }
     }
 
     // --- Server API ---
@@ -50,7 +79,8 @@ public class PassengerManager : NetworkBehaviour
             groups.Add(new WaitingPassengerGroup 
             { 
                 DestinationTileIndex = destinationTile, 
-                PassengerCount = count 
+                PassengerCount = count,
+                SpawnTime = SimulationTimeManager.Instance.CurrentTimeOfDay
             });
         }
 
@@ -69,6 +99,16 @@ public class PassengerManager : NetworkBehaviour
             if (groups[i].DestinationTileIndex == destinationTile)
             {
                 var g = groups[i];
+                int boarded = Mathf.Min(count, g.PassengerCount);
+
+                // KPI: these passengers boarded a bus, so record how long they waited.
+                if (boarded > 0 && SimulationTimeManager.Instance != null)
+                {
+                    float waitHours = SimulationTimeManager.Instance.CurrentTimeOfDay - g.SpawnTime;
+                    if (waitHours < 0) waitHours += 24f; // day wrap-around
+                    OnPassengersServed?.Invoke(waitHours, boarded);
+                }
+
                 if (g.PassengerCount <= count)
                 {
                     groups.RemoveAt(i);
@@ -81,8 +121,70 @@ public class PassengerManager : NetworkBehaviour
                 break;
             }
         }
-        
+
         SyncStopPassengersClientRpc(stopID, groups.ToArray());
+    }
+
+    private void CheckPassengerTimeouts()
+    {
+        
+        if (CompanyManager.Instance == null || SimulationTimeManager.Instance == null) return;
+
+        float currentTime = SimulationTimeManager.Instance.CurrentTimeOfDay;
+        List<string> stopsToUpdate = new List<string>();
+
+        // Iterate over every stop in the game
+        var stopIDs = new List<string>(_stopWaitingData.Keys);
+
+        foreach (string stopID in stopIDs)
+        {
+            var groups = _stopWaitingData[stopID];
+            bool changed = false;
+
+            // Iterate backwards so we can remove items safely
+            for (int i = groups.Count - 1; i >= 0; i--)
+            {
+                // Calculate how long they have been waiting
+                float arrivalTime = groups[i].SpawnTime;
+                float waitDuration = currentTime - arrivalTime;
+
+                // Handle Day Wrap-around (e.g., Arrived at 23:00, Current is 01:00)
+                if (waitDuration < 0)
+                {
+                    waitDuration += 24f;
+                }
+
+                if (waitDuration > maxWaitTimeHours)
+                {
+                    // TIMEOUT! They leave angry.
+                    int leavingCount = groups[i].PassengerCount;
+
+                    
+                    float penalty = -(leavingCount * 0.1f * CompanyManager.Instance.satisfactionPenaltyPertimeout);
+
+                    CompanyManager.Instance.ModifySatisfaction(penalty);
+
+                    OnPassengersTimedOut?.Invoke(leavingCount); // KPI: missed passengers
+
+                    
+                    //Debug.Log($"[PassengerManager] {leavingCount} passengers gave up at Stop {stopID}. Penalty: {penalty}");
+
+                    groups.RemoveAt(i);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                stopsToUpdate.Add(stopID);
+            }
+        }
+
+        // Sync only the stops that changed
+        foreach (string stopID in stopsToUpdate)
+        {
+            SyncStopPassengersClientRpc(stopID, _stopWaitingData[stopID].ToArray());
+        }
     }
 
     // --- Client Access ---

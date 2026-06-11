@@ -36,32 +36,26 @@ public abstract class VehicleDriver : NetworkBehaviour
     /// </summary>
     protected void UpdateTransformOnSpline(float currentDist, List<PathLeg> pathSegments)
     {
+        // 1. Get Position AND Corrected Tangent
         Vector3 pos = CalculatePoint(currentDist, pathSegments, out Vector3 currentTangent);
         transform.position = pos;
 
-        // Look-ahead for rotation
-        float lookDist = currentDist + 1.0f;
-        if (lookDist > m_TotalLegLength) lookDist = m_TotalLegLength; 
+        // 2. Use the Tangent directly for rotation
+        Vector3 dir = currentTangent;
 
-        if (lookDist - currentDist > 0.01f)
+        // 3. Apply your flatness constraint
+        dir.y = 0; 
+        dir.Normalize();
+
+        if (dir.sqrMagnitude > 0.001f)
         {
-            Vector3 lookPos = CalculatePoint(lookDist, pathSegments, out _);
-            Vector3 dir = lookPos - pos;
-
-            dir.y = 0;
-            dir.Normalize();
-
-            if (dir.sqrMagnitude > 0.001f)
-            {
-                Quaternion targetRot = Quaternion.LookRotation(dir);
-                
-                // Dependencies on SimulationTimeManager are global game state
-                transform.rotation = Quaternion.Slerp(
-                    transform.rotation, 
-                    targetRot, 
-                    Time.deltaTime * rotationSpeed * SimulationTimeManager.Instance.TimeMultiplier
-                );
-            }
+            Quaternion targetRot = Quaternion.LookRotation(dir);
+            
+            transform.rotation = Quaternion.Slerp(
+                transform.rotation, 
+                targetRot, 
+                Time.deltaTime * rotationSpeed * SimulationTimeManager.Instance.TimeMultiplier
+            );
         }
     }
 
@@ -83,7 +77,12 @@ public abstract class VehicleDriver : NetworkBehaviour
                 if (leg.Segment.Container != null)
                 {
                     Vector3 p = leg.Segment.GetPointOnRoad(t, leg.HeadingToB);
-                    tangent = (Vector3)leg.Segment.Container.EvaluateTangent(t); 
+                    tangent = (Vector3)leg.Segment.Container.EvaluateTangent(t);
+                    // FIX: Invert tangent if moving against the spline direction
+                    if (!leg.HeadingToB) 
+                    {
+                        tangent = -tangent;
+                    } 
                     return p;
                 }
             }
@@ -93,6 +92,12 @@ public abstract class VehicleDriver : NetworkBehaviour
         if (segments.Count > 0)
         {
             var last = segments.Last();
+            tangent = (Vector3)last.Segment.Container.EvaluateTangent(last.EndT);
+            // FIX: Invert tangent here too
+            if (!last.HeadingToB) 
+            {
+                tangent = -tangent;
+            }
             return last.Segment.GetPointOnRoad(last.EndT, last.HeadingToB);
         }
 

@@ -152,7 +152,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RecoveryVehicle
   ShowTopMostFoldoutHeaderGroup: 1
-  baseSpeed: 10
+  baseSpeed: 30
   clientSpeedBuffer: 1.1
   rotationSpeed: 10
   debugMarkerSpawner: {fileID: 2263427490345583347}

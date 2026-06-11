@@ -268,20 +268,47 @@ public class RecoveryVehicle : VehicleDriver
 
     private void ServerHandleRepair(float dt)
     {
-        if (_targetBusData == null) 
+        // 1. Resolve Target Bus Data
+        if (_targetBusData == null)
             _targetBusData = FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == _netState.Value.TargetBusID.ToString());
 
-        float targetHealth = MaintenanceManager.Instance.operationalThreshold;
-        
-        if (_targetBusData != null && _targetBusData.Durability < targetHealth)
+        // Safety checks
+        if (_targetBusData == null || _targetBusData.Parts == null) return;
+
+        // 2. Determine Repair Goal
+        // We aim to get parts back to the "Operational Threshold" (e.g., 30%) so the bus can move.
+        float targetHealth = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 30f;
+        float breakdownThreshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.breakdownThreshold : 5f;
+
+        // 3. Find the most critical part needing repair
+        // Logic: Find parts below threshold, prioritize the lowest health, then by importance (Enum order: Engine=0 is highest priority)
+        var partToRepair = _targetBusData.Parts
+            .Where(p => p.Health < targetHealth && p.Health < p.MaxLife)
+            .OrderBy(p => p.Health)
+            .ThenBy(p => p.PartType)
+            .FirstOrDefault();
+
+        // 4. Perform Repair Step
+        if (partToRepair != null)
         {
             float boost = repairRatePerSecond * dt;
-            FleetManager.Instance.UpdateBusDurability(_targetBusData.BusID, _targetBusData.Durability + boost);
+            float newHealth = partToRepair.Health + boost;
+
+            // Ensure we don't exceed the part's maximum lifespan or 100%
+            if (newHealth > partToRepair.MaxLife) newHealth = partToRepair.MaxLife;
+
+            // Apply the update via FleetManager API
+            FleetManager.Instance.UpdateBusPartHealth(_targetBusData.BusID, partToRepair.PartType, newHealth);
         }
         else
         {
+            // 5. Job Complete (All parts are above threshold)
             GameObject busObj = FleetManager.Instance.GetActiveBus(_targetBusData.BusID);
-            if (busObj != null) busObj.GetComponent<BusDriver>()?.SetBrokenDown(false);
+            if (busObj != null)
+            {
+                // Re-enable the bus driver
+                busObj.GetComponent<BusDriver>()?.SetBrokenDown(false);
+            }
             ServerStartReturnTrip();
         }
     }

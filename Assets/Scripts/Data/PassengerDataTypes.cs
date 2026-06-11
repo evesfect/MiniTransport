@@ -7,15 +7,17 @@ public struct WaitingPassengerGroup : INetworkSerializable, IEquatable<WaitingPa
 {
     public int DestinationTileIndex; // The specific tile they want to go to
     public ushort PassengerCount;    // How many people are waiting for this destination
+    public float SpawnTime; // Tracking when they spawn
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
         serializer.SerializeValue(ref DestinationTileIndex);
         serializer.SerializeValue(ref PassengerCount);
+        serializer.SerializeValue(ref SpawnTime);
     }
 
     public bool Equals(WaitingPassengerGroup other)
     {
-        return DestinationTileIndex == other.DestinationTileIndex && PassengerCount == other.PassengerCount;
+        return DestinationTileIndex == other.DestinationTileIndex && PassengerCount == other.PassengerCount && Mathf.Approximately(SpawnTime, other.SpawnTime);
     }
 }

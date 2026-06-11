@@ -9,29 +9,172 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 34.92832565307617
+            "PendingSale": false,
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 90.02841186523438,
+                    "MaxLife": 91.70855712890625,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 1,
+                    "Health": 90.02841186523438,
+                    "MaxLife": 91.70855712890625,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 2,
+                    "Health": 84.06778717041016,
+                    "MaxLife": 90.06292724609375,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 3,
+                    "Health": 98.02023315429688,
+                    "MaxLife": 98.35615539550781,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 4,
+                    "Health": 27.186025619506837,
+                    "MaxLife": 91.7175521850586,
+                    "PendingReplacementItemID": ""
+                }
+            ],
+            "Capacity": 50
         },
         {
             "BusID": "02",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
-                "StartTime": 6.200000286102295,
+                "RouteID": "66456769",
+                "StartTime": 7.0,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 34.855499267578128
+            "PendingSale": false,
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 91.93914031982422,
+                    "MaxLife": 92.39517974853516,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 1,
+                    "Health": 91.93914031982422,
+                    "MaxLife": 92.39517974853516,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 2,
+                    "Health": 90.33860778808594,
+                    "MaxLife": 90.88582611083985,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 3,
+                    "Health": 98.40026092529297,
+                    "MaxLife": 98.49143981933594,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 4,
+                    "Health": 38.73918151855469,
+                    "MaxLife": 92.39917755126953,
+                    "PendingReplacementItemID": ""
+                }
+            ],
+            "Capacity": 50
         },
         {
             "BusID": "03",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
-                "StartTime": 6.599999904632568,
+                "StartTime": 8.149999618530274,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
-            "Durability": 34.800315856933597
+            "PendingSale": false,
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 93.51556396484375,
+                    "MaxLife": 93.51556396484375,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 1,
+                    "Health": 93.51556396484375,
+                    "MaxLife": 93.51556396484375,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 2,
+                    "Health": 92.22857666015625,
+                    "MaxLife": 92.22857666015625,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 3,
+                    "Health": 98.71340942382813,
+                    "MaxLife": 98.71340942382813,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 4,
+                    "Health": 93.51756286621094,
+                    "MaxLife": 93.51756286621094,
+                    "PendingReplacementItemID": ""
+                }
+            ],
+            "Capacity": 50
+        },
+        {
+            "BusID": "04",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "66456769",
+                "StartTime": 12.149999618530274,
+                "EndTime": 20.0,
+                "TurnaroundWait": 15.0
+            },
+            "PendingSale": false,
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 94.52900695800781,
+                    "MaxLife": 94.52900695800781,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 1,
+                    "Health": 95.03073120117188,
+                    "MaxLife": 95.03073120117188,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 2,
+                    "Health": 94.04446411132813,
+                    "MaxLife": 94.04446411132813,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 3,
+                    "Health": 98.77668762207031,
+                    "MaxLife": 98.77668762207031,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 4,
+                    "Health": 95.03073120117188,
+                    "MaxLife": 95.03073120117188,
+                    "PendingReplacementItemID": ""
+                }
+            ],
+            "Capacity": 50
         }
     ]
 }

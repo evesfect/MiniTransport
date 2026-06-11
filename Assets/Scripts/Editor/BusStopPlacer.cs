@@ -244,6 +244,8 @@ public class BusStopPlacer
             stopObj = new GameObject($"BusStop_{segment.name}");
         }
 
+        stopObj.isStatic = false;
+
         Undo.RegisterCreatedObjectUndo(stopObj, "Place Bus Stop");
 
         stopObj.transform.parent = segment.transform;

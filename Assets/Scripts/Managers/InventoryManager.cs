@@ -9,15 +9,11 @@ public class InventoryManager : NetworkBehaviour
 {
     public static InventoryManager Instance { get; private set; }
 
-    //Key:InventoryItemData.ItemID (string)
-    //Value: Quantity
-    private Dictionary<string, int> inventoryDatabase = new Dictionary<string, int>();
+    private Dictionary<string, List<PartCondition>> inventoryDatabase = new Dictionary<string, List<PartCondition>>();
 
-    [Header("Configure")]
-    [Tooltip("All available InventoryItemData ScriptableObjects to load into the system.")]
+    [HideInInspector]
     public InventoryItemData[] allAvailableItems;
 
-    // --- Events to notify UI Logic of changes ---
     public event Action<string, int> OnItemQuantityChanged;
 
     #if UNITY_EDITOR
@@ -32,6 +28,10 @@ public class InventoryManager : NetworkBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
+            
+            allAvailableItems = Resources.LoadAll<InventoryItemData>("InventoryItems");
+            Debug.Log($"[InventoryManager] Auto-loaded {allAvailableItems.Length} item definitions from Resources.");
         }
         else
         {
@@ -46,10 +46,7 @@ public class InventoryManager : NetworkBehaviour
             LoadInventory();
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
-        else
-        {
-            inventoryDatabase.Clear();
-        }
+        else { inventoryDatabase.Clear(); }
     }
 
     public override void OnNetworkDespawn()
@@ -60,10 +57,7 @@ public class InventoryManager : NetworkBehaviour
         }
     }
 
-    private void OnApplicationQuit()
-    {
-        if(IsServer) SaveInventory();
-    }
+    private void OnApplicationQuit() { if(IsServer) SaveInventory(); }
 
     private void OnClientConnected(ulong clientId)
     {
@@ -76,179 +70,164 @@ public class InventoryManager : NetworkBehaviour
 
     private void InitializeInventory()
     {
-        if (allAvailableItems != null)
-        {
-            foreach (var item in allAvailableItems)
-            {
-                if (!inventoryDatabase.ContainsKey(item.ItemID))
-                {
-                    inventoryDatabase.Add(item.ItemID, 0);
-                }
-            }
-            Debug.Log($"[InventoryManager] Initialized {inventoryDatabase.Count} items on Server.");
-        }
+        // POINT 3: Deliberately left empty. 
+        // We no longer pre-fill the database with dummy empty lists from allAvailableItems.
+        // Lists are naturally created only when a part actually arrives.
     }
 
     [ContextMenu("Save Inventory")]
-    public void SaveInventory()
-    {
-        string json = SerializeInventory();
-        File.WriteAllText(SavePath, json);
-        Debug.Log($"[InventoryManager] Saved to {SavePath}");
-    }
+    public void SaveInventory() { File.WriteAllText(SavePath, SerializeInventory()); }
 
     [ContextMenu("Load Inventory")]
     public void LoadInventory()
     {
-        // First setup the keys from the ScriptableObjects
-        InitializeInventory(); 
-
+        InitializeInventory();
         if (File.Exists(SavePath))
         {
-            try
+            ApplyJsonToDatabase(File.ReadAllText(SavePath));
+
+            // ADD THIS LOOP: Force the local Host UI to refresh visually after loading from disk
+            foreach (var kvp in inventoryDatabase)
             {
-                string json = File.ReadAllText(SavePath);
-                InventorySaveData data = JsonUtility.FromJson<InventorySaveData>(json);
-                if (data != null && data.Items != null)
-                {
-                    foreach (var entry in data.Items)
-                    {
-                        // Only load if the item ID is still valid in our config
-                        if (inventoryDatabase.ContainsKey(entry.ID))
-                        {
-                            inventoryDatabase[entry.ID] = entry.Count;
-                        }
-                    }
-                    Debug.Log($"[InventoryManager] Loaded {data.Items.Count} items from disk.");
-                }
+                OnItemQuantityChanged?.Invoke(kvp.Key, kvp.Value.Count);
             }
-            catch (Exception e)
-            {
-                Debug.LogError($"[InventoryManager] Load failed: {e.Message}");
-            }
+
+            Debug.Log($"[InventoryManager] Successfully loaded and refreshed {inventoryDatabase.Count} item stacks from JSON.");
         }
+    }
+
+    public void AddPartWithDurability(string itemID, float durability)
+    {
+        if (IsServer) ModifyQuantityInternal(itemID, durability, true);
+        else RequestPartAddRpc(itemID, durability);
     }
 
     public void IncreaseItemQuantity(string itemID, int amount)
     {
         if (amount <= 0) return;
-
-        if (IsServer)
-        {
-            ModifyQuantityInternal(itemID, amount);
-        }
-        else
-        {
-            RequestItemChangeRpc(itemID, amount);
-        }
+        for (int i = 0; i < amount; i++) AddPartWithDurability(itemID, 100f);
     }
 
     public bool DecreaseItemQuantity(string itemID, int amount)
     {
         if (amount <= 0) return false;
+        if (!inventoryDatabase.ContainsKey(itemID) || inventoryDatabase[itemID].Count < amount) return false;
 
         if (IsServer)
         {
-            return ModifyQuantityInternal(itemID, -amount);
+            for (int i = 0; i < amount; i++) inventoryDatabase[itemID].RemoveAt(0);
+            
+            OnItemQuantityChanged?.Invoke(itemID, inventoryDatabase[itemID].Count);
+            UpdateItemClientRpc(itemID, SerializeInventory());
+            
+            // POINT 3: Real-time saving
+            SaveInventory();
+            return true;
         }
         else
         {
-            RequestItemChangeRpc(itemID, -amount);
+            RequestPartRemoveRpc(itemID, amount);
             return true; 
         }
     }
 
     public int GetItemQuantity(string itemID)
     {
-        if (inventoryDatabase.ContainsKey(itemID))
+        return inventoryDatabase.ContainsKey(itemID) ? inventoryDatabase[itemID].Count : 0;
+    }
+
+    public bool TryConsumeItem(string itemID, out float consumedDurability)
+    {
+        consumedDurability = 0f;
+
+        // Check if we have the item in stock
+        if (!inventoryDatabase.ContainsKey(itemID) || inventoryDatabase[itemID].Count == 0)
+            return false;
+
+        if (IsServer)
         {
-            return inventoryDatabase[itemID];
+            // Grab the durability of the first part in the stack (First In, First Out)
+            consumedDurability = inventoryDatabase[itemID][0].MaxDurability;
+
+            // Remove it from the inventory
+            inventoryDatabase[itemID].RemoveAt(0);
+
+            // Sync and Save
+            OnItemQuantityChanged?.Invoke(itemID, inventoryDatabase[itemID].Count);
+            UpdateItemClientRpc(itemID, SerializeInventory());
+            SaveInventory();
+
+            return true;
         }
-        return 0;
+
+        return false;
     }
 
-    // --- Internal Server Logic ---
-
-    private bool ModifyQuantityInternal(string itemID, int amount)
+    private void ModifyQuantityInternal(string itemID, float durability, bool isAdd)
     {
-        if (!inventoryDatabase.ContainsKey(itemID)) return false;
+        if (!inventoryDatabase.ContainsKey(itemID)) 
+        {
+            inventoryDatabase.Add(itemID, new List<PartCondition>());
+        }
 
-        int currentQuantity = inventoryDatabase[itemID];
-        int newQuantity = currentQuantity + amount;
+        if (isAdd)
+        {
+            inventoryDatabase[itemID].Add(new PartCondition { CurrentDurability = durability, MaxDurability = durability });
+        }
 
-        if (newQuantity < 0) return false;
-
-        inventoryDatabase[itemID] = newQuantity;
+        OnItemQuantityChanged?.Invoke(itemID, inventoryDatabase[itemID].Count);
+        UpdateItemClientRpc(itemID, SerializeInventory());
         
-        OnItemQuantityChanged?.Invoke(itemID, newQuantity);
-        UpdateItemClientRpc(itemID, newQuantity);
-
-        return true;
+        // POINT 3: Real-time saving
+        SaveInventory();
     }
 
-    // --- Networking RPCs ---
-
-    [Rpc(SendTo.Server)]
-    private void RequestItemChangeRpc(string itemID, int amount)
-    {
-        ModifyQuantityInternal(itemID, amount);
-    }
+    [Rpc(SendTo.Server)] private void RequestPartAddRpc(string itemID, float durability) { ModifyQuantityInternal(itemID, durability, true); }
+    [Rpc(SendTo.Server)] private void RequestPartRemoveRpc(string itemID, int amount) { DecreaseItemQuantity(itemID, amount); }
 
     [Rpc(SendTo.ClientsAndHost)]
-    private void UpdateItemClientRpc(string itemID, int newAmount)
+    private void UpdateItemClientRpc(string itemID, string fullJson)
     {
         if (IsServer) return; 
-
-        inventoryDatabase[itemID] = newAmount;
-        OnItemQuantityChanged?.Invoke(itemID, newAmount);
+        ApplyJsonToDatabase(fullJson);
+        OnItemQuantityChanged?.Invoke(itemID, inventoryDatabase.ContainsKey(itemID) ? inventoryDatabase[itemID].Count : 0);
     }
 
-    // FIXED: Added AllowTargetOverride = true to support RpcTarget.Single
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncInventoryRpc(string json, RpcParams rpcParams = default)
     {
         if (IsServer) return; 
+        ApplyJsonToDatabase(json);
+        foreach(var kvp in inventoryDatabase) OnItemQuantityChanged?.Invoke(kvp.Key, kvp.Value.Count);
+    }
 
+    private void ApplyJsonToDatabase(string json)
+    {
         InventorySaveData data = JsonUtility.FromJson<InventorySaveData>(json);
         if (data != null && data.Items != null)
         {
             inventoryDatabase.Clear();
-            foreach (var item in data.Items)
-            {
-                inventoryDatabase[item.ID] = item.Count;
-            }
-            
-            // Refresh UI
-            foreach(var kvp in inventoryDatabase)
-            {
-                OnItemQuantityChanged?.Invoke(kvp.Key, kvp.Value);
-            }
+            foreach (var item in data.Items) inventoryDatabase[item.ID] = item.Conditions ?? new List<PartCondition>();
         }
     }
 
-    // --- Serialization Helpers ---
-
     private string SerializeInventory()
     {
-        InventorySaveData data = new InventorySaveData();
-        data.Items = new List<InventoryEntry>();
-        foreach (var kvp in inventoryDatabase)
-        {
-            data.Items.Add(new InventoryEntry { ID = kvp.Key, Count = kvp.Value });
-        }
+        InventorySaveData data = new InventorySaveData { Items = new List<InventoryEntry>() };
+        foreach (var kvp in inventoryDatabase) data.Items.Add(new InventoryEntry { ID = kvp.Key, Conditions = kvp.Value });
         return JsonUtility.ToJson(data);
     }
 }
 
 [System.Serializable]
-public class InventorySaveData
+public class PartCondition
 {
-    public List<InventoryEntry> Items;
+    public float CurrentDurability;
+    public float MaxDurability;
 }
 
 [System.Serializable]
-public struct InventoryEntry
-{
-    public string ID;
-    public int Count;
-}
+public class InventorySaveData { public List<InventoryEntry> Items; }
+
+[System.Serializable]
+public struct InventoryEntry { public string ID; public List<PartCondition> Conditions; }
