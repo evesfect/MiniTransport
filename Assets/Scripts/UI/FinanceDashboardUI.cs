@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
+using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.UI; 
+using UnityEngine.UI;
 using XCharts.Runtime;
 
 public class FinanceDashboardUI : MonoBehaviour
@@ -26,9 +27,16 @@ public class FinanceDashboardUI : MonoBehaviour
 
     private List<string> _dropdownOptions = new List<string>();
 
+    // Tracks whether this client is enrolled for ongoing ledger syncs from the server. Without this,
+    // a remote client only ever receives the one-time initial ledger snapshot (sent on connect) and
+    // its table goes stale the moment new transactions happen server-side. The host reads the live
+    // ledger directly and doesn't need (or send) a subscription.
+    private bool _ledgerSubscribed = false;
+
     private void OnEnable()
     {
         SetupDropdown();
+        EnsureLedgerSubscription();
 
         if (CompanyManager.Instance != null)
         {
@@ -82,6 +90,8 @@ public class FinanceDashboardUI : MonoBehaviour
             CompanyManager.Instance.OnLedgerUpdated -= HandleCompanyDataUpdated;
             CompanyManager.Instance.OnBalanceChanged -= HandleCompanyDataUpdated;
         }
+
+        ReleaseLedgerSubscription();
     }
 
     // [NEW] Listens to the toggle button and refreshes only when opening
@@ -89,8 +99,36 @@ public class FinanceDashboardUI : MonoBehaviour
     {
         if (isOpen && CompanyManager.Instance != null)
         {
+            // The panel object can be enabled (and OnEnable run) before the client finishes
+            // connecting, in which case the initial subscribe attempt is skipped. Retry on open.
+            EnsureLedgerSubscription();
             ForceRefresh();
         }
+    }
+
+    // Enrolls a remote client for ongoing CompanyLedger syncs. Subscribing also makes the server
+    // immediately push the current ledger (NetworkSyncBroker.SubscribeRpc delivers current state),
+    // so the table fills in right away. No-op on the host/server, which holds the live ledger.
+    private void EnsureLedgerSubscription()
+    {
+        if (_ledgerSubscribed) return;
+
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.IsListening || nm.IsServer || NetworkSyncBroker.Instance == null) return;
+
+        NetworkSyncBroker.Instance.SubscribeRpc(SyncDataType.CompanyLedger);
+        _ledgerSubscribed = true;
+    }
+
+    private void ReleaseLedgerSubscription()
+    {
+        if (!_ledgerSubscribed) return;
+        _ledgerSubscribed = false;
+
+        var nm = NetworkManager.Singleton;
+        if (nm == null || !nm.IsListening || nm.IsServer || NetworkSyncBroker.Instance == null) return;
+
+        NetworkSyncBroker.Instance.UnsubscribeRpc(SyncDataType.CompanyLedger);
     }
 
     private void HandleCompanyDataUpdated()
