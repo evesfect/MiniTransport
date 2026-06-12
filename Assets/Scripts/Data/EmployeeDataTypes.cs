@@ -34,6 +34,14 @@ public class EmployeeData
 
     // True while the employee is away on a training course (counts down on each day change).
     public bool IsInTraining => TrainingDaysRemaining > 0;
+
+    [Header("Wellbeing")]
+    [Range(0, 100)]
+    [Tooltip("Accumulated fatigue (0 = fully rested, 100 = burnt out). Rises while on shift, recovers when resting/idle/training.")]
+    public float Fatigue;
+
+    // Morale is the inverse of fatigue (per HR design): a rested employee has high morale.
+    public float Morale => 100f - Mathf.Clamp(Fatigue, 0f, 100f);
 }
 
 [Serializable]

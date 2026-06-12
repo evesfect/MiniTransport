@@ -53,6 +53,18 @@ public class EmployeeManager : NetworkBehaviour
     [Tooltip("Maximum length of a single training course, in days.")]
     public int maxTrainingDays = 7;
 
+    [Header("Fatigue Settings")]
+    [Tooltip("Fatigue gained each sim-hour an assigned mechanic is on shift (during work hours).")]
+    public float fatiguePerWorkHour = 2f;
+    [Tooltip("Fatigue recovered each sim-hour while resting (off-hours, idle, or unassigned).")]
+    public float fatigueRecoveryPerHour = 2.5f;
+    [Tooltip("Fatigue recovered each sim-hour while away on a training course (rest from the floor).")]
+    public float fatigueRecoveryTrainingPerHour = 3f;
+    [Tooltip("Hour the work day starts (mechanics on shift accrue fatigue from here).")]
+    public float workDayStartHour = 6f;
+    [Tooltip("Hour the work day ends (after this they rest and recover).")]
+    public float workDayEndHour = 22f;
+
     // Events for UI
     public event Action<string> OnEmployeeHired;
     public event Action<string> OnEmployeeFired;
@@ -100,6 +112,7 @@ public class EmployeeManager : NetworkBehaviour
             {
                 SimulationTimeManager.Instance.OnDayChanged += ProcessPendingAdCampaign;
                 SimulationTimeManager.Instance.OnDayChanged += ProcessTraining;
+                SimulationTimeManager.Instance.OnHourChanged += UpdateFatigue;
             }
 
 
@@ -132,6 +145,7 @@ public class EmployeeManager : NetworkBehaviour
             {
                 SimulationTimeManager.Instance.OnDayChanged -= ProcessPendingAdCampaign;
                 SimulationTimeManager.Instance.OnDayChanged -= ProcessTraining;
+                SimulationTimeManager.Instance.OnHourChanged -= UpdateFatigue;
             }
         }
     }
@@ -607,6 +621,41 @@ public class EmployeeManager : NetworkBehaviour
         {
             SaveEmployees();
             SyncEmployeesRpc(SerializeEmployees()); // fires OnEmployeeDataUpdated on host + clients
+        }
+    }
+
+    /// <summary>
+    /// Server-side hourly tick: advances every employee's fatigue. Assigned mechanics tire while
+    /// on shift (work hours); everyone else (off-hours, idle/unassigned, or in training) recovers.
+    /// Fatigue is read live by the HR report (avgFatigue KPI); it is not synced/saved every hour
+    /// to avoid UI churn — the next discrete action persists it.
+    /// </summary>
+    private void UpdateFatigue()
+    {
+        if (!IsServer || allEmployees == null || allEmployees.Count == 0) return;
+
+        float hour = SimulationTimeManager.Instance != null
+            ? SimulationTimeManager.Instance.CurrentTimeOfDay : 12f;
+        bool isWorkHours = hour >= workDayStartHour && hour < workDayEndHour;
+
+        foreach (var emp in allEmployees)
+        {
+            float delta;
+
+            if (emp.IsInTraining)
+            {
+                delta = -fatigueRecoveryTrainingPerHour;            // resting away on a course
+            }
+            else if (isWorkHours && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            {
+                delta = fatiguePerWorkHour;                          // on shift
+            }
+            else
+            {
+                delta = -fatigueRecoveryPerHour;                     // off-hours / idle / unassigned
+            }
+
+            emp.Fatigue = Mathf.Clamp(emp.Fatigue + delta, 0f, 100f);
         }
     }
 

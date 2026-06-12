@@ -1,7 +1,7 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 43451.6796875,
-    "TransferTripCount": 204,
+    "CurrentBalance": 43908.6796875,
+    "TransferTripCount": 365,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -2524,12 +2524,12 @@
             "Count": 316
         },
         {
-            "Amount": 90511.859375,
+            "Amount": 90921.859375,
             "Type": 1,
             "Category": 2,
             "Description": "Simulated Passenger Fare",
             "Timestamp": 1,
-            "Count": 355
+            "Count": 368
         },
         {
             "Amount": -244.56285095214845,
@@ -2546,6 +2546,14 @@
             "Description": "Training Course for Employee 4552 (2 days)",
             "Timestamp": 1,
             "Count": 2
+        },
+        {
+            "Amount": 47.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 4
         }
     ]
 }

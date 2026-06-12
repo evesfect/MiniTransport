@@ -160,7 +160,9 @@ public class PassengerManager : NetworkBehaviour
                     int leavingCount = groups[i].PassengerCount;
 
                     
-                    float penalty = -(leavingCount * 0.1f * CompanyManager.Instance.satisfactionPenaltyPertimeout);
+                    // Softened: 0.025 (was 0.1) so a wave of give-ups no longer tanks satisfaction.
+                    // Net effect with the default penalty field ≈ -0.05 satisfaction per passenger who leaves.
+                    float penalty = -(leavingCount * 0.025f * CompanyManager.Instance.satisfactionPenaltyPertimeout);
 
                     CompanyManager.Instance.ModifySatisfaction(penalty);
 

@@ -4,12 +4,13 @@
             "EmployeeID": "4552",
             "FullName": "Employee 4552",
             "Role": 0,
-            "SkillLevel": 62.0,
-            "WeeklySalary": 324.0,
+            "SkillLevel": 64.0,
+            "WeeklySalary": 328.0,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team C",
-            "TrainingDaysRemaining": 1
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "29e04b36",
@@ -20,7 +21,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team A",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "29e04b36",
@@ -31,7 +33,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team B",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "29e21b36",
@@ -42,7 +45,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team C",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "12e04b36",
@@ -53,7 +57,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team A",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "56e04b36",
@@ -64,7 +69,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team B",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "29e04236",
@@ -75,7 +81,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team C",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "fb076144",
@@ -86,7 +93,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team B",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "29e04b33",
@@ -97,7 +105,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team A",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "d51e704c",
@@ -108,7 +117,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": "",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "af77cd0b",
@@ -119,7 +129,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": "",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         },
         {
             "EmployeeID": "3257ced5",
@@ -130,7 +141,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": "",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         }
     ],
     "Candidates": [
@@ -143,7 +155,8 @@
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": "",
-            "TrainingDaysRemaining": 0
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
         }
     ],
     "AdCampaignActive": false,
