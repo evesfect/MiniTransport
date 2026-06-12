@@ -205,7 +205,8 @@ public class MaintenanceManager : NetworkBehaviour
 
         foreach (var emp in EmployeeManager.Instance.allEmployees)
         {
-            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            // Mechanics away on a training course do not contribute to repair work.
+            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID) && !emp.IsInTraining)
             {
                 string teamName = string.IsNullOrEmpty(emp.AssignedTeamID) ? "General Crew" : emp.AssignedTeamID;
                 string teamKey = $"{emp.AssignedDepotID}_{teamName}";

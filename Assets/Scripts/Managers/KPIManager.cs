@@ -193,7 +193,8 @@ public class KPIManager : NetworkBehaviour
         int active = buses.Count(b => FleetManager.Instance.IsBusActive(b.BusID));
         _utilSampleSum += (active / (float)buses.Count) * 100f;
         _utilSampleCount++;
-        MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
+        // HrReport included so the hourly-updated fatigue KPI refreshes live.
+        MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport, SyncDataType.HrReport);
     }
 
     private void OnDayChanged()
@@ -389,7 +390,7 @@ public class KPIManager : NetworkBehaviour
     {
         var emp = EmployeeManager.Instance;
         if (emp == null || emp.allEmployees == null || emp.allEmployees.Count == 0)
-            return new HrReportData { totalHires = _totalHires, avgFatigue = -1f, inTraining = -1 };
+            return new HrReportData { totalHires = _totalHires, avgFatigue = -1f, inTraining = 0 };
 
         var staff = emp.allEmployees;
         float weeklyPayroll = staff.Sum(e => e.WeeklySalary) + staff.Count * emp.upkeepPerEmployee;
@@ -406,8 +407,8 @@ public class KPIManager : NetworkBehaviour
             avgSkill = staff.Average(e => e.SkillLevel),
             weeklyPayroll = weeklyPayroll,
             teamCount = teamCount,
-            avgFatigue = -1f, // TODO: fatigue/overtime not modeled yet (doc: 1 pt / 2 sim-min overtime, morale = 100 - fatigue)
-            inTraining = -1   // TODO: training queue not modeled yet
+            avgFatigue = staff.Average(e => e.Fatigue),       // 0 = rested, 100 = burnt out
+            inTraining = staff.Count(e => e.IsInTraining)
         };
     }
 
