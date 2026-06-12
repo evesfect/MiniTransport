@@ -91,14 +91,19 @@ public class DemandSimulationSystem : GridSimulationSystem
             if (tile.EcoClass == EconomicClass.High) rawOut *= 0.75f;
             if (tile.EcoClass == EconomicClass.Low) rawOut *= 0.9f;
 
-            byte newOutDemand = (byte)Mathf.Clamp(rawOut / 10f, 0, 100); // Scaling factor to fit byte
-
             // In Demand Calculation
             float rawIn = 0f;
             rawIn += (tile.Population * (tile.ResidentialRatio / 100f)) * resIn; // Returning home
             rawIn += (tile.Jobs * (tile.CommercialRatio / 100f)) * comIn;        // Going to shop/work
             rawIn += (tile.Jobs * (tile.IndustrialRatio / 100f)) * indIn;        // Going to work
 
+            // THE DIRECTOR MODIFIERS
+            if (SimulationDirector.Instance != null)
+            {
+                SimulationDirector.Instance.ApplyDemandModifiers(i, ref rawOut, ref rawIn);
+            }
+
+            byte newOutDemand = (byte)Mathf.Clamp(rawOut / 10f, 0, 100); // Scaling factor to fit byte
             byte newInDemand = (byte)Mathf.Clamp(rawIn / 10f, 0, 100);
 
             // Update Grid Data if Changed
@@ -132,6 +137,12 @@ public class DemandSimulationSystem : GridSimulationSystem
             // OutDemand (0-100) is "People per Hour" roughly? 
             // minutesPassed is e.g. 15.
             float spawnChance = tile.OutDemand * globalSpawnRate * (minutesPassed / 60f);
+
+            // DIRECT SPAWN OVERRIDE HERE
+            if (SimulationDirector.Instance != null)
+            {
+                spawnChance *= SimulationDirector.Instance.GetDirectSpawnMultiplier(i);
+            }
             
             int spawnCount = Mathf.FloorToInt(spawnChance);
             if (UnityEngine.Random.value < (spawnChance - spawnCount)) spawnCount++;
