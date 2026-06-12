@@ -27,6 +27,13 @@ public class EmployeeData
     public string AssignedDepotID;
     [Header("Team Logistics")]
     public string AssignedTeamID;
+
+    [Header("Training")]
+    [Tooltip("Days of training still remaining. While > 0 the mechanic is away on a course and does not contribute to repair work.")]
+    public int TrainingDaysRemaining;
+
+    // True while the employee is away on a training course (counts down on each day change).
+    public bool IsInTraining => TrainingDaysRemaining > 0;
 }
 
 [Serializable]

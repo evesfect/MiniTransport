@@ -1,6 +1,6 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 63985.41015625,
+    "CurrentBalance": 43451.6796875,
     "TransferTripCount": 204,
     "History": [
         {
@@ -2524,12 +2524,12 @@
             "Count": 316
         },
         {
-            "Amount": 90497.859375,
+            "Amount": 90511.859375,
             "Type": 1,
             "Category": 2,
             "Description": "Simulated Passenger Fare",
             "Timestamp": 1,
-            "Count": 354
+            "Count": 355
         },
         {
             "Amount": -244.56285095214845,
@@ -2538,6 +2538,14 @@
             "Description": "Ordered EngineBlock22-27",
             "Timestamp": 1,
             "Count": 1
+        },
+        {
+            "Amount": -20547.732421875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Training Course for Employee 4552 (2 days)",
+            "Timestamp": 1,
+            "Count": 2
         }
     ]
 }

@@ -4,21 +4,23 @@
             "EmployeeID": "4552",
             "FullName": "Employee 4552",
             "Role": 0,
-            "SkillLevel": 60.0,
-            "WeeklySalary": 320.0,
+            "SkillLevel": 62.0,
+            "WeeklySalary": 324.0,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team C"
+            "AssignedTeamID": "Team C",
+            "TrainingDaysRemaining": 1
         },
         {
             "EmployeeID": "29e04b36",
             "FullName": "Employee 45",
             "Role": 0,
-            "SkillLevel": 76.47732543945313,
-            "WeeklySalary": 352.95465087890627,
+            "SkillLevel": 78.47732543945313,
+            "WeeklySalary": 356.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team A"
+            "AssignedTeamID": "Team A",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "29e04b36",
@@ -28,7 +30,8 @@
             "WeeklySalary": 352.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team B"
+            "AssignedTeamID": "Team B",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "29e21b36",
@@ -38,7 +41,8 @@
             "WeeklySalary": 352.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team C"
+            "AssignedTeamID": "Team C",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "12e04b36",
@@ -48,7 +52,8 @@
             "WeeklySalary": 352.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team A"
+            "AssignedTeamID": "Team A",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "56e04b36",
@@ -58,7 +63,8 @@
             "WeeklySalary": 352.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team B"
+            "AssignedTeamID": "Team B",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "29e04236",
@@ -68,7 +74,8 @@
             "WeeklySalary": 352.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team C"
+            "AssignedTeamID": "Team C",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "fb076144",
@@ -78,7 +85,8 @@
             "WeeklySalary": 344.18310546875,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team B"
+            "AssignedTeamID": "Team B",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "29e04b33",
@@ -88,7 +96,8 @@
             "WeeklySalary": 352.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team A"
+            "AssignedTeamID": "Team A",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "d51e704c",
@@ -98,7 +107,8 @@
             "WeeklySalary": 332.38250732421877,
             "AssignedBusID": "",
             "AssignedDepotID": "",
-            "AssignedTeamID": ""
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "af77cd0b",
@@ -108,7 +118,8 @@
             "WeeklySalary": 378.8192138671875,
             "AssignedBusID": "",
             "AssignedDepotID": "",
-            "AssignedTeamID": ""
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0
         },
         {
             "EmployeeID": "3257ced5",
@@ -118,7 +129,8 @@
             "WeeklySalary": 338.3064270019531,
             "AssignedBusID": "",
             "AssignedDepotID": "",
-            "AssignedTeamID": ""
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0
         }
     ],
     "Candidates": [
@@ -130,7 +142,8 @@
             "WeeklySalary": 339.7540283203125,
             "AssignedBusID": "",
             "AssignedDepotID": "",
-            "AssignedTeamID": ""
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0
         }
     ],
     "AdCampaignActive": false,

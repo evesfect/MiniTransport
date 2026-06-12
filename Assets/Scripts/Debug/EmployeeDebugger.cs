@@ -165,10 +165,15 @@ public class EmployeeDebugger : MonoBehaviour
         GUILayout.BeginHorizontal();
 
         // Train
-        if (emp.SkillLevel < 100)
+        if (emp.IsInTraining)
         {
-            float cost = EmployeeManager.Instance.GetTrainingCost(emp.EmployeeID);
-            if (GUILayout.Button($"Train (${cost:F0})")) EmployeeManager.Instance.TrainEmployee(emp.EmployeeID);
+            GUILayout.Label($"Training: {emp.TrainingDaysRemaining}d left");
+        }
+        else if (emp.SkillLevel < 100)
+        {
+            // Debug shortcut: enroll in a single day of training.
+            float cost = EmployeeManager.Instance.GetTrainingCost(emp.EmployeeID, 1);
+            if (GUILayout.Button($"Train 1d (${cost:F0})")) EmployeeManager.Instance.TrainEmployee(emp.EmployeeID, 1);
         }
 
         // Fire
