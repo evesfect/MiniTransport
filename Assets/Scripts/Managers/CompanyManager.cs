@@ -118,13 +118,17 @@ public class CompanyManager : NetworkBehaviour
         else
         {
             _companyData = new CompanyData();
+
+            // [NEW] The exact moment the client is fully spawned and ready, tap the Server on the shoulder and ask for the history!
+            Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} requesting initial sync...");
+            RequestInitialSyncRpc();
         }
     }
 
     public override void OnNetworkDespawn()
     {
         if (IsServer && NetworkManager.Singleton != null)
-        {   
+        {  
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged -= CheckDateForBills;
 
@@ -347,13 +351,36 @@ public class CompanyManager : NetworkBehaviour
             currentBalance = _companyData.CurrentBalance,
             transferTripCount = _companyData.TransferTripCount
         };
-        SyncStatsRpc(JsonUtility.ToJson(stats), target);
+        BroadcastStatsSyncRpc(JsonUtility.ToJson(stats));
     }
 
     private void PerformLedgerSync(BaseRpcTarget target)
     {
         var ledger = new CompanyLedgerData { transactions = _companyData.History };
-        SyncLedgerRpc(JsonUtility.ToJson(ledger), target);
+        BroadcastLedgerSyncRpc(JsonUtility.ToJson(ledger));
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void BroadcastStatsSyncRpc(string json, RpcParams rpcParams = default)
+    {
+        if (IsServer) return;
+
+        var stats = JsonUtility.FromJson<CompanyStatsData>(json);
+        _companyData.CurrentBalance = stats.currentBalance;
+        _companyData.TransferTripCount = stats.transferTripCount;
+
+        OnBalanceChanged?.Invoke(stats.currentBalance);
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void BroadcastLedgerSyncRpc(string json, RpcParams rpcParams = default)
+    {
+        if (IsServer) return;
+
+        var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
+        Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received periodic ledger sync: {ledger.transactions.Count} transactions.");
+        _companyData.History = ledger.transactions;
+        OnLedgerUpdated?.Invoke();
     }
 
     [Rpc(SendTo.Server)]
@@ -366,23 +393,52 @@ public class CompanyManager : NetworkBehaviour
         ProcessTransaction(amount, type, category, desc);
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
+    // [NEW] Client asks the server for the data
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void RequestInitialSyncRpc(RpcParams rpcParams = default)
+    {
+        // Find out exactly which client just asked
+        ulong clientId = rpcParams.Receive.SenderClientId;
+        Debug.Log($"[CompanyManager] Server received sync request from client {clientId}.");
+        Debug.Log($"[CompanyManager] Server state: balance={_companyData.CurrentBalance}, ledger items={_companyData.History.Count}");
+        
+        if (_companyData.History.Count == 0)
+        {
+            Debug.LogWarning("[CompanyManager] WARNING: Server history is EMPTY!");
+        }
+
+        // 1. Send them the Balance
+        var stats = new CompanyStatsData
+        {
+            currentBalance = _companyData.CurrentBalance,
+            transferTripCount = _companyData.TransferTripCount
+        };
+        SyncStatsRpc(JsonUtility.ToJson(stats), RpcTarget.Single(clientId, RpcTargetUse.Temp));
+
+        var ledger = new CompanyLedgerData { transactions = _companyData.History };
+        SyncLedgerRpc(JsonUtility.ToJson(ledger), RpcTarget.Single(clientId, RpcTargetUse.Temp));
+    }
+
+    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncStatsRpc(string json, RpcParams rpcParams = default)
     {
         if (IsServer) return;
-        
+
         var stats = JsonUtility.FromJson<CompanyStatsData>(json);
         _companyData.CurrentBalance = stats.currentBalance;
         _companyData.TransferTripCount = stats.transferTripCount;
+        Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received stats sync: balance={stats.currentBalance}, transfers={stats.transferTripCount}");
 
         OnBalanceChanged?.Invoke(stats.currentBalance);
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
+    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncLedgerRpc(string json, RpcParams rpcParams = default)
     {
         if (IsServer) return;
+
         var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
+        Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received ledger sync: {ledger.transactions.Count} transactions.");
         _companyData.History = ledger.transactions;
         OnLedgerUpdated?.Invoke();
     }
@@ -415,7 +471,9 @@ public class CompanyManager : NetworkBehaviour
             try
             {
                 string json = File.ReadAllText(SavePath);
+                Debug.Log($"[CompanyManager] Loaded company.json: {json.Length} bytes");
                 _companyData = JsonUtility.FromJson<CompanyData>(json);
+                Debug.Log($"[CompanyManager] Parsed company data: balance={_companyData.CurrentBalance}, ledger items={_companyData.History.Count}");
             }
             catch (Exception e)
             {
@@ -423,7 +481,11 @@ public class CompanyManager : NetworkBehaviour
                 ResetData();
             }
         }
-        else ResetData();
+        else 
+        {
+            Debug.LogWarning($"[CompanyManager] No save file found at {SavePath}. Creating new company.");
+            ResetData();
+        }
         OnLedgerUpdated?.Invoke();
     }
 
