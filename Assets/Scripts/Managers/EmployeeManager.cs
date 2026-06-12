@@ -47,11 +47,31 @@ public class EmployeeManager : NetworkBehaviour
     public float trainingCostBase = 300f;
     public float hiringFee = 100f;
 
+    [Header("Training Settings")]
+    [Tooltip("Skill points an employee gains for each day spent in training.")]
+    public float trainingSkillPerDay = 2f;
+    [Tooltip("Maximum length of a single training course, in days.")]
+    public int maxTrainingDays = 7;
+
+    [Header("Fatigue Settings")]
+    [Tooltip("Fatigue gained each sim-hour an assigned mechanic is on shift (during work hours).")]
+    public float fatiguePerWorkHour = 2f;
+    [Tooltip("Fatigue recovered each sim-hour while resting (off-hours, idle, or unassigned).")]
+    public float fatigueRecoveryPerHour = 2.5f;
+    [Tooltip("Fatigue recovered each sim-hour while away on a training course (rest from the floor).")]
+    public float fatigueRecoveryTrainingPerHour = 3f;
+    [Tooltip("Hour the work day starts (mechanics on shift accrue fatigue from here).")]
+    public float workDayStartHour = 6f;
+    [Tooltip("Hour the work day ends (after this they rest and recover).")]
+    public float workDayEndHour = 22f;
+
     // Events for UI
     public event Action<string> OnEmployeeHired;
     public event Action<string> OnEmployeeFired;
     public event Action<string, float> OnEmployeeTrained; // ID, NewSkill
     public event Action OnCandidatesUpdated;
+    // [NEW] Event to tell UI panels (like the HR Request Panel) to refresh their lists
+    public event Action OnEmployeeDataUpdated;
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "employees.json");
@@ -91,6 +111,8 @@ public class EmployeeManager : NetworkBehaviour
             if (SimulationTimeManager.Instance != null)
             {
                 SimulationTimeManager.Instance.OnDayChanged += ProcessPendingAdCampaign;
+                SimulationTimeManager.Instance.OnDayChanged += ProcessTraining;
+                SimulationTimeManager.Instance.OnHourChanged += UpdateFatigue;
             }
 
 
@@ -122,6 +144,8 @@ public class EmployeeManager : NetworkBehaviour
             if (SimulationTimeManager.Instance != null)
             {
                 SimulationTimeManager.Instance.OnDayChanged -= ProcessPendingAdCampaign;
+                SimulationTimeManager.Instance.OnDayChanged -= ProcessTraining;
+                SimulationTimeManager.Instance.OnHourChanged -= UpdateFatigue;
             }
         }
     }
@@ -162,6 +186,8 @@ public class EmployeeManager : NetworkBehaviour
             _pendingAdTier = tier;
             _adCampaignActive = true;
             Debug.Log($"[HR] Successfully launched {tier} ad campaign. Applicants arriving tomorrow.");
+            // Push the new campaign state to clients so their HR banner updates immediately.
+            SyncEmployeesRpc(SerializeEmployees());
             OnCandidatesUpdated?.Invoke();
         }
     }
@@ -176,10 +202,13 @@ public class EmployeeManager : NetworkBehaviour
     {
         if (!_adCampaignActive || _pendingAdTier == AdTier.None) return;
 
-        DeliverCandidates(_pendingAdTier);
-
+        // Clear the campaign state BEFORE delivering, so the snapshot DeliverCandidates
+        // syncs to clients already reflects the campaign as resolved (banner clears).
+        AdTier resolvedTier = _pendingAdTier;
         _adCampaignActive = false;
         _pendingAdTier = AdTier.None;
+
+        DeliverCandidates(resolvedTier);
 
         Debug.Log("[HR] Morning arrival: Ad campaign applicants have entered the lobby!");
         OnCandidatesUpdated?.Invoke();
@@ -297,12 +326,14 @@ public class EmployeeManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Trains an employee to increase skill. Costs money.
+    /// Enrolls an employee in a training course lasting <paramref name="days"/> days (1..maxTrainingDays).
+    /// The company pays the full cost upfront; the employee is away (not working) until the course ends,
+    /// gaining skill on each day that passes.
     /// </summary>
-    public void TrainEmployee(string employeeID)
+    public void TrainEmployee(string employeeID, int days)
     {
-        if (IsServer) TrainInternal(employeeID);
-        else RequestTrainRpc(employeeID);
+        if (IsServer) TrainInternal(employeeID, days);
+        else RequestTrainRpc(employeeID, days);
     }
 
     /// <summary>
@@ -317,11 +348,23 @@ public class EmployeeManager : NetworkBehaviour
     
     // --- Helpers ---
 
+    /// <summary>
+    /// Cost of a single day of training for this employee (scales with their current skill).
+    /// </summary>
     public float GetTrainingCost(string employeeID)
     {
         var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
         if (emp == null) return 0f;
         return trainingCostBase + (emp.SkillLevel * 100f);
+    }
+
+    /// <summary>
+    /// Total cost of a <paramref name="days"/>-day training course (linear: per-day cost x days).
+    /// </summary>
+    public float GetTrainingCost(string employeeID, int days)
+    {
+        days = Mathf.Clamp(days, 1, maxTrainingDays);
+        return GetTrainingCost(employeeID) * days;
     }
 
     public float CalculateWageForSkill(float skill)
@@ -446,7 +489,9 @@ public class EmployeeManager : NetworkBehaviour
 
         EmployeeData candidate = candidates[index];
 
-       float cost = hiringFee + CalculateWageForSkill((int)candidate.SkillLevel);
+        // Charge the candidate's actual demanded wage (what the HR card displays),
+        // not a recomputed/truncated value, so the quote and the charge always match.
+        float cost = hiringFee + candidate.WeeklySalary;
 
         // 1. Pay Hiring Fee
         bool success = CompanyManager.Instance.TryExecuteActionableTransaction(
@@ -467,6 +512,12 @@ public class EmployeeManager : NetworkBehaviour
             Debug.Log($"[HR] Hired {candidate.FullName}");
 
             
+
+            // NEW: Tell Request Manager a mechanic was hired, pass their skill level
+            if (candidate.Role == EmployeeRole.Mechanic && RequestManager.Instance != null)
+            {
+                RequestManager.Instance.NotifyActionTaken(RequestType.HireMechanic, 1, candidate.SkillLevel.ToString());
+            }
         }
     }
 
@@ -506,32 +557,105 @@ public class EmployeeManager : NetworkBehaviour
         }
     }
 
-    private void TrainInternal(string id)
+    private void TrainInternal(string id, int days)
     {
         EmployeeData emp = allEmployees.FirstOrDefault(e => e.EmployeeID == id);
         if (emp == null) return;
-        if (emp.SkillLevel >= 100f) return; // Maxed out
+        if (emp.SkillLevel >= 100f) return;     // Maxed out
+        if (emp.IsInTraining) return;           // Already away on a course
 
-        float cost = trainingCostBase + (emp.SkillLevel * 10f);
+        days = Mathf.Clamp(days, 1, maxTrainingDays);
+
+        // Charge the full course upfront. Per-day cost x days (matches the UI quote).
+        float cost = GetTrainingCost(id, days);
 
         bool paid = CompanyManager.Instance.TryExecuteActionableTransaction(
             cost,
             TransactionCategory.General,
-            $"Training Course for {emp.FullName}"
+            $"Training Course for {emp.FullName} ({days} day{(days == 1 ? "" : "s")})"
         );
 
         if (paid)
         {
-            emp.SkillLevel += 5f;
-            if (emp.SkillLevel > 100f) emp.SkillLevel = 100f;
-
-            // Raise Salary
-            emp.WeeklySalary = CalculateWageForSkill(emp.SkillLevel);
+            // Enroll: skill is gained gradually as the days tick down (see ProcessTraining).
+            emp.TrainingDaysRemaining = days;
 
             SaveEmployees();
-            SyncEmployeesRpc(SerializeEmployees());
-            OnEmployeeTrained?.Invoke(id, emp.SkillLevel);
-            Debug.Log($"[HR] Trained {emp.FullName}. New Skill: {emp.SkillLevel}");
+            SyncEmployeesRpc(SerializeEmployees()); // fires OnEmployeeDataUpdated on host + clients
+            Debug.Log($"[HR] Enrolled {emp.FullName} in a {days}-day training course. Away until it completes.");
+        }
+    }
+
+    /// <summary>
+    /// Server-side day tick: advances every active training course. Each enrolled employee gains
+    /// <see cref="trainingSkillPerDay"/> skill per day and returns to work when their course ends.
+    /// </summary>
+    private void ProcessTraining()
+    {
+        if (!IsServer) return;
+
+        bool changed = false;
+
+        foreach (var emp in allEmployees)
+        {
+            if (!emp.IsInTraining) continue;
+
+            emp.SkillLevel = Mathf.Min(100f, emp.SkillLevel + trainingSkillPerDay);
+            emp.WeeklySalary = CalculateWageForSkill(emp.SkillLevel);
+            emp.TrainingDaysRemaining--;
+            changed = true;
+
+            if (!emp.IsInTraining)
+            {
+                Debug.Log($"[HR] {emp.FullName} finished training. New Skill: {emp.SkillLevel}");
+                OnEmployeeTrained?.Invoke(emp.EmployeeID, emp.SkillLevel);
+
+                if (emp.Role == EmployeeRole.Mechanic && RequestManager.Instance != null)
+                {
+                    RequestManager.Instance.NotifyActionTaken(RequestType.TrainMechanic, 1, emp.EmployeeID);
+                }
+            }
+        }
+
+        if (changed)
+        {
+            SaveEmployees();
+            SyncEmployeesRpc(SerializeEmployees()); // fires OnEmployeeDataUpdated on host + clients
+        }
+    }
+
+    /// <summary>
+    /// Server-side hourly tick: advances every employee's fatigue. Assigned mechanics tire while
+    /// on shift (work hours); everyone else (off-hours, idle/unassigned, or in training) recovers.
+    /// Fatigue is read live by the HR report (avgFatigue KPI); it is not synced/saved every hour
+    /// to avoid UI churn — the next discrete action persists it.
+    /// </summary>
+    private void UpdateFatigue()
+    {
+        if (!IsServer || allEmployees == null || allEmployees.Count == 0) return;
+
+        float hour = SimulationTimeManager.Instance != null
+            ? SimulationTimeManager.Instance.CurrentTimeOfDay : 12f;
+        bool isWorkHours = hour >= workDayStartHour && hour < workDayEndHour;
+
+        foreach (var emp in allEmployees)
+        {
+            float delta;
+
+            if (emp.IsInTraining)
+            {
+                delta = -fatigueRecoveryTrainingPerHour;            // resting away on a course
+            }
+            else if (isWorkHours && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            {
+                delta = fatiguePerWorkHour;                          // on shift
+            }
+            else
+            {
+                delta = -fatigueRecoveryPerHour;                     // off-hours / idle / unassigned
+            }
+
+            emp.Fatigue = Mathf.Clamp(emp.Fatigue + delta, 0f, 100f);
         }
     }
 
@@ -549,7 +673,7 @@ public class EmployeeManager : NetworkBehaviour
     private void RequestFireRpc(string id) { FireInternal(id); }
 
     [Rpc(SendTo.Server)]
-    private void RequestTrainRpc(string id) { TrainInternal(id); }
+    private void RequestTrainRpc(string id, int days) { TrainInternal(id, days); }
 
     [Rpc(SendTo.Server)]
     private void RequestDepotAssignmentRpc(string employeeID, string depotID)
@@ -561,13 +685,22 @@ public class EmployeeManager : NetworkBehaviour
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncEmployeesRpc(string json, RpcParams rpcParams = default)
     {
-        if (IsServer) return;
-        var container = JsonUtility.FromJson<EmployeeContainer>(json);
-        if (container != null)
+        // Host already holds the authoritative lists; clients apply the synced snapshot.
+        if (!IsServer)
         {
-            allEmployees = container.Employees;
-            candidates = container.Candidates;
+            var container = JsonUtility.FromJson<EmployeeContainer>(json);
+            if (container != null)
+            {
+                allEmployees = container.Employees;
+                candidates = container.Candidates;
+                _adCampaignActive = container.AdCampaignActive;
+                _pendingAdTier = container.PendingAdTier;
+            }
         }
+
+        // Notify UI on BOTH host and clients that employee data changed, so panels
+        // refresh after a server-side hire/fire/train (clients only learn via this sync).
+        OnEmployeeDataUpdated?.Invoke();
     }
 
     [Rpc(SendTo.Server)]
@@ -583,7 +716,9 @@ public class EmployeeManager : NetworkBehaviour
         return JsonUtility.ToJson(new EmployeeContainer
         {
             Employees = allEmployees,
-            Candidates = candidates
+            Candidates = candidates,
+            AdCampaignActive = _adCampaignActive,
+            PendingAdTier = _pendingAdTier
         }, true);
     }
 
@@ -613,6 +748,8 @@ public class EmployeeManager : NetworkBehaviour
         }
 
         Debug.Log($"[EmployeeManager] Loaded {allEmployees.Count} employees from: {SavePath}");
+        // [NEW] Fire UI update event after initial file load
+        OnEmployeeDataUpdated?.Invoke();
     }
 
 }

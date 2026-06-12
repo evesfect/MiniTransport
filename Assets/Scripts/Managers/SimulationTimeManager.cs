@@ -128,10 +128,24 @@ public class SimulationTimeManager : NetworkBehaviour
         _netTimeOfDay.Value = newTime;
     }
 
+    private bool _timeLocked = false;
+
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
     public void RequestTimeMultiplierRpc(float newMultiplier)
     {
-        _netTimeMultiplier.Value = Mathf.Clamp(newMultiplier, 0f, 100f);   
+        if (_timeLocked) return; // ignore speed changes once the clock is locked (e.g. game over)
+        _netTimeMultiplier.Value = Mathf.Clamp(newMultiplier, 0f, 100f);
+    }
+
+    /// <summary>
+    /// Server-only. Freezes the simulation clock and blocks all further speed changes.
+    /// Used by GameEndManager when the game ends.
+    /// </summary>
+    public void LockTime()
+    {
+        if (!IsServer) return;
+        _netTimeMultiplier.Value = 0f;
+        _timeLocked = true;
     }
 
     private void OnServerTimeChanged(float oldValue, float newValue)

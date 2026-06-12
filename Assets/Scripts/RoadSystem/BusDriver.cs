@@ -9,6 +9,10 @@ public class BusDriver : VehicleDriver
 {
     [Header("Debug")]
     public MarkerSpawner debugMarkerSpawner;
+    [Tooltip("Log passenger transfer events (board-for-transfer, alight-to-transfer) to the console.")]
+    public bool logTransfers = true;
+    [Tooltip("Log fare collection at each stop (arrivals, transfers, ticket price, total charged).")]
+    public bool logFares = true;
 
     // Properties baseSpeed, clientSpeedBuffer, rotationSpeed are in Base Class
 
@@ -20,7 +24,15 @@ public class BusDriver : VehicleDriver
     );
 
     //Passenger Logic
-    private List<WaitingPassengerGroup> _passengersOnBoard = new List<WaitingPassengerGroup>();
+    // Server-only. A passenger's alight tile (where they leave THIS bus) may differ from
+    // their final destination when they are mid-transfer.
+    private struct OnboardGroup
+    {
+        public int AlightTile;     // tile where this group leaves the current bus
+        public int FinalDestTile;  // tile the passengers ultimately want to reach
+        public ushort Count;
+    }
+    private List<OnboardGroup> _passengersOnBoard = new List<OnboardGroup>();
 
 
     // Breakdown logic
@@ -292,6 +304,24 @@ public class BusDriver : VehicleDriver
 
     private void DespawnBus()
     {
+        // Check if the bus was flagged for sale while it was out driving
+        if (_serverEntry != null && _serverEntry.PendingSale)
+        {
+            Debug.Log($"[BusDriver] Bus {_serverEntry.BusID} returned to depot and is now being sold!");
+            
+            // Trigger the actual sale/removal
+            FleetManager.Instance.RequestFleetOperationRpc(JsonUtility.ToJson(new BusData { BusID = _serverEntry.BusID }), FleetManager.FleetOperation.Remove);
+            
+            // Grant the income now that the shift is over
+            if (CompanyManager.Instance != null)
+            {
+                CompanyManager.Instance.AddIncome(8000f, TransactionCategory.VehiclePurchase, $"Sold bus {_serverEntry.BusID} (Delayed)");
+            }
+            
+            return; // Stop here, do not return it to the normal depot cycle
+        }
+
+        // Normal behavior: park the bus
         if(_serverDepot != null) _serverDepot.ReturnBusToDepot(_serverEntry.BusID);
     }
 
@@ -311,21 +341,58 @@ public class BusDriver : VehicleDriver
         if (!GridManager.Instance.WorldToGrid(currentStop.transform.position, out int x, out int y)) return 0;
         int currentTileIndex = GridManager.Instance.GetIndex(x, y);
 
-        // 2. DROP OFF (Alighting)
-        // Passengers get off first. Each one adds to the timer.
-        
+        // Snapshot the stop's waiting groups BEFORE drop-off, so passengers who alight here
+        // to transfer are not immediately re-boarded onto this same bus on this visit.
+        List<WaitingPassengerGroup> waitingSnapshot = null;
+        var liveWaiting = PassengerManager.Instance.GetPassengersAtStop(currentStop.stopID);
+        if (liveWaiting != null) waitingSnapshot = new List<WaitingPassengerGroup>(liveWaiting);
+
+        // 2. DROP OFF (Alighting + transfers)
+        // Passengers leave the bus at their planned alight tile. Each one adds to the timer.
+        // Fare is charged per passenger per route leg (flat, length-independent); transfer legs
+        // get the GM-configured discount. We accumulate here and bank it in one income line below.
+        float ticketPrice = CompanyManager.Instance != null ? CompanyManager.Instance.TicketPrice : 0f;
+        float transferDiscount = CompanyManager.Instance != null ? CompanyManager.Instance.TransferDiscount : 0f;
+        float fareCollected = 0f;
+
+        int arrivedCount = 0; // passengers who reached their FINAL destination here
         for (int i = _passengersOnBoard.Count - 1; i >= 0; i--)
         {
-            if (_passengersOnBoard[i].DestinationTileIndex == currentTileIndex)
+            if (_passengersOnBoard[i].AlightTile != currentTileIndex) continue;
+
+            var group = _passengersOnBoard[i];
+            totalInteractions += group.Count;
+            _passengersOnBoard.RemoveAt(i);
+
+            if (group.FinalDestTile == currentTileIndex)
             {
-                totalInteractions += _passengersOnBoard[i].PassengerCount;
-                _passengersOnBoard.RemoveAt(i);
+                // Reached final destination.
+                arrivedCount += group.Count;
+            }
+            else
+            {
+                // Transfer point: passengers wait here for the next leg toward their
+                // destination. AddPassengers resets their patience and syncs the waiting UI.
+                PassengerManager.Instance.AddPassengers(currentStop.stopID, group.FinalDestTile, group.Count);
+                if (CompanyManager.Instance != null)
+                    CompanyManager.Instance.RecordTransfer(group.Count);
+
+                // Discounted fare for this (transfer) leg.
+                fareCollected += group.Count * ticketPrice * (1f - transferDiscount);
+
+                if (logTransfers)
+                {
+                    int kpiTotal = CompanyManager.Instance != null ? CompanyManager.Instance.GetCompanyData().TransferTripCount : 0;
+                    Debug.Log($"<color=orange>[Transfer]</color> {group.Count} pax ALIGHTED to transfer at stop {currentStop.stopID} " +
+                              $"(tile {currentTileIndex}) off bus {BusIdLabel()} [route {RouteLabel()}] — continuing toward tile {group.FinalDestTile}. " +
+                              $"(Total Transfer Trips: {kpiTotal})");
+                }
             }
         }
 
-        if (totalInteractions > 0 && CompanyManager.Instance != null)
+        if (arrivedCount > 0 && CompanyManager.Instance != null)
         {
-            float baseReward = totalInteractions * CompanyManager.Instance.baseRewardPerPassenger;
+            float baseReward = arrivedCount * CompanyManager.Instance.baseRewardPerPassenger;
 
             // NEW SATISFACTION CALCULATION: Derived from the Bus's Interior Health condition
             float interiorHealthPct = 1.0f;
@@ -343,26 +410,48 @@ public class BusDriver : VehicleDriver
             float finalReward = baseReward * conditionMultiplier;
 
             CompanyManager.Instance.ModifySatisfaction(finalReward);
+
+            // Full fare for passengers completing their journey on this leg.
+            fareCollected += arrivedCount * ticketPrice;
         }
 
-        // 3. PICK UP (Boarding)
+        // Bank all fares collected at this stop as a single ticket-revenue line.
+        if (fareCollected > 0f && CompanyManager.Instance != null)
+            CompanyManager.Instance.AddIncome(fareCollected, TransactionCategory.TicketRevenue, "Passenger Fares");
 
-        if (IsShiftActive)
+        if (logFares)
+        {
+            int waitingHere = 0;
+            if (waitingSnapshot != null)
+                foreach (var g in waitingSnapshot) waitingHere += g.PassengerCount;
+
+            Debug.Log($"<color=lime>[Fare]</color> Stop {currentStop.stopID} (bus {BusIdLabel()}): " +
+                      $"waitingAtStop={waitingHere} ({(waitingSnapshot?.Count ?? 0)} groups), shiftActive={IsShiftActive}, " +
+                      $"capacity={_serverEntry?.Capacity}, arrived={arrivedCount}, fareCollected={fareCollected}, " +
+                      $"onboard={_passengersOnBoard.Count} groups, routeNet={(RouteNetworkGraph.Instance != null)}");
+        }
+
+        // 3. PICK UP (Boarding) - transfer-aware planning
+
+        if (IsShiftActive && waitingSnapshot != null)
         {
             int myCapacity = _serverEntry.Capacity; // Unique capacity from BusData
             int currentLoad = GetTotalPassengerCount();
 
-            var waitingGroups = PassengerManager.Instance.GetPassengersAtStop(currentStop.stopID);
-            if (waitingGroups != null && currentLoad < myCapacity)
+            if (currentLoad < myCapacity && RouteNetworkGraph.Instance != null)
             {
-                HashSet<int> reachableTiles = GetReachableTiles(); // Using the predicted route logic
-                var groupsCopy = new List<WaitingPassengerGroup>(waitingGroups);
+                // Tiles this bus will reach next, in arrival order, for transfer planning.
+                List<int> upcomingTiles = GetUpcomingTilesInOrder();
 
-                foreach (var group in groupsCopy)
+                foreach (var group in waitingSnapshot)
                 {
                     if (currentLoad >= myCapacity) break;
 
-                    if (reachableTiles.Contains(group.DestinationTileIndex))
+                    int finalDest = group.DestinationTileIndex;
+
+                    // Board only if this bus brings the passenger strictly closer (in rides)
+                    // to their destination. alightTile is where they leave THIS bus.
+                    if (RouteNetworkGraph.Instance.TryPlanLeg(currentTileIndex, upcomingTiles, finalDest, out int alightTile))
                     {
                         int space = myCapacity - currentLoad;
                         ushort countToTake = (ushort)Mathf.Min(space, group.PassengerCount);
@@ -370,17 +459,25 @@ public class BusDriver : VehicleDriver
                         if (countToTake > 0)
                         {
                             // Add to bus storage and remove from the physical stop
-                            AddToBusStorage(group.DestinationTileIndex, countToTake);
-                            PassengerManager.Instance.RemovePassengers(currentStop.stopID, group.DestinationTileIndex, countToTake);
+                            AddToBusStorage(alightTile, finalDest, countToTake);
+                            PassengerManager.Instance.RemovePassengers(currentStop.stopID, finalDest, countToTake);
 
                             currentLoad += countToTake;
                             totalInteractions += countToTake;
+
+                            // Only log transfer legs (alight tile differs from final destination);
+                            // ordinary direct boardings are left unlogged to avoid console spam.
+                            if (logTransfers && alightTile != finalDest)
+                            {
+                                Debug.Log($"<color=orange>[Transfer]</color> {countToTake} pax BOARDED bus {BusIdLabel()} [route {RouteLabel()}] " +
+                                          $"at stop {currentStop.stopID} (tile {currentTileIndex}) — will alight at tile {alightTile} to transfer toward final tile {finalDest}.");
+                            }
                         }
                     }
                 }
             }
         }
-        
+
 
         // Update Network State for Client UI
         var state = _netState.Value;
@@ -390,12 +487,15 @@ public class BusDriver : VehicleDriver
         return totalInteractions;
     }
 
-    // Helper: Simulate the route forward to find all reachable tiles from current position
-    private HashSet<int> GetReachableTiles()
+    // Helper: Simulate the route forward to list the upcoming stop tiles in arrival order
+    // (de-duplicated, keeping first occurrence). Used for transfer planning.
+    private List<int> GetUpcomingTilesInOrder()
     {
-        HashSet<int> reachableTiles = new HashSet<int>();
+        List<int> ordered = new List<int>();
+        HashSet<int> seen = new HashSet<int>();
 
-        if (_serverRoute == null || _serverRoute.StopIDs.Count == 0) return reachableTiles;
+        if (_serverRoute == null || _serverRoute.StopIDs.Count < 2) return ordered;
+        if (GridManager.Instance == null) return ordered;
 
         // Start simulation from current state
         int simIndex = _serverRouteIndex;
@@ -431,40 +531,43 @@ public class BusDriver : VehicleDriver
 
             if (stop != null)
             {
-                // Assuming GridManager has the helper we discussed
                 if (GridManager.Instance.WorldToGrid(stop.transform.position, out int x, out int y))
                 {
                     int tileIndex = GridManager.Instance.GetIndex(x, y);
-                    reachableTiles.Add(tileIndex);
+                    if (seen.Add(tileIndex)) ordered.Add(tileIndex);
                 }
             }
         }
 
-        return reachableTiles;
+        return ordered;
     }
 
-    private void AddToBusStorage(int destIndex, ushort count)
+    private void AddToBusStorage(int alightTile, int finalDest, ushort count)
     {
         for (int i = 0; i < _passengersOnBoard.Count; i++)
         {
-            if (_passengersOnBoard[i].DestinationTileIndex == destIndex)
+            if (_passengersOnBoard[i].AlightTile == alightTile && _passengersOnBoard[i].FinalDestTile == finalDest)
             {
                 var g = _passengersOnBoard[i];
-                g.PassengerCount += count;
+                g.Count += count;
                 _passengersOnBoard[i] = g;
                 return;
             }
         }
         // New group
-        _passengersOnBoard.Add(new WaitingPassengerGroup { DestinationTileIndex = destIndex, PassengerCount = count });
+        _passengersOnBoard.Add(new OnboardGroup { AlightTile = alightTile, FinalDestTile = finalDest, Count = count });
     }
 
     private int GetTotalPassengerCount()
     {
         int total = 0;
-        foreach (var g in _passengersOnBoard) total += g.PassengerCount;
+        foreach (var g in _passengersOnBoard) total += g.Count;
         return total;
     }
+
+    // Null-safe labels for transfer logging.
+    private string BusIdLabel() => _serverEntry != null ? _serverEntry.BusID : "?";
+    private string RouteLabel() => _serverRoute != null ? _serverRoute.RouteName : "?";
 
     // Client Logic (Visuals)
     private void OnNetworkStateChanged(BusNetworkState oldState, BusNetworkState newState)

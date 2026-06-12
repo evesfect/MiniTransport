@@ -32,6 +32,12 @@ public class VendorManager : NetworkBehaviour
 
     public event Action OnVendorDataUpdated;
 
+    // --- KPI lifetime counters (server-side runtime; consumed by KPIManager). Not persisted. ---
+    [HideInInspector] public int lifetimeOrdersPlaced;
+    [HideInInspector] public int lifetimeOrdersDelivered;
+    [HideInInspector] public int lifetimeOnTimeDeliveries;
+    [HideInInspector] public float lifetimeQualitySum; // sum of delivered part durability rolls
+
     public static readonly Dictionary<BusPartCategory, string[]> CategoryParts = new Dictionary<BusPartCategory, string[]>
     {
         { BusPartCategory.Engine, new string[] { "EngineBlock", "Piston", "Alternator" } },
@@ -126,6 +132,11 @@ public class VendorManager : NetworkBehaviour
                 
                 if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived LATE from {order.VendorID}.");
                 else Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived ON TIME from {order.VendorID}.");
+
+                // KPI: track delivery performance & part quality.
+                lifetimeOrdersDelivered++;
+                if (!order.IsDelayed) lifetimeOnTimeDeliveries++;
+                lifetimeQualitySum += order.DurabilityRoll;
                 
                 var vendor = availableVendors.FirstOrDefault(v => v.VendorID == order.VendorID);
                 if (vendor != null)
@@ -305,8 +316,16 @@ public class VendorManager : NetworkBehaviour
         
         CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier * amount, TransactionCategory.PartPurchase, $"Ordered {generatedDisplayID}");
 
+        lifetimeOrdersPlaced++; // KPI: total orders placed
+
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());
+
+        // NEW: Tell Request Manager parts were ordered, passing the base item name.
+        if (RequestManager.Instance != null)
+        {
+            RequestManager.Instance.NotifyActionTaken(RequestType.BuyParts, amount, baseItemName);
+        }
     }
 
     [Rpc(SendTo.Server)] private void RequestSignDealRpc(string vID, BusPartCategory c) { SignDealInternal(vID, c); }

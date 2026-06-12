@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using System;
+using Unity.Collections;
 using Unity.Netcode;
 
 [DefaultExecutionOrder(-55)] 
@@ -17,8 +18,14 @@ public class CompanyManager : NetworkBehaviour
     public float GlobalSatisfaction = 80f;
     public const float MaxSatisfaction = 100f;
 
-    public float satisfactionPenaltyPertimeout = 2.0f; 
-    public float baseRewardPerPassenger = 0.5f; 
+    public float satisfactionPenaltyPertimeout = 2.0f;
+    public float baseRewardPerPassenger = 0.5f;
+
+    [Header("Fare Settings")]
+    [Tooltip("Starting ticket price charged per passenger per route leg (flat, length-independent). The GM can change it at runtime.")]
+    public float defaultTicketPrice = 2.0f;
+    [Tooltip("Starting transfer discount (0..1) applied to fares on transfer legs. The GM can change it at runtime.")]
+    [Range(0f, 1f)] public float defaultTransferDiscount = 0.5f;
 
     [Tooltip("The maximum debt allowed")]
     public float bankruptcyThreshold;
@@ -30,12 +37,50 @@ public class CompanyManager : NetworkBehaviour
     private bool _needsSave = false;
     private float _saveTimer = 0f;
 
+    // Mirrors only the most recent expense (negative transaction) to every client, so the HUD can
+    // show it without subscribing to the whole ledger. Written by the server.
+    private readonly NetworkVariable<FixedString128Bytes> _netLastExpenseDesc = new NetworkVariable<FixedString128Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+    private readonly NetworkVariable<float> _netLastExpenseAmount = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // GM-tunable fare values + a networked mirror of satisfaction, so the GM panel works on clients.
+    private readonly NetworkVariable<float> _netTicketPrice = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> _netTransferDiscount = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> _netSatisfaction = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     public CompanyData GetCompanyData() => _companyData;
+
+    /// <summary>Description of the most recent expense (empty if none recorded yet).</summary>
+    public string LatestExpenseDescription => _netLastExpenseDesc.Value.ToString();
+    /// <summary>Signed amount of the most recent expense (negative). 0 means none recorded yet.</summary>
+    public float LatestExpenseAmount => _netLastExpenseAmount.Value;
+    /// <summary>True once at least one expense has been recorded.</summary>
+    public bool HasLatestExpense => _netLastExpenseAmount.Value < 0f;
+
+    /// <summary>Current ticket price per passenger per route leg. Read-Everyone (works on clients).</summary>
+    public float TicketPrice => _netTicketPrice.Value;
+    /// <summary>Current transfer discount (0..1) applied to transfer-leg fares. Read-Everyone.</summary>
+    public float TransferDiscount => _netTransferDiscount.Value;
+    /// <summary>Networked mirror of GlobalSatisfaction so the GM panel reads it on clients too.</summary>
+    public float Satisfaction => _netSatisfaction.Value;
 
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
     public event Action OnWeeklyExpensesRequested;
     public event Action<float> OnSatisfactionChanged;
+    public event Action OnLedgerUpdated;
+    public event Action OnTransferRecorded; // raised when TransferTripCount changes (KPI report refresh)
+
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "company.json");
@@ -55,6 +100,11 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer)
         {
             LoadCompanyData();
+            InitializeLatestExpenseFromHistory();
+
+            _netTicketPrice.Value = Mathf.Max(0f, defaultTicketPrice);
+            _netTransferDiscount.Value = Mathf.Clamp01(defaultTransferDiscount);
+            _netSatisfaction.Value = GlobalSatisfaction;
 
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged += CheckDateForBills;
@@ -88,19 +138,24 @@ public class CompanyManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer && _needsSave)
+        if (!IsServer || !_needsSave) return;
+
+        _saveTimer += Time.deltaTime;
+        if (_saveTimer < 5f) return;
+
+        // Reset the timer up front, regardless of outcome. If the write fails (e.g. the file is
+        // briefly locked by OneDrive sync), we retry on the NEXT 5s interval instead of hammering
+        // the locked file every frame — which is what turned a single transient lock into an
+        // endless IOException storm.
+        _saveTimer = 0f;
+
+        if (TrySaveCompanyData())
         {
-            _saveTimer += Time.deltaTime;
-            if (_saveTimer >= 5f) 
+            _needsSave = false;
+
+            if (NetworkSyncBroker.Instance != null)
             {
-                SaveCompanyData();
-                _needsSave = false;
-                _saveTimer = 0f;
-                
-                if (NetworkSyncBroker.Instance != null)
-                {
-                    NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
-                }
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
             }
         }
     }
@@ -193,6 +248,8 @@ public class CompanyManager : NetworkBehaviour
             OnTransactionAdded?.Invoke(newTrans);
         }
 
+        if (amount < 0f) SetLatestExpense(description, amount);
+
         OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
 
         if (NetworkSyncBroker.Instance != null)
@@ -208,18 +265,88 @@ public class CompanyManager : NetworkBehaviour
         }
 
         _needsSave = true;
+        OnLedgerUpdated?.Invoke();
+    }
+
+    // Server-only. Pushes the latest expense to the networked mirror read by the HUD.
+    private void SetLatestExpense(string description, float amount)
+    {
+        if (!IsServer || !IsSpawned) return;
+
+        FixedString128Bytes desc = default;
+        if (!string.IsNullOrEmpty(description)) desc.CopyFromTruncated(description);
+
+        _netLastExpenseDesc.Value = desc;
+        _netLastExpenseAmount.Value = amount;
+    }
+
+    // Server-only. Seeds the latest-expense mirror from the most recent negative entry in the
+    // loaded ledger, so a freshly loaded save shows the last expense from company.json immediately.
+    private void InitializeLatestExpenseFromHistory()
+    {
+        if (!IsServer || _companyData?.History == null) return;
+
+        for (int i = _companyData.History.Count - 1; i >= 0; i--)
+        {
+            if (_companyData.History[i].Amount < 0f)
+            {
+                SetLatestExpense(_companyData.History[i].Description, _companyData.History[i].Amount);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server-only. Records that <paramref name="count"/> passengers made a transfer,
+    /// feeding the global "Number of Transfer Trips" KPI.
+    /// </summary>
+    public void RecordTransfer(int count)
+    {
+        if (!IsServer || count <= 0) return;
+
+        _companyData.TransferTripCount += count;
+
+        // Company stats are surfaced to the local dashboard via OnBalanceChanged
+        // (the dashboard rebuilds the full stats snapshot); the balance value is unchanged.
+        OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
+
+        if (NetworkSyncBroker.Instance != null)
+            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyStats);
+
+
+        OnTransferRecorded?.Invoke(); // let KPIManager refresh the transfer-trip report value
+        _needsSave = true;
     }
 
     public void ModifySatisfaction(float amount)
     {
         GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
         //Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        if (IsServer && IsSpawned) _netSatisfaction.Value = GlobalSatisfaction;
         OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
+    }
+
+    // --- GM fare controls (callable from any client, e.g. the GM panel) ---
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetTicketPriceRpc(float price)
+    {
+        _netTicketPrice.Value = Mathf.Max(0f, price);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetTransferDiscountRpc(float discount)
+    {
+        _netTransferDiscount.Value = Mathf.Clamp01(discount);
     }
 
     private void PerformStatsSync(BaseRpcTarget target)
     {
-        var stats = new CompanyStatsData { currentBalance = _companyData.CurrentBalance };
+        var stats = new CompanyStatsData
+        {
+            currentBalance = _companyData.CurrentBalance,
+            transferTripCount = _companyData.TransferTripCount
+        };
         SyncStatsRpc(JsonUtility.ToJson(stats), target);
     }
 
@@ -246,7 +373,8 @@ public class CompanyManager : NetworkBehaviour
         
         var stats = JsonUtility.FromJson<CompanyStatsData>(json);
         _companyData.CurrentBalance = stats.currentBalance;
-        
+        _companyData.TransferTripCount = stats.transferTripCount;
+
         OnBalanceChanged?.Invoke(stats.currentBalance);
     }
 
@@ -256,13 +384,27 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer) return;
         var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
         _companyData.History = ledger.transactions;
+        OnLedgerUpdated?.Invoke();
     }
 
     [ContextMenu("Save Company")]
-    public void SaveCompanyData()
+    public void SaveCompanyData() => TrySaveCompanyData();
+
+    // Returns true on success. Failures are swallowed and logged once so a transient file lock
+    // (OneDrive sync touching the Assets copy) doesn't throw an unhandled exception every frame.
+    private bool TrySaveCompanyData()
     {
-        string json = JsonUtility.ToJson(_companyData, true);
-        File.WriteAllText(SavePath, json);
+        try
+        {
+            string json = JsonUtility.ToJson(_companyData, true);
+            File.WriteAllText(SavePath, json);
+            return true;
+        }
+        catch (IOException e)
+        {
+            Debug.LogWarning($"[CompanyManager] Save deferred (file busy), will retry next interval: {e.Message}");
+            return false;
+        }
     }
 
     [ContextMenu("Load Company")]
@@ -282,6 +424,7 @@ public class CompanyManager : NetworkBehaviour
             }
         }
         else ResetData();
+        OnLedgerUpdated?.Invoke();
     }
 
     private void ResetData()
@@ -300,6 +443,7 @@ public class CompanyData
 {
     public string CompanyName;
     public float CurrentBalance;
+    public int TransferTripCount; // Global KPI: cumulative number of passenger transfers
     public List<Transaction> History = new List<Transaction>();
 }
 
@@ -320,3 +464,5 @@ public enum TransactionCategory
 {
     General, Grant, TicketRevenue, VehiclePurchase, PartPurchase, Maintenance, Fuel, StaffSalary, StaffUpkeep, Tax
 }
+
+

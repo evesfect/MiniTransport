@@ -48,7 +48,8 @@ public class MechanicDetailPanel : MonoBehaviour
                 (string.IsNullOrEmpty(e.AssignedTeamID) ? "General Crew" : e.AssignedTeamID) == teamName
             ).ToList();
 
-            totalTeamCapacity = teamMembers.Sum(m => m.SkillLevel);
+            // Mechanics away on a training course don't contribute to active team capacity.
+            totalTeamCapacity = teamMembers.Where(m => !m.IsInTraining).Sum(m => m.SkillLevel);
             teamMemberCount = teamMembers.Count;
         }
 

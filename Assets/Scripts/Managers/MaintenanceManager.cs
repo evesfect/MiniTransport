@@ -36,9 +36,48 @@ public class MaintenanceManager : NetworkBehaviour
 
     public IReadOnlyList<WorkItem> WorkQueue => _workItems;
     public event Action OnWorkQueueChanged;
+
+    // --- KPI collection hooks (server-side; consumed by KPIManager) ---
+    public event Action<string, BusPartType> OnBreakdownOccurred; // busID, failed part
+    public event Action OnRepairCompleted;                        // a part fully repaired
+    public event Action OnPartReplaced;                           // a part swapped from inventory
     public bool IsOnRouteBreakdown(string busID)
     {
         return _breakdownSet.Contains(busID);
+    }
+
+    // --- KPI: Mean Time To Repair (breakdown -> return to service) ---
+    private int _simMinute;                                            // monotonic in-game minute counter
+    private readonly Dictionary<string, int> _breakdownStartMinute = new Dictionary<string, int>();
+    private float _repairMinuteSum;
+    private int _repairsTimed;
+    public float AverageRepairHours => _repairsTimed > 0 ? (_repairMinuteSum / _repairsTimed) / 60f : -1f;
+
+    // --- KPI: technician utilization (busy crews / total crews, sampled each hour tick) ---
+    private int _lastTeamsTotal, _lastTeamsBusy;
+    public float TechnicianUtilization => _lastTeamsTotal > 0 ? (_lastTeamsBusy / (float)_lastTeamsTotal) * 100f : -1f;
+
+    // --- KPI: spare-part delays + repair completion ---
+    private int _sparePartDelays;                                     // distinct "waiting for parts" stall episodes
+    private readonly HashSet<string> _partsDelayedBuses = new HashSet<string>(); // buses currently stalled on parts
+    public int SparePartDelays => _sparePartDelays;                   // spare-part delay frequency (episode count)
+    public int BreakdownsResolved => _repairsTimed;                   // buses returned to service (drives repair completion rate)
+
+    // Counts a spare-part stall once per episode: only when a bus newly enters the parts-delayed state.
+    private void RecordPartsDelay(string busID)
+    {
+        if (_partsDelayedBuses.Add(busID)) _sparePartDelays++;
+    }
+
+    // Closes the MTTR clock for a bus that has returned to service (if one was open).
+    private void FinalizeRepairTiming(string busID)
+    {
+        if (_breakdownStartMinute.TryGetValue(busID, out int startMinute))
+        {
+            _repairMinuteSum += Mathf.Max(0, _simMinute - startMinute);
+            _repairsTimed++;
+            _breakdownStartMinute.Remove(busID);
+        }
     }
 
 
@@ -110,6 +149,8 @@ public class MaintenanceManager : NetworkBehaviour
 
     private void OnMinuteTick()
     {
+        _simMinute++; // advance the monotonic clock used for MTTR timing
+
         if (FleetManager.Instance == null) return;
 
         foreach (var busData in FleetManager.Instance.allBuses)
@@ -164,7 +205,8 @@ public class MaintenanceManager : NetworkBehaviour
 
         foreach (var emp in EmployeeManager.Instance.allEmployees)
         {
-            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            // Mechanics away on a training course do not contribute to repair work.
+            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID) && !emp.IsInTraining)
             {
                 string teamName = string.IsNullOrEmpty(emp.AssignedTeamID) ? "General Crew" : emp.AssignedTeamID;
                 string teamKey = $"{emp.AssignedDepotID}_{teamName}";
@@ -273,6 +315,7 @@ public class MaintenanceManager : NetworkBehaviour
 
                         assignedTeam.AvailableCapacity -= allocatedCapacity;
                         Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using '{requiredItemID}'. {assignedTeam.AvailableCapacity:F1} capacity left.");
+                        OnPartReplaced?.Invoke(); // KPI: count parts replaced
                         continue;
                     }
                     else
@@ -301,6 +344,7 @@ public class MaintenanceManager : NetworkBehaviour
                         assignedTeam.AvailableCapacity -= capacityUsed;
                         FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.MaxLife);
                         Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID} by +{potentialHeal:F1} HP using {assignedTeam.TeamID}. {assignedTeam.AvailableCapacity:F1} left.");
+                        OnRepairCompleted?.Invoke(); // KPI: count repairs completed
                     }
                     else
                     {
@@ -314,10 +358,16 @@ public class MaintenanceManager : NetworkBehaviour
             // Update UI Work Item attributed directly to the active team
             if (blockingPart.HasValue)
             {
+                // KPI: count a spare-part delay episode when a bus stalls waiting for parts.
+                if (blockingStatus == WorkItemStatus.AwaitingParts) RecordPartsDelay(busData.BusID);
+                else _partsDelayedBuses.Remove(busData.BusID);
+
                 UpsertDepotWorkItem(busData.BusID, blockingPart.Value, blockingStatus, displayTeamLabel);
             }
             else
             {
+                _partsDelayedBuses.Remove(busData.BusID); // no longer parts-blocked
+
                 bool allHealthy = busData.Parts.All(p => p.Health >= p.MaxLife && p.MaxLife >= replacePartThreshold);
                 if (allHealthy)
                 {
@@ -329,6 +379,10 @@ public class MaintenanceManager : NetworkBehaviour
                 }
             }
         }
+
+        // KPI: sample crew utilization for this hour (busy teams vs total active teams)
+        _lastTeamsTotal = activeTeams.Count;
+        _lastTeamsBusy = activeTeams.Values.Count(t => t.IsCurrentlyWorkingOnABus);
     }
     private void TriggerBreakdown(string busID, BusPartType reason)
     {
@@ -344,10 +398,12 @@ public class MaintenanceManager : NetworkBehaviour
         if (!_breakdownSet.Contains(busID))
         {
             _breakdownSet.Add(busID);
+            _breakdownStartMinute[busID] = _simMinute; // KPI: start the MTTR clock
             var item = new WorkItem(busID, reason, WorkItemStatus.AwaitingTechnician);
             item.Priority = _workItems.Count;
             _workItems.Add(item);
             OnWorkQueueChanged?.Invoke();
+            OnBreakdownOccurred?.Invoke(busID, reason); // KPI: count lifetime breakdowns
             TryDispatchJobs();
         }
     }
@@ -419,6 +475,7 @@ public class MaintenanceManager : NetworkBehaviour
     {
         int removed = _workItems.RemoveAll(w => w.BusID == busID);
         _breakdownSet.Remove(busID);
+        FinalizeRepairTiming(busID); // KPI: close MTTR clock on return to service
         if (removed > 0)
             OnWorkQueueChanged?.Invoke();
     }
@@ -490,11 +547,13 @@ public class MaintenanceManager : NetworkBehaviour
     {
         // Remove all work items for this bus since it is fully repaired
         int removed = _workItems.RemoveAll(w => w.BusID == busID);
+        _partsDelayedBuses.Remove(busID); // no longer stalled on parts
 
         // Clear the bus from the breakdown tracking set so it doesn't block future maintenance checks
         if (_breakdownSet.Contains(busID))
         {
             _breakdownSet.Remove(busID);
+            FinalizeRepairTiming(busID); // KPI: close MTTR clock on return to service
             removed++;
         }
 

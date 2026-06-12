@@ -35,6 +35,13 @@ public class DepotDashboardUI : MonoBehaviour
         {
             MaintenanceManager.Instance.OnWorkQueueChanged += RefreshCurrentDepot;
         }
+
+        // Refresh when staff data changes (e.g. a mechanic is sent to / returns from training),
+        // so the capacity figure updates without waiting for a work-queue change.
+        if (EmployeeManager.Instance != null)
+        {
+            EmployeeManager.Instance.OnEmployeeDataUpdated += RefreshCurrentDepot;
+        }
     }
 
     private void OnDisable()
@@ -47,6 +54,11 @@ public class DepotDashboardUI : MonoBehaviour
         if (MaintenanceManager.Instance != null)
         {
             MaintenanceManager.Instance.OnWorkQueueChanged -= RefreshCurrentDepot;
+        }
+
+        if (EmployeeManager.Instance != null)
+        {
+            EmployeeManager.Instance.OnEmployeeDataUpdated -= RefreshCurrentDepot;
         }
     }
 
@@ -100,12 +112,19 @@ public class DepotDashboardUI : MonoBehaviour
 
         foreach (var emp in depotMechanics)
         {
-            totalSupply += emp.SkillLevel;
             string teamName = string.IsNullOrEmpty(emp.AssignedTeamID) ? "General Crew" : emp.AssignedTeamID;
+
+            // Mechanics away on a training course are not working, so they don't contribute
+            // to the depot's repair capacity (matches MaintenanceManager's hourly pooling).
+            string label = emp.IsInTraining
+                ? $"{emp.FullName} ({teamName}) - Training {emp.TrainingDaysRemaining}d"
+                : $"{emp.FullName} ({teamName})";
+
+            if (!emp.IsInTraining) totalSupply += emp.SkillLevel;
 
             GameObject newRow = Instantiate(mechanicRowPrefab, mechanicsListContainer);
             // Reusing your existing row component perfectly while appending the team name visually
-            newRow.GetComponent<MechanicUIRow>()?.Setup($"{emp.FullName} ({teamName})", emp.SkillLevel);
+            newRow.GetComponent<MechanicUIRow>()?.Setup(label, emp.SkillLevel);
         }
 
         // 3. Calculate DEMAND (Total Workload for this Depot)

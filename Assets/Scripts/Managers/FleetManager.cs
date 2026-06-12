@@ -19,8 +19,16 @@ public class FleetManager : NetworkBehaviour
 
     public event Action OnFleetUpdated;
 
-    // Runtime Lookup: Maps BusID -> Spawned GameObject
+    // Runtime Lookup: Maps BusID -> Spawned GameObject (server-only)
     private Dictionary<string, GameObject> _activeBusInstances = new Dictionary<string, GameObject>();
+
+    // Mirrors the number of spawned/in-service buses to every client. Written by the server
+    // whenever a bus is registered/unregistered, since _activeBusInstances only exists on the server.
+    private readonly NetworkVariable<int> _netActiveBusCount = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
 
     public enum FleetOperation { Add, Remove, Update }
 
@@ -121,12 +129,31 @@ public class FleetManager : NetworkBehaviour
             _activeBusInstances[busID] = busInstance;
         else
             _activeBusInstances.Add(busID, busInstance);
+
+        PublishActiveBusCount();
     }
 
     public void UnregisterBus(string busID)
     {
         if (_activeBusInstances.ContainsKey(busID))
             _activeBusInstances.Remove(busID);
+
+        PublishActiveBusCount();
+    }
+
+    // Server-only: recompute the live count and mirror it to clients.
+    private void PublishActiveBusCount()
+    {
+        if (!IsServer) return;
+        _netActiveBusCount.Value = CountActiveInstances();
+    }
+
+    private int CountActiveInstances()
+    {
+        int count = 0;
+        foreach (var instance in _activeBusInstances.Values)
+            if (instance != null) count++;
+        return count;
     }
 
     public GameObject GetActiveBus(string busID)
@@ -134,6 +161,12 @@ public class FleetManager : NetworkBehaviour
         if (_activeBusInstances.TryGetValue(busID, out GameObject obj)) return obj;
         return null;
     }
+
+    /// <summary>
+    /// Number of buses currently spawned/in-service. Works on clients too: the server keeps
+    /// the authoritative dictionary, while clients read the mirrored network value.
+    /// </summary>
+    public int ActiveBusCount => IsServer ? CountActiveInstances() : _netActiveBusCount.Value;
 
     // --- Networking & Data ---
 
