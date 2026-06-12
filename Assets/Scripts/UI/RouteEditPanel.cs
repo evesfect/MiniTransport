@@ -22,6 +22,10 @@ public class RouteEditPanel : MonoBehaviour
     public Transform busListContainer;
     public GameObject busAssignedCardPrefab;
 
+    [Header("Add Bus")]
+    public Button addBusButton;
+    public TMP_Dropdown busDropdown;
+
     [Header("Tools & Visualizations")]
     public Toggle addStopToggle;
     public BusStopAddTool busStopAddTool;
@@ -37,6 +41,7 @@ public class RouteEditPanel : MonoBehaviour
     private RouteScrollManager _parentManager;
     private readonly List<GameObject> _stopPool = new List<GameObject>();
     private readonly List<GameObject> _busPool = new List<GameObject>();
+    private List<BusData> _availableBusesCache = new List<BusData>();
     private CanvasGroup _canvasGroup;
 
     private void Awake()
@@ -72,6 +77,15 @@ public class RouteEditPanel : MonoBehaviour
         {
             demandVizToggle.onValueChanged.AddListener(OnDemandVizToggled);
             demandVizToggle.isOn = false;
+        }
+
+        if (addBusButton != null)
+            addBusButton.onClick.AddListener(OnAddBusClicked);
+
+        if (busDropdown != null)
+        {
+            busDropdown.onValueChanged.AddListener(OnBusDropdownSelected);
+            busDropdown.gameObject.SetActive(false);
         }
     }
 
@@ -114,6 +128,7 @@ public class RouteEditPanel : MonoBehaviour
         if (addStopToggle != null) addStopToggle.isOn = false;
         if (trafficVizToggle != null) trafficVizToggle.isOn = false;
         if (demandVizToggle != null) demandVizToggle.isOn = false;
+        if (busDropdown != null) busDropdown.gameObject.SetActive(false);
 
         HidePanel();
 
@@ -291,5 +306,58 @@ public class RouteEditPanel : MonoBehaviour
         if (addStopToggle != null) addStopToggle.isOn = false;
         if (trafficVizToggle != null) trafficVizToggle.isOn = false;
         if (demandVizToggle != null) demandVizToggle.isOn = false;
+        if (busDropdown != null) busDropdown.gameObject.SetActive(false);
+    }
+
+    // ────── Add Bus Dropdown ──────
+
+    private void OnAddBusClicked()
+    {
+        if (_currentRoute == null || FleetManager.Instance == null || busDropdown == null) return;
+
+        _availableBusesCache.Clear();
+        foreach (var bus in FleetManager.Instance.allBuses)
+        {
+            if (bus.Schedule == null || string.IsNullOrEmpty(bus.Schedule.RouteID))
+                _availableBusesCache.Add(bus);
+        }
+
+        busDropdown.ClearOptions();
+        var options = new System.Collections.Generic.List<string>();
+
+        if (_availableBusesCache.Count == 0)
+        {
+            options.Add("No available buses");
+            busDropdown.interactable = false;
+        }
+        else
+        {
+            options.Add("Select a bus...");
+            foreach (var bus in _availableBusesCache)
+                options.Add(bus.BusID);
+            busDropdown.interactable = true;
+        }
+
+        busDropdown.AddOptions(options);
+        busDropdown.value = 0;
+        busDropdown.RefreshShownValue();
+        busDropdown.gameObject.SetActive(true);
+        busDropdown.Show();
+    }
+
+    private void OnBusDropdownSelected(int index)
+    {
+        busDropdown.gameObject.SetActive(false);
+
+        // index 0 is the placeholder ("Select a bus..." or "No available buses")
+        if (index == 0 || index - 1 >= _availableBusesCache.Count) return;
+
+        var selectedBus = _availableBusesCache[index - 1];
+        if (selectedBus.Schedule == null)
+            selectedBus.Schedule = new BusSchedule();
+        selectedBus.Schedule.RouteID = _currentRoute.RouteID;
+
+        FleetManager.Instance?.UpdateBusClient(selectedBus);
+        RefreshBusList();
     }
 }

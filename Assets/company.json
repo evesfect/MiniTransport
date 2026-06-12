@@ -1,7 +1,7 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 44561.6796875,
-    "TransferTripCount": 614,
+    "CurrentBalance": 44629.6796875,
+    "TransferTripCount": 620,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -2556,12 +2556,12 @@
             "Count": 4
         },
         {
-            "Amount": 653.0,
+            "Amount": 721.0,
             "Type": 1,
             "Category": 2,
             "Description": "Passenger Fares",
             "Timestamp": 1,
-            "Count": 34
+            "Count": 37
         }
     ]
 }
