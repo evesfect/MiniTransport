@@ -14,18 +14,22 @@ public class CompanyDebugBalanceSimulator : MonoBehaviour
 
     private void Update()
     {
-        // Wait until the CompanyManager is fully loaded
-        if (CompanyManager.Instance == null) return;
+        // DEBUG-ONLY simulator disabled: it spammed the ledger with fake "Simulated Passenger Fare"
+        // income and "Simulated Random Repair" expenses every updateInterval seconds purely to make
+        // the balance move while testing UI. Re-enable the block below to use it again.
 
-        // Only run the simulation on the Server/Host so we don't spam client RPCs
-        if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer) return;
-
-        _timer += Time.deltaTime;
-        if (_timer >= updateInterval)
-        {
-            _timer = 0f;
-            SimulateTransaction();
-        }
+        // // Wait until the CompanyManager is fully loaded
+        // if (CompanyManager.Instance == null) return;
+        //
+        // // Only run the simulation on the Server/Host so we don't spam client RPCs
+        // if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsServer) return;
+        //
+        // _timer += Time.deltaTime;
+        // if (_timer >= updateInterval)
+        // {
+        //     _timer = 0f;
+        //     SimulateTransaction();
+        // }
     }
 
     private void SimulateTransaction()

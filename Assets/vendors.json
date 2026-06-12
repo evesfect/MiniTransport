@@ -259,7 +259,21 @@
             "StartDay": 1
         }
     ],
-    "ActiveOrders": [],
+    "ActiveOrders": [
+        {
+            "OrderID": "b7f61e",
+            "VendorID": "ed2b0171",
+            "ItemID": "EngineBlock",
+            "BaseItemName": "EngineBlock",
+            "StartIndex": 22,
+            "Amount": 6,
+            "Category": 1,
+            "ExpectedArrivalHour": 58.815330505371097,
+            "ActualArrivalHour": 58.815330505371097,
+            "IsDelayed": false,
+            "DurabilityRoll": 41.21155548095703
+        }
+    ],
     "LifetimeItemCounts": [
         {
             "BaseName": "Piston",
@@ -267,7 +281,7 @@
         },
         {
             "BaseName": "EngineBlock",
-            "Count": 21
+            "Count": 27
         },
         {
             "BaseName": "BusFrame",

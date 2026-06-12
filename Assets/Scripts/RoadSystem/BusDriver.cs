@@ -11,6 +11,8 @@ public class BusDriver : VehicleDriver
     public MarkerSpawner debugMarkerSpawner;
     [Tooltip("Log passenger transfer events (board-for-transfer, alight-to-transfer) to the console.")]
     public bool logTransfers = true;
+    [Tooltip("Log fare collection at each stop (arrivals, transfers, ticket price, total charged).")]
+    public bool logFares = true;
 
     // Properties baseSpeed, clientSpeedBuffer, rotationSpeed are in Base Class
 
@@ -347,6 +349,12 @@ public class BusDriver : VehicleDriver
 
         // 2. DROP OFF (Alighting + transfers)
         // Passengers leave the bus at their planned alight tile. Each one adds to the timer.
+        // Fare is charged per passenger per route leg (flat, length-independent); transfer legs
+        // get the GM-configured discount. We accumulate here and bank it in one income line below.
+        float ticketPrice = CompanyManager.Instance != null ? CompanyManager.Instance.TicketPrice : 0f;
+        float transferDiscount = CompanyManager.Instance != null ? CompanyManager.Instance.TransferDiscount : 0f;
+        float fareCollected = 0f;
+
         int arrivedCount = 0; // passengers who reached their FINAL destination here
         for (int i = _passengersOnBoard.Count - 1; i >= 0; i--)
         {
@@ -368,6 +376,9 @@ public class BusDriver : VehicleDriver
                 PassengerManager.Instance.AddPassengers(currentStop.stopID, group.FinalDestTile, group.Count);
                 if (CompanyManager.Instance != null)
                     CompanyManager.Instance.RecordTransfer(group.Count);
+
+                // Discounted fare for this (transfer) leg.
+                fareCollected += group.Count * ticketPrice * (1f - transferDiscount);
 
                 if (logTransfers)
                 {
@@ -399,6 +410,25 @@ public class BusDriver : VehicleDriver
             float finalReward = baseReward * conditionMultiplier;
 
             CompanyManager.Instance.ModifySatisfaction(finalReward);
+
+            // Full fare for passengers completing their journey on this leg.
+            fareCollected += arrivedCount * ticketPrice;
+        }
+
+        // Bank all fares collected at this stop as a single ticket-revenue line.
+        if (fareCollected > 0f && CompanyManager.Instance != null)
+            CompanyManager.Instance.AddIncome(fareCollected, TransactionCategory.TicketRevenue, "Passenger Fares");
+
+        if (logFares)
+        {
+            int waitingHere = 0;
+            if (waitingSnapshot != null)
+                foreach (var g in waitingSnapshot) waitingHere += g.PassengerCount;
+
+            Debug.Log($"<color=lime>[Fare]</color> Stop {currentStop.stopID} (bus {BusIdLabel()}): " +
+                      $"waitingAtStop={waitingHere} ({(waitingSnapshot?.Count ?? 0)} groups), shiftActive={IsShiftActive}, " +
+                      $"capacity={_serverEntry?.Capacity}, arrived={arrivedCount}, fareCollected={fareCollected}, " +
+                      $"onboard={_passengersOnBoard.Count} groups, routeNet={(RouteNetworkGraph.Instance != null)}");
         }
 
         // 3. PICK UP (Boarding) - transfer-aware planning

@@ -33,6 +33,17 @@ public class KPIManager : NetworkBehaviour
 
     private int _totalHires;
 
+    // Mirrors the demand-met % (served / total) to every client so a live panel (e.g. the GM panel)
+    // can show it without subscribing to the heavy report snapshots. Written by the server.
+    private readonly NetworkVariable<float> _netDemandMet = new NetworkVariable<float>(
+        100f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    /// <summary>
+    /// Percentage of passenger demand met (boarded vs boarded+gave-up). Server computes it live;
+    /// clients read the networked mirror.
+    /// </summary>
+    public float DemandMetPercent => IsServer ? OnTimePerformance() : _netDemandMet.Value;
+
     // --- Client-received snapshots (populated by RPCs on non-server peers) ---
     private GeneralReportData _generalReport;
     private OperationsReportData _operationsReport;
@@ -143,13 +154,21 @@ public class KPIManager : NetworkBehaviour
     {
         _passengersServed += count;
         _totalWaitHours += waitHours * count;
+        PublishDemandMet();
         MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
     }
 
     private void OnPassengersTimedOut(int count)
     {
         _passengersTimedOut += count;
+        PublishDemandMet();
         MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
+    }
+
+    // Server-only: mirror the live demand-met % to clients.
+    private void PublishDemandMet()
+    {
+        if (IsServer && IsSpawned) _netDemandMet.Value = OnTimePerformance();
     }
 
     // Transfers are counted in CompanyManager.TransferTripCount (see BusDriver); this just
