@@ -57,6 +57,7 @@ public class RoleManager : NetworkBehaviour
     // Call this from your pre-game UI
     public void SelectRole(PlayerRole requestedRole)
     {
+        if (!IsSpawned) return;
         if (IsServer) ClaimRoleInternal(NetworkManager.Singleton.LocalClientId, requestedRole);
         else RequestRoleServerRpc(requestedRole);
     }

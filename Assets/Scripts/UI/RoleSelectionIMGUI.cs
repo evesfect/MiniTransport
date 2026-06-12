@@ -5,9 +5,10 @@ public class RoleSelectionIMGUI : MonoBehaviour
 {
     private void OnGUI()
     {
-        // 1. Don't show the role menu if we aren't connected yet
-        if (NetworkManager.Singleton == null || (!NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer))
-            return;
+        // 1. Don't show the role menu if we aren't fully connected yet
+        if (NetworkManager.Singleton == null) return;
+        bool fullyConnected = NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsConnectedClient;
+        if (!fullyConnected) return;
 
         // 2. Don't show the role menu if RoleManager isn't loaded
         if (RoleManager.Instance == null)
