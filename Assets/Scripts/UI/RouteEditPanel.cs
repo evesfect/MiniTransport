@@ -22,9 +22,15 @@ public class RouteEditPanel : MonoBehaviour
     public Transform busListContainer;
     public GameObject busAssignedCardPrefab;
 
-    [Header("Add Stop Tool")]
+    [Header("Tools & Visualizations")]
     public Toggle addStopToggle;
     public BusStopAddTool busStopAddTool;
+    
+    public Toggle trafficVizToggle;
+    public GameObject trafficVizObject;
+    
+    public Toggle demandVizToggle;
+    public GameObject demandVizObject;
 
     private Route _currentRoute;
     public Route CurrentRoute => _currentRoute;
@@ -55,6 +61,18 @@ public class RouteEditPanel : MonoBehaviour
             addStopToggle.onValueChanged.AddListener(OnAddStopToggled);
             addStopToggle.isOn = false;
         }
+
+        if (trafficVizToggle != null)
+        {
+            trafficVizToggle.onValueChanged.AddListener(OnTrafficVizToggled);
+            trafficVizToggle.isOn = false;
+        }
+
+        if (demandVizToggle != null)
+        {
+            demandVizToggle.onValueChanged.AddListener(OnDemandVizToggled);
+            demandVizToggle.isOn = false;
+        }
     }
 
     private void ShowPanel()
@@ -83,8 +101,9 @@ public class RouteEditPanel : MonoBehaviour
         if (routeNameTitle != null)
             routeNameTitle.text = route.RouteName;
 
-        if (addStopToggle != null)
-            addStopToggle.isOn = false;
+        if (addStopToggle != null) addStopToggle.isOn = false;
+        if (trafficVizToggle != null) trafficVizToggle.isOn = false;
+        if (demandVizToggle != null) demandVizToggle.isOn = false;
 
         RefreshStopList();
         RefreshBusList();
@@ -92,8 +111,9 @@ public class RouteEditPanel : MonoBehaviour
 
     public void Close()
     {
-        if (addStopToggle != null)
-            addStopToggle.isOn = false;
+        if (addStopToggle != null) addStopToggle.isOn = false;
+        if (trafficVizToggle != null) trafficVizToggle.isOn = false;
+        if (demandVizToggle != null) demandVizToggle.isOn = false;
 
         HidePanel();
 
@@ -169,9 +189,6 @@ public class RouteEditPanel : MonoBehaviour
         RefreshRouteVisualization();
     }
 
-    /// <summary>
-    /// Called by BusStopAddTool when a new stop is selected via left click.
-    /// </summary>
     public void AddStop(string stopID)
     {
         if (_currentRoute == null) return;
@@ -184,9 +201,6 @@ public class RouteEditPanel : MonoBehaviour
         RefreshRouteVisualization();
     }
 
-    /// <summary>
-    /// Called by BusStopAddTool when a stop is right-clicked to remove.
-    /// </summary>
     public void RemoveStop(string stopID)
     {
         if (_currentRoute == null) return;
@@ -244,7 +258,7 @@ public class RouteEditPanel : MonoBehaviour
             _busPool[i].SetActive(false);
     }
 
-    // ────── Add Stop Toggle ──────
+    // ────── Toggles ──────
 
     private void OnAddStopToggled(bool isOn)
     {
@@ -256,9 +270,26 @@ public class RouteEditPanel : MonoBehaviour
             busStopAddTool.Deactivate();
     }
 
+    private void OnTrafficVizToggled(bool isOn)
+    {
+        if (trafficVizObject != null)
+        {
+            trafficVizObject.SetActive(isOn);
+        }
+    }
+
+    private void OnDemandVizToggled(bool isOn)
+    {
+        if (demandVizObject != null)
+        {
+            demandVizObject.SetActive(isOn);
+        }
+    }
+
     private void OnDisable()
     {
-        if (addStopToggle != null)
-            addStopToggle.isOn = false;
+        if (addStopToggle != null) addStopToggle.isOn = false;
+        if (trafficVizToggle != null) trafficVizToggle.isOn = false;
+        if (demandVizToggle != null) demandVizToggle.isOn = false;
     }
 }
