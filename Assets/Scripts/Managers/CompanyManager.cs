@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using System;
+using Unity.Collections;
 using Unity.Netcode;
 
 [DefaultExecutionOrder(-55)] 
@@ -17,8 +18,14 @@ public class CompanyManager : NetworkBehaviour
     public float GlobalSatisfaction = 80f;
     public const float MaxSatisfaction = 100f;
 
-    public float satisfactionPenaltyPertimeout = 2.0f; 
-    public float baseRewardPerPassenger = 0.5f; 
+    public float satisfactionPenaltyPertimeout = 2.0f;
+    public float baseRewardPerPassenger = 0.5f;
+
+    [Header("Fare Settings")]
+    [Tooltip("Starting ticket price charged per passenger per route leg (flat, length-independent). The GM can change it at runtime.")]
+    public float defaultTicketPrice = 2.0f;
+    [Tooltip("Starting transfer discount (0..1) applied to fares on transfer legs. The GM can change it at runtime.")]
+    [Range(0f, 1f)] public float defaultTransferDiscount = 0.5f;
 
     [Tooltip("The maximum debt allowed")]
     public float bankruptcyThreshold;
@@ -30,7 +37,42 @@ public class CompanyManager : NetworkBehaviour
     private bool _needsSave = false;
     private float _saveTimer = 0f;
 
+    // Mirrors only the most recent expense (negative transaction) to every client, so the HUD can
+    // show it without subscribing to the whole ledger. Written by the server.
+    private readonly NetworkVariable<FixedString128Bytes> _netLastExpenseDesc = new NetworkVariable<FixedString128Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+    private readonly NetworkVariable<float> _netLastExpenseAmount = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // GM-tunable fare values + a networked mirror of satisfaction, so the GM panel works on clients.
+    private readonly NetworkVariable<float> _netTicketPrice = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> _netTransferDiscount = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> _netSatisfaction = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     public CompanyData GetCompanyData() => _companyData;
+
+    /// <summary>Description of the most recent expense (empty if none recorded yet).</summary>
+    public string LatestExpenseDescription => _netLastExpenseDesc.Value.ToString();
+    /// <summary>Signed amount of the most recent expense (negative). 0 means none recorded yet.</summary>
+    public float LatestExpenseAmount => _netLastExpenseAmount.Value;
+    /// <summary>True once at least one expense has been recorded.</summary>
+    public bool HasLatestExpense => _netLastExpenseAmount.Value < 0f;
+
+    /// <summary>Current ticket price per passenger per route leg. Read-Everyone (works on clients).</summary>
+    public float TicketPrice => _netTicketPrice.Value;
+    /// <summary>Current transfer discount (0..1) applied to transfer-leg fares. Read-Everyone.</summary>
+    public float TransferDiscount => _netTransferDiscount.Value;
+    /// <summary>Networked mirror of GlobalSatisfaction so the GM panel reads it on clients too.</summary>
+    public float Satisfaction => _netSatisfaction.Value;
 
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
@@ -58,6 +100,11 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer)
         {
             LoadCompanyData();
+            InitializeLatestExpenseFromHistory();
+
+            _netTicketPrice.Value = Mathf.Max(0f, defaultTicketPrice);
+            _netTransferDiscount.Value = Mathf.Clamp01(defaultTransferDiscount);
+            _netSatisfaction.Value = GlobalSatisfaction;
 
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged += CheckDateForBills;
@@ -201,6 +248,8 @@ public class CompanyManager : NetworkBehaviour
             OnTransactionAdded?.Invoke(newTrans);
         }
 
+        if (amount < 0f) SetLatestExpense(description, amount);
+
         OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
 
         if (NetworkSyncBroker.Instance != null)
@@ -217,6 +266,34 @@ public class CompanyManager : NetworkBehaviour
 
         _needsSave = true;
         OnLedgerUpdated?.Invoke();
+    }
+
+    // Server-only. Pushes the latest expense to the networked mirror read by the HUD.
+    private void SetLatestExpense(string description, float amount)
+    {
+        if (!IsServer || !IsSpawned) return;
+
+        FixedString128Bytes desc = default;
+        if (!string.IsNullOrEmpty(description)) desc.CopyFromTruncated(description);
+
+        _netLastExpenseDesc.Value = desc;
+        _netLastExpenseAmount.Value = amount;
+    }
+
+    // Server-only. Seeds the latest-expense mirror from the most recent negative entry in the
+    // loaded ledger, so a freshly loaded save shows the last expense from company.json immediately.
+    private void InitializeLatestExpenseFromHistory()
+    {
+        if (!IsServer || _companyData?.History == null) return;
+
+        for (int i = _companyData.History.Count - 1; i >= 0; i--)
+        {
+            if (_companyData.History[i].Amount < 0f)
+            {
+                SetLatestExpense(_companyData.History[i].Description, _companyData.History[i].Amount);
+                return;
+            }
+        }
     }
 
     /// <summary>
@@ -245,7 +322,22 @@ public class CompanyManager : NetworkBehaviour
     {
         GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
         //Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        if (IsServer && IsSpawned) _netSatisfaction.Value = GlobalSatisfaction;
         OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
+    }
+
+    // --- GM fare controls (callable from any client, e.g. the GM panel) ---
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetTicketPriceRpc(float price)
+    {
+        _netTicketPrice.Value = Mathf.Max(0f, price);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetTransferDiscountRpc(float discount)
+    {
+        _netTransferDiscount.Value = Mathf.Clamp01(discount);
     }
 
     private void PerformStatsSync(BaseRpcTarget target)

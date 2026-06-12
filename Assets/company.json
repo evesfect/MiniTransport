@@ -1,7 +1,7 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 54360.98828125,
-    "TransferTripCount": 167,
+    "CurrentBalance": 63985.41015625,
+    "TransferTripCount": 204,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -2514,6 +2514,30 @@
             "Description": "Simulated Passenger Fare",
             "Timestamp": 2,
             "Count": 34
+        },
+        {
+            "Amount": -80628.8359375,
+            "Type": 1,
+            "Category": 5,
+            "Description": "Simulated Random Repair",
+            "Timestamp": 1,
+            "Count": 316
+        },
+        {
+            "Amount": 90497.859375,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Simulated Passenger Fare",
+            "Timestamp": 1,
+            "Count": 354
+        },
+        {
+            "Amount": -244.56285095214845,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock22-27",
+            "Timestamp": 1,
+            "Count": 1
         }
     ]
 }
