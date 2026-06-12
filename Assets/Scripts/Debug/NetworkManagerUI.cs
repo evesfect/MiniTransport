@@ -1,9 +1,11 @@
 using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
 using UnityEngine;
 
 public class NetworkManagerUI : MonoBehaviour
 {
     private NetworkManager m_NetworkManager;
+    private string m_IpAddress = "127.0.0.1";
 
     void Awake()
     {
@@ -38,7 +40,19 @@ public class NetworkManagerUI : MonoBehaviour
     void StartButtons()
     {
         if (GUILayout.Button("Host")) m_NetworkManager.StartHost();
-        if (GUILayout.Button("Client")) m_NetworkManager.StartClient();
+
+        GUILayout.Space(5);
+        GUILayout.Label("Server IP:");
+        m_IpAddress = GUILayout.TextField(m_IpAddress, GUILayout.Width(200));
+
+        if (GUILayout.Button("Client"))
+        {
+            var transport = m_NetworkManager.GetComponent<UnityTransport>();
+            if (transport != null)
+                transport.SetConnectionData(m_IpAddress, transport.ConnectionData.Port);
+            m_NetworkManager.StartClient();
+        }
+
         if (GUILayout.Button("Server")) m_NetworkManager.StartServer();
     }
 
