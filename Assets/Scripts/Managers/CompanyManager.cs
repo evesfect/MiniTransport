@@ -37,6 +37,16 @@ public class CompanyManager : NetworkBehaviour
     private bool _needsSave = false;
     private float _saveTimer = 0f;
 
+    // The ledger is streamed to clients in small batches. A single RPC carrying the whole history
+    // (hundreds of entries -> tens of KB of JSON) blows past Netcode's max message size and is
+    // silently dropped, which is why clients received the stats sync but never the ledger. Keep this
+    // small enough that one chunk stays well under the transport's payload limit even with long
+    // transaction descriptions.
+    private const int LedgerChunkSize = 20;
+
+    // Client-side: accumulates chunks of an in-flight ledger stream until the final chunk arrives.
+    private List<Transaction> _ledgerAssembly;
+
     // Mirrors only the most recent expense (negative transaction) to every client, so the HUD can
     // show it without subscribing to the whole ledger. Written by the server.
     private readonly NetworkVariable<FixedString128Bytes> _netLastExpenseDesc = new NetworkVariable<FixedString128Bytes>(
@@ -356,8 +366,34 @@ public class CompanyManager : NetworkBehaviour
 
     private void PerformLedgerSync(BaseRpcTarget target)
     {
-        var ledger = new CompanyLedgerData { transactions = _companyData.History };
-        BroadcastLedgerSyncRpc(JsonUtility.ToJson(ledger));
+        // The history is broadcast to everyone in chunks; the per-subscriber target is unused here
+        // because the chunk RPC fans out to all clients (non-subscribers simply re-apply data they
+        // already hold). The subscriber set still gates whether the server sends at all.
+        BroadcastLedgerChunked();
+    }
+
+    // Server-only. Streams the full ledger to all clients as a sequence of small RPCs. Each call
+    // runs synchronously to completion, so chunk RPCs from one stream are queued contiguously and,
+    // being reliable-ordered, are reassembled in order on the client without interleaving with a
+    // later stream.
+    private void BroadcastLedgerChunked()
+    {
+        if (!IsServer) return;
+
+        var history = _companyData.History;
+        int total = history != null ? history.Count : 0;
+        int totalChunks = Mathf.Max(1, Mathf.CeilToInt(total / (float)LedgerChunkSize));
+
+        for (int i = 0; i < totalChunks; i++)
+        {
+            int start = i * LedgerChunkSize;
+            int count = Mathf.Min(LedgerChunkSize, total - start);
+            var batch = new CompanyLedgerData
+            {
+                transactions = count > 0 ? history.GetRange(start, count) : new List<Transaction>()
+            };
+            SyncLedgerChunkRpc(i, totalChunks, JsonUtility.ToJson(batch));
+        }
     }
 
     [Rpc(SendTo.ClientsAndHost)]
@@ -372,15 +408,30 @@ public class CompanyManager : NetworkBehaviour
         OnBalanceChanged?.Invoke(stats.currentBalance);
     }
 
+    // Receives one chunk of a ledger stream. Chunk 0 starts a fresh assembly; the final chunk
+    // commits the reassembled history and notifies listeners. Reliable-ordered delivery guarantees
+    // chunks arrive in send order.
     [Rpc(SendTo.ClientsAndHost)]
-    private void BroadcastLedgerSyncRpc(string json, RpcParams rpcParams = default)
+    private void SyncLedgerChunkRpc(int chunkIndex, int totalChunks, string json)
     {
         if (IsServer) return;
 
-        var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
-        Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received periodic ledger sync: {ledger.transactions.Count} transactions.");
-        _companyData.History = ledger.transactions;
-        OnLedgerUpdated?.Invoke();
+        var batch = JsonUtility.FromJson<CompanyLedgerData>(json);
+
+        // Chunk 0 (or a missed start) begins a new assembly buffer.
+        if (chunkIndex == 0 || _ledgerAssembly == null)
+            _ledgerAssembly = new List<Transaction>();
+
+        if (batch.transactions != null)
+            _ledgerAssembly.AddRange(batch.transactions);
+
+        if (chunkIndex == totalChunks - 1)
+        {
+            _companyData.History = _ledgerAssembly;
+            _ledgerAssembly = null;
+            Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} assembled ledger: {_companyData.History.Count} transactions.");
+            OnLedgerUpdated?.Invoke();
+        }
     }
 
     [Rpc(SendTo.Server)]
@@ -415,8 +466,9 @@ public class CompanyManager : NetworkBehaviour
         };
         SyncStatsRpc(JsonUtility.ToJson(stats), RpcTarget.Single(clientId, RpcTargetUse.Temp));
 
-        var ledger = new CompanyLedgerData { transactions = _companyData.History };
-        SyncLedgerRpc(JsonUtility.ToJson(ledger), RpcTarget.Single(clientId, RpcTargetUse.Temp));
+        // Ledger goes out chunked to everyone. Targeting a single client isn't worth the added
+        // complexity: other clients just re-apply the history they already have.
+        BroadcastLedgerChunked();
     }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
@@ -430,17 +482,6 @@ public class CompanyManager : NetworkBehaviour
         Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received stats sync: balance={stats.currentBalance}, transfers={stats.transferTripCount}");
 
         OnBalanceChanged?.Invoke(stats.currentBalance);
-    }
-
-    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
-    private void SyncLedgerRpc(string json, RpcParams rpcParams = default)
-    {
-        if (IsServer) return;
-
-        var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
-        Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received ledger sync: {ledger.transactions.Count} transactions.");
-        _companyData.History = ledger.transactions;
-        OnLedgerUpdated?.Invoke();
     }
 
     [ContextMenu("Save Company")]
