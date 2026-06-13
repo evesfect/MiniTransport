@@ -319,6 +319,7 @@ public class CompanyManager : NetworkBehaviour
         if (!IsServer || count <= 0) return;
 
         _companyData.TransferTripCount += count;
+        LogTransfer(count);
 
         // Company stats are surfaced to the local dashboard via OnBalanceChanged
         // (the dashboard rebuilds the full stats snapshot); the balance value is unchanged.
@@ -332,12 +333,68 @@ public class CompanyManager : NetworkBehaviour
         _needsSave = true;
     }
 
-    public void ModifySatisfaction(float amount)
+    // Back-compat overload: callers that don't supply a reason are logged as "Other".
+    public void ModifySatisfaction(float amount) => ModifySatisfaction(amount, "Other");
+
+    public void ModifySatisfaction(float amount, string reason)
     {
+        LogSatisfactionChange(amount, reason);
+
         GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
         //Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
         if (IsServer && IsSpawned) _netSatisfaction.Value = GlobalSatisfaction;
         OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
+    }
+
+    // --- Satisfaction event log (server-side, in-memory, feeds the KPI drill-down) ---
+
+    private const int SatisfactionLogCap = 150;
+    private readonly List<KpiDetailEntry> _satisfactionLog = new List<KpiDetailEntry>();
+
+    /// <summary>Newest-first log of satisfaction changes with reasons (server-authoritative, session-only).</summary>
+    public IReadOnlyList<KpiDetailEntry> SatisfactionLog => _satisfactionLog;
+
+    private void LogSatisfactionChange(float amount, string reason)
+    {
+        if (!IsServer || Mathf.Approximately(amount, 0f)) return;
+
+        var time = SimulationTimeManager.Instance;
+        _satisfactionLog.Insert(0, new KpiDetailEntry
+        {
+            label = string.IsNullOrEmpty(reason) ? "Other" : reason,
+            value = amount,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = amount >= 0f ? 1 : 2
+        });
+
+        if (_satisfactionLog.Count > SatisfactionLogCap)
+            _satisfactionLog.RemoveAt(_satisfactionLog.Count - 1);
+    }
+
+    // --- Transfer event log (server-side, in-memory, feeds the Number of Transfers drill-down) ---
+
+    private readonly List<KpiDetailEntry> _transferLog = new List<KpiDetailEntry>();
+
+    /// <summary>Newest-first log of passenger transfer events (server-authoritative, session-only).</summary>
+    public IReadOnlyList<KpiDetailEntry> TransferLog => _transferLog;
+
+    private void LogTransfer(int count)
+    {
+        if (!IsServer || count <= 0) return;
+
+        var time = SimulationTimeManager.Instance;
+        _transferLog.Insert(0, new KpiDetailEntry
+        {
+            label = $"{count} passenger{(count == 1 ? "" : "s")} transferred",
+            value = count,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = 0
+        });
+
+        if (_transferLog.Count > SatisfactionLogCap)
+            _transferLog.RemoveAt(_transferLog.Count - 1);
     }
 
     // --- GM fare controls (callable from any client, e.g. the GM panel) ---

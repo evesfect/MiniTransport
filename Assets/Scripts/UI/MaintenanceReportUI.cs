@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 using Unity.Netcode;
 
@@ -31,7 +32,23 @@ public class MaintenanceReportUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI breakdownFrequencyText;        // breakdowns per day
     [SerializeField] private TextMeshProUGUI repairCompletionRateText;      // % of breakdowns resolved
     [SerializeField] private TextMeshProUGUI sparePartDelayFrequencyText;   // count of parts-delay stalls
-    [SerializeField] private TextMeshProUGUI busReturnToServiceText;        // avg return-to-service time (= MTTR)
+    [SerializeField] private TextMeshProUGUI busReturnToServiceText;        // total downtime: sum of all repair durations
+
+    [Header("Drill-Down")]
+    [Tooltip("Shared list panel (same one the other reports use).")]
+    [SerializeField] private KpiDetailPanelUI detailPanel;
+    [Tooltip("One Button per card in grid order: MTTR, Breakdown Freq, Repair Completion, Spare Part Delays, Bus Return to Service, Technician Utilization.")]
+    [SerializeField] private Button[] cardButtons = new Button[6];
+
+    private static readonly KpiMetric[] CardMetrics =
+    {
+        KpiMetric.MaintMttr,                  // 0
+        KpiMetric.MaintBreakdownFrequency,    // 1
+        KpiMetric.MaintRepairCompletionRate,  // 2
+        KpiMetric.MaintSparePartDelays,       // 3
+        KpiMetric.MaintBusReturnToService,    // 4
+        KpiMetric.MaintTechnicianUtilization  // 5
+    };
 
     private bool _subscribed;
 
@@ -42,6 +59,7 @@ public class MaintenanceReportUI : MonoBehaviour
         if (RoleManager.Instance != null)
             RoleManager.Instance.OnRolesUpdated += ApplyGate;
 
+        WireCardButtons();
         ApplyGate();
     }
 
@@ -52,6 +70,7 @@ public class MaintenanceReportUI : MonoBehaviour
         if (RoleManager.Instance != null)
             RoleManager.Instance.OnRolesUpdated -= ApplyGate;
 
+        UnwireCardButtons();
         SetReportSubscription(false);
     }
 
@@ -98,6 +117,33 @@ public class MaintenanceReportUI : MonoBehaviour
         if (breakdownFrequencyText != null) breakdownFrequencyText.text = ReportFormat.PerDay(d.breakdownFrequency);
         if (repairCompletionRateText != null) repairCompletionRateText.text = ReportFormat.Pct(d.repairCompletionRate);
         if (sparePartDelayFrequencyText != null) sparePartDelayFrequencyText.text = $"{d.sparePartDelays}";
-        if (busReturnToServiceText != null) busReturnToServiceText.text = ReportFormat.Hours(d.mttrHours);
+        if (busReturnToServiceText != null) busReturnToServiceText.text = ReportFormat.Hours(d.totalDowntimeHours);
+    }
+
+    // --- Drill-down ---
+
+    private void WireCardButtons()
+    {
+        if (cardButtons == null) return;
+        for (int i = 0; i < cardButtons.Length; i++)
+        {
+            if (cardButtons[i] == null) continue;
+            int index = i; // capture for closure
+            cardButtons[i].onClick.AddListener(() => OpenCard(index));
+        }
+    }
+
+    private void UnwireCardButtons()
+    {
+        if (cardButtons == null) return;
+        foreach (var btn in cardButtons)
+            if (btn != null) btn.onClick.RemoveAllListeners();
+    }
+
+    /// <summary>Opens the shared detail panel for a Maintenance card (index matches CardMetrics).</summary>
+    public void OpenCard(int index)
+    {
+        if (detailPanel != null && index >= 0 && index < CardMetrics.Length)
+            detailPanel.Show(CardMetrics[index]);
     }
 }

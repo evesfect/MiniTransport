@@ -51,11 +51,32 @@ public class MaintenanceManager : NetworkBehaviour
     private readonly Dictionary<string, int> _breakdownStartMinute = new Dictionary<string, int>();
     private float _repairMinuteSum;
     private int _repairsTimed;
+    private int _onTimeRepairs;                                        // repairs finished within targetRepairHours
+    [Tooltip("Target return-to-service time (hours). Repairs finishing within this count as 'on time'.")]
+    public float targetRepairHours = 2f;
     public float AverageRepairHours => _repairsTimed > 0 ? (_repairMinuteSum / _repairsTimed) / 60f : -1f;
+    // On-time repair rate: % of repairs that returned to service within targetRepairHours (drives Repair Completion Rate).
+    public float OnTimeRepairRate => _repairsTimed > 0 ? (_onTimeRepairs / (float)_repairsTimed) * 100f : -1f;
+    // Total downtime: sum of every repair's duration across the session, in hours (drives Bus Return to Service).
+    public float TotalDowntimeHours => _repairMinuteSum / 60f;
 
     // --- KPI: technician utilization (busy crews / total crews, sampled each hour tick) ---
     private int _lastTeamsTotal, _lastTeamsBusy;
     public float TechnicianUtilization => _lastTeamsTotal > 0 ? (_lastTeamsBusy / (float)_lastTeamsTotal) * 100f : -1f;
+
+    // Per-team busy/total hour tallies (keyed by "{depot}_{team}") for the per-technician drill-down.
+    private readonly Dictionary<string, (int busy, int total)> _teamHours = new Dictionary<string, (int busy, int total)>();
+
+    /// <summary>Session utilization % for the crew a technician belongs to (busy hours / on-shift hours).
+    /// Returns -1 for an unassigned technician, 0 for an assigned crew with no logged hours yet.</summary>
+    public float GetTechnicianUtilization(string depotID, string teamID)
+    {
+        if (string.IsNullOrEmpty(depotID)) return -1f;
+        string teamName = string.IsNullOrEmpty(teamID) ? "General Crew" : teamID;
+        if (_teamHours.TryGetValue($"{depotID}_{teamName}", out var h) && h.total > 0)
+            return (h.busy / (float)h.total) * 100f;
+        return 0f;
+    }
 
     // --- KPI: spare-part delays + repair completion ---
     private int _sparePartDelays;                                     // distinct "waiting for parts" stall episodes
@@ -63,10 +84,35 @@ public class MaintenanceManager : NetworkBehaviour
     public int SparePartDelays => _sparePartDelays;                   // spare-part delay frequency (episode count)
     public int BreakdownsResolved => _repairsTimed;                   // buses returned to service (drives repair completion rate)
 
+    // --- KPI drill-down logs (in-memory, capped, newest-first) ---
+    private const int MaintLogCap = 150;
+    private readonly List<KpiDetailEntry> _repairLog = new List<KpiDetailEntry>();   // completed repairs (with duration)
+    private readonly List<KpiDetailEntry> _delayLog = new List<KpiDetailEntry>();    // spare-part stall episodes
+    public IReadOnlyList<KpiDetailEntry> RepairLog => _repairLog;
+    public IReadOnlyList<KpiDetailEntry> DelayLog => _delayLog;
+
+    private void PushMaintLog(List<KpiDetailEntry> log, string label, float value, int kind)
+    {
+        var time = SimulationTimeManager.Instance;
+        log.Insert(0, new KpiDetailEntry
+        {
+            label = label,
+            value = value,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = kind
+        });
+        if (log.Count > MaintLogCap) log.RemoveAt(log.Count - 1);
+    }
+
     // Counts a spare-part stall once per episode: only when a bus newly enters the parts-delayed state.
     private void RecordPartsDelay(string busID)
     {
-        if (_partsDelayedBuses.Add(busID)) _sparePartDelays++;
+        if (_partsDelayedBuses.Add(busID))
+        {
+            _sparePartDelays++;
+            PushMaintLog(_delayLog, $"Bus {busID} — stalled waiting for parts", 0f, 2);
+        }
     }
 
     // Closes the MTTR clock for a bus that has returned to service (if one was open).
@@ -74,9 +120,15 @@ public class MaintenanceManager : NetworkBehaviour
     {
         if (_breakdownStartMinute.TryGetValue(busID, out int startMinute))
         {
-            _repairMinuteSum += Mathf.Max(0, _simMinute - startMinute);
+            int duration = Mathf.Max(0, _simMinute - startMinute);
+            _repairMinuteSum += duration;
             _repairsTimed++;
             _breakdownStartMinute.Remove(busID);
+
+            bool onTime = duration <= targetRepairHours * 60f;
+            if (onTime) _onTimeRepairs++;
+            // Green when within the target return-to-service time, red when over.
+            PushMaintLog(_repairLog, $"Bus {busID} — repaired in {duration} min", duration, onTime ? 1 : 2);
         }
     }
 
@@ -383,6 +435,15 @@ public class MaintenanceManager : NetworkBehaviour
         // KPI: sample crew utilization for this hour (busy teams vs total active teams)
         _lastTeamsTotal = activeTeams.Count;
         _lastTeamsBusy = activeTeams.Values.Count(t => t.IsCurrentlyWorkingOnABus);
+
+        // Accumulate per-crew busy/on-shift hours for the technician-utilization drill-down.
+        foreach (var kv in activeTeams)
+        {
+            _teamHours.TryGetValue(kv.Key, out var h);
+            h.total++;
+            if (kv.Value.IsCurrentlyWorkingOnABus) h.busy++;
+            _teamHours[kv.Key] = h;
+        }
     }
     private void TriggerBreakdown(string busID, BusPartType reason)
     {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Unity.Netcode;
 using UnityEngine;
@@ -54,6 +55,16 @@ public class KPIManager : NetworkBehaviour
 
     /// <summary>Fired whenever any report data changes (host: counters; client: RPC received).</summary>
     public event Action OnReportsUpdated;
+
+    // --- KPI drill-down detail (server logs events; clients fetch on demand) ---
+    private const int DetailLogCap = 150;
+    private readonly List<KpiDetailEntry> _breakdownLog = new List<KpiDetailEntry>();
+    private readonly List<KpiDetailEntry> _otpLog = new List<KpiDetailEntry>();      // boarded / gave-up timeline
+    private readonly List<KpiDetailEntry> _waitingLog = new List<KpiDetailEntry>();  // per-batch wait times
+    private readonly List<KpiDetailEntry> _hireLog = new List<KpiDetailEntry>();     // hires timeline
+
+    /// <summary>Fired when a requested KPI detail payload is ready (host: built locally; client: RPC received).</summary>
+    public event Action<KpiDetailData> OnKpiDetailReady;
 
     private void Awake()
     {
@@ -135,6 +146,20 @@ public class KPIManager : NetworkBehaviour
     private void OnBreakdown(string busID, BusPartType reason)
     {
         _totalBreakdowns++;
+
+        // Log the event for the Total Breakdowns drill-down (which bus, what failed, when).
+        var time = SimulationTimeManager.Instance;
+        _breakdownLog.Insert(0, new KpiDetailEntry
+        {
+            label = $"Bus {busID} — {reason} failure",
+            value = 0f,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = 2
+        });
+        if (_breakdownLog.Count > DetailLogCap)
+            _breakdownLog.RemoveAt(_breakdownLog.Count - 1);
+
         MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.MaintenanceReport);
     }
 
@@ -154,6 +179,11 @@ public class KPIManager : NetworkBehaviour
     {
         _passengersServed += count;
         _totalWaitHours += waitHours * count;
+
+        // Drill-down timelines: On-Time Performance (boarded) and Average Waiting Time (wait per batch).
+        PushDetail(_otpLog, $"{count} boarded", count, 1);
+        PushDetail(_waitingLog, $"{count} boarded — waited {waitHours * 60f:F0} min", waitHours * 60f, 0);
+
         PublishDemandMet();
         MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
     }
@@ -161,8 +191,27 @@ public class KPIManager : NetworkBehaviour
     private void OnPassengersTimedOut(int count)
     {
         _passengersTimedOut += count;
+
+        // On-Time Performance drill-down: the give-ups that drag the ratio down.
+        PushDetail(_otpLog, $"{count} gave up waiting", count, 2);
+
         PublishDemandMet();
         MarkReportsDirty(SyncDataType.GeneralReport, SyncDataType.OperationsReport);
+    }
+
+    // Appends a stamped entry to a capped, newest-first drill-down log.
+    private void PushDetail(List<KpiDetailEntry> log, string label, float value, int kind)
+    {
+        var time = SimulationTimeManager.Instance;
+        log.Insert(0, new KpiDetailEntry
+        {
+            label = label,
+            value = value,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = kind
+        });
+        if (log.Count > DetailLogCap) log.RemoveAt(log.Count - 1);
     }
 
     // Server-only: mirror the live demand-met % to clients.
@@ -181,6 +230,13 @@ public class KPIManager : NetworkBehaviour
     private void OnEmployeeHired(string employeeID)
     {
         _totalHires++;
+
+        // Hire-timeline drill-down: look up the freshly-added employee for name/skill.
+        var em = EmployeeManager.Instance;
+        var emp = em?.allEmployees?.FirstOrDefault(e => e.EmployeeID == employeeID);
+        string who = emp != null ? $"Hired {emp.FullName} (skill {emp.SkillLevel:F0})" : "Hired employee";
+        PushDetail(_hireLog, who, emp != null ? emp.SkillLevel : 0f, 1);
+
         MarkReportsDirty(SyncDataType.HrReport);
     }
 
@@ -365,10 +421,6 @@ public class KPIManager : NetworkBehaviour
         int day = SimulationTimeManager.Instance != null ? SimulationTimeManager.Instance.CurrentDay : 1;
         float breakdownFrequency = _totalBreakdowns / (float)Mathf.Max(1, day);
 
-        // Repair completion rate = breakdowns returned to service / breakdowns occurred.
-        int resolved = mm != null ? mm.BreakdownsResolved : 0;
-        float repairCompletionRate = _totalBreakdowns > 0 ? (resolved / (float)_totalBreakdowns) * 100f : -1f;
-
         return new MaintenanceReportData
         {
             totalBreakdowns = _totalBreakdowns,
@@ -378,11 +430,12 @@ public class KPIManager : NetworkBehaviour
             avgFleetHealth = AvgFleetHealth(),
             busesNeedingRepair = BusesNeedingRepair(),
             availableBuses = AvailableBuses(),
-            mttrHours = mm != null ? mm.AverageRepairHours : -1f,
+            mttrHours = mm != null ? mm.AverageRepairHours : -1f,           // average repair duration
             technicianUtilization = mm != null ? mm.TechnicianUtilization : -1f,
             breakdownFrequency = breakdownFrequency,
-            repairCompletionRate = repairCompletionRate,
-            sparePartDelays = mm != null ? mm.SparePartDelays : 0
+            repairCompletionRate = mm != null ? mm.OnTimeRepairRate : -1f,   // on-time repair % (within target)
+            sparePartDelays = mm != null ? mm.SparePartDelays : 0,
+            totalDowntimeHours = mm != null ? mm.TotalDowntimeHours : 0f      // Bus Return to Service (total)
         };
     }
 
@@ -469,6 +522,463 @@ public class KPIManager : NetworkBehaviour
                 ? vm.lifetimeQualitySum / vm.lifetimeOrdersDelivered : 0f,
             activeDeals = vm.activeDeals != null ? vm.activeDeals.Count : 0
         };
+    }
+
+    // ============================================================
+    // KPI DRILL-DOWN DETAIL  (on-demand request/response)
+    // ============================================================
+
+    /// <summary>
+    /// Fetch the detail payload behind a General Report card. The host builds it locally and
+    /// fires <see cref="OnKpiDetailReady"/> immediately; a client round-trips to the server.
+    /// </summary>
+    public void RequestKpiDetail(KpiMetric metric)
+    {
+        if (IsServer) OnKpiDetailReady?.Invoke(BuildKpiDetail(metric));
+        else RequestKpiDetailRpc((int)metric);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestKpiDetailRpc(int metric, RpcParams rpcParams = default)
+    {
+        ulong sender = rpcParams.Receive.SenderClientId;
+        string json = JsonUtility.ToJson(BuildKpiDetail((KpiMetric)metric));
+        SendKpiDetailRpc(json, RpcTarget.Single(sender, RpcTargetUse.Temp));
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void SendKpiDetailRpc(string json, RpcParams rpcParams = default)
+    {
+        if (IsServer) return;
+        OnKpiDetailReady?.Invoke(JsonUtility.FromJson<KpiDetailData>(json));
+    }
+
+    // Server-side: assemble the detail payload for one metric from the owning manager's log.
+    private KpiDetailData BuildKpiDetail(KpiMetric metric)
+    {
+        var entries = new System.Collections.Generic.List<KpiDetailEntry>();
+        string header = "";
+        string explanation = "No detail data yet.";
+
+        switch (metric)
+        {
+            case KpiMetric.CustomerSatisfaction:
+                header = $"%{(CompanyManager.Instance != null ? CompanyManager.Instance.GlobalSatisfaction : 0f):F0}";
+                explanation = "Each delivered passenger raises it; each give-up lowers it.";
+                if (CompanyManager.Instance != null)
+                    entries.AddRange(CompanyManager.Instance.SatisfactionLog);
+                break;
+
+            case KpiMetric.TotalBreakdowns:
+                header = $"{_totalBreakdowns}";
+                explanation = "Every bus that suffered a critical part failure.";
+                entries.AddRange(_breakdownLog);
+                break;
+
+            case KpiMetric.OnTimePerformance:
+                header = $"%{OnTimePerformance():F0}";
+                explanation = "Boarded vs. (boarded + gave up). Green boarded, red gave up.";
+                entries.AddRange(_otpLog);
+                break;
+
+            case KpiMetric.AvgWaitingTime:
+                header = $"{AvgWaitMinutes():F0} min";
+                explanation = "Wait time of each boarded batch (value in minutes).";
+                entries.AddRange(_waitingLog);
+                break;
+
+            case KpiMetric.Transfers:
+                header = $"{(CompanyManager.Instance != null ? CompanyManager.Instance.GetCompanyData().TransferTripCount : 0)}";
+                explanation = "Passengers who changed buses to finish a journey.";
+                if (CompanyManager.Instance != null)
+                    entries.AddRange(CompanyManager.Instance.TransferLog);
+                break;
+
+            case KpiMetric.FleetReliability:
+                header = $"%{FleetReliability():F0}";
+                explanation = "Average structural integrity of each bus's parts.";
+                entries.AddRange(BuildFleetReliabilityEntries());
+                break;
+
+            case KpiMetric.FleetUtilization:
+                header = $"%{Utilization():F0}";
+                explanation = "Each bus's current status — on a route or idle.";
+                entries.AddRange(BuildFleetUtilizationEntries());
+                break;
+
+            case KpiMetric.FinanceTotalRevenue:
+                header = ReportFormat.Money(BuildFinanceReport().totalRevenue);
+                explanation = "Every income line in the ledger.";
+                entries.AddRange(BuildLedgerEntries(t => t.Amount >= 0f));
+                break;
+
+            case KpiMetric.FinanceTotalExpenses:
+                header = ReportFormat.Money(BuildFinanceReport().totalExpenses);
+                explanation = "Every expense line in the ledger.";
+                entries.AddRange(BuildLedgerEntries(t => t.Amount < 0f));
+                break;
+
+            case KpiMetric.FinancePayrollSpend:
+                header = ReportFormat.Money(BuildFinanceReport().payrollSpend);
+                explanation = "Staff salary and upkeep payments.";
+                entries.AddRange(BuildLedgerEntries(t =>
+                    t.Category == TransactionCategory.StaffSalary || t.Category == TransactionCategory.StaffUpkeep));
+                break;
+
+            case KpiMetric.FinancePartsSpend:
+                header = ReportFormat.Money(BuildFinanceReport().partsSpend);
+                explanation = "Spare-part purchases from vendors.";
+                entries.AddRange(BuildLedgerEntries(t => t.Category == TransactionCategory.PartPurchase));
+                break;
+
+            case KpiMetric.FinanceOrdersPlaced:
+                header = $"{(VendorManager.Instance != null ? VendorManager.Instance.lifetimeOrdersPlaced : 0)}";
+                explanation = "Every parts order placed with a vendor.";
+                if (VendorManager.Instance != null) entries.AddRange(VendorManager.Instance.OrderLog);
+                break;
+
+            case KpiMetric.FinanceOnTimeDeliveries:
+                header = $"%{BuildFinanceReport().onTimeDeliveryRate:F0}";
+                explanation = "Each delivery — on time (green) or late (red).";
+                if (VendorManager.Instance != null) entries.AddRange(VendorManager.Instance.DeliveryLog);
+                break;
+
+            case KpiMetric.FinanceAvgPartQuality:
+                header = ReportFormat.Score(BuildFinanceReport().avgPartQuality);
+                explanation = "Durability (quality) of each delivered part batch.";
+                if (VendorManager.Instance != null) entries.AddRange(VendorManager.Instance.DeliveryLog);
+                break;
+
+            case KpiMetric.OpsPassengersServed:
+                header = $"{_passengersServed}";
+                explanation = "Each batch of passengers that boarded.";
+                entries.AddRange(_otpLog.Where(e => e.kind == 1));
+                break;
+
+            case KpiMetric.OpsPassengersMissed:
+                header = $"{_passengersTimedOut}";
+                explanation = "Each batch of passengers that gave up waiting.";
+                entries.AddRange(_otpLog.Where(e => e.kind == 2));
+                break;
+
+            case KpiMetric.OpsAvailableBuses:
+                header = $"{AvailableBuses()}";
+                explanation = "Each bus — ready for service (green) or not (red).";
+                entries.AddRange(BuildAvailableBusesEntries());
+                break;
+
+            case KpiMetric.OpsStopCoverage:
+                header = ReportFormat.Pct(TransportManager.Instance != null ? TransportManager.Instance.StopCoveragePercent() : -1f);
+                explanation = "Each stop — served by a route (green) or not (red).";
+                entries.AddRange(BuildStopCoverageEntries(false));
+                break;
+
+            case KpiMetric.OpsLongestRoute:
+                header = $"{(TransportManager.Instance != null ? TransportManager.Instance.LongestRouteStopCount() : 0)} stops";
+                explanation = "Every route and its stop sequence (longest first).";
+                entries.AddRange(BuildLongestRouteEntries());
+                break;
+
+            case KpiMetric.OpsStopsNotCovered:
+                header = $"{(TransportManager.Instance != null ? TransportManager.Instance.StopsNotCovered() : 0)}";
+                explanation = "Stops not served by any active route.";
+                entries.AddRange(BuildStopCoverageEntries(true));
+                break;
+
+            case KpiMetric.HrTotalEmployees:
+                header = $"{BuildHrReport().totalEmployees}";
+                explanation = "Every employee on the payroll (in training shown in grey).";
+                entries.AddRange(BuildEmployeeEntries(e => new KpiDetailEntry
+                {
+                    label = $"{e.FullName} — skill {e.SkillLevel:F0}{(string.IsNullOrEmpty(e.AssignedTeamID) ? "" : $", {e.AssignedTeamID}")}{(e.IsInTraining ? " (in training)" : "")}",
+                    value = 0f,
+                    kind = e.IsInTraining ? 0 : 1
+                }));
+                break;
+
+            case KpiMetric.HrTotalHires:
+                header = $"{_totalHires}";
+                explanation = "Every employee hired this session.";
+                entries.AddRange(_hireLog);
+                break;
+
+            case KpiMetric.HrAvgSkill:
+                header = ReportFormat.Score(BuildHrReport().avgSkill);
+                explanation = "Each employee's skill level.";
+                entries.AddRange(BuildEmployeeEntries(e => new KpiDetailEntry
+                {
+                    label = e.FullName,
+                    value = e.SkillLevel,
+                    kind = e.SkillLevel >= 70f ? 1 : e.SkillLevel < 40f ? 2 : 0
+                }));
+                break;
+
+            case KpiMetric.HrWeeklyPayroll:
+                header = ReportFormat.Money(BuildHrReport().weeklyPayroll);
+                explanation = "Each employee's weekly wage (plus shared upkeep).";
+                entries.AddRange(BuildEmployeeEntries(e => new KpiDetailEntry
+                {
+                    label = $"{e.FullName} — ${e.WeeklySalary:N0}/wk",
+                    value = e.WeeklySalary,
+                    kind = 0
+                }));
+                break;
+
+            case KpiMetric.HrTeamCount:
+                header = $"{BuildHrReport().teamCount}";
+                explanation = "Each maintenance team and its pooled skill.";
+                entries.AddRange(BuildTeamEntries());
+                break;
+
+            case KpiMetric.HrAvgFatigue:
+                header = ReportFormat.Score(BuildHrReport().avgFatigue);
+                explanation = "Each employee's fatigue — rested (green) to burnt out (red).";
+                entries.AddRange(BuildEmployeeEntries(e => new KpiDetailEntry
+                {
+                    label = $"{e.FullName}{(e.IsInTraining ? " (resting)" : "")}",
+                    value = e.Fatigue,
+                    kind = e.Fatigue >= 66f ? 2 : e.Fatigue <= 33f ? 1 : 0
+                }));
+                break;
+
+            case KpiMetric.MaintMttr:
+                header = ReportFormat.Hours(MaintenanceManager.Instance != null ? MaintenanceManager.Instance.AverageRepairHours : -1f);
+                explanation = "Each repair's duration (green = within target, red = over). MTTR is their average.";
+                if (MaintenanceManager.Instance != null) entries.AddRange(MaintenanceManager.Instance.RepairLog);
+                break;
+
+            case KpiMetric.MaintBusReturnToService:
+                header = ReportFormat.Hours(MaintenanceManager.Instance != null ? MaintenanceManager.Instance.TotalDowntimeHours : 0f);
+                explanation = "Total hours buses spent out of service — the sum of every repair's duration.";
+                if (MaintenanceManager.Instance != null) entries.AddRange(MaintenanceManager.Instance.RepairLog);
+                break;
+
+            case KpiMetric.MaintBreakdownFrequency:
+                header = ReportFormat.PerDay(BuildMaintenanceReport().breakdownFrequency);
+                explanation = "Every breakdown that occurred (frequency = these ÷ days elapsed).";
+                entries.AddRange(_breakdownLog);
+                break;
+
+            case KpiMetric.MaintRepairCompletionRate:
+                header = ReportFormat.Pct(MaintenanceManager.Instance != null ? MaintenanceManager.Instance.OnTimeRepairRate : -1f);
+                explanation = "Each repair — finished within the target time (green) or over (red). Rate = on-time ÷ all.";
+                if (MaintenanceManager.Instance != null) entries.AddRange(MaintenanceManager.Instance.RepairLog);
+                break;
+
+            case KpiMetric.MaintSparePartDelays:
+                header = $"{(MaintenanceManager.Instance != null ? MaintenanceManager.Instance.SparePartDelays : 0)}";
+                explanation = "Each time a repair stalled waiting for a spare part.";
+                if (MaintenanceManager.Instance != null) entries.AddRange(MaintenanceManager.Instance.DelayLog);
+                break;
+
+            case KpiMetric.MaintTechnicianUtilization:
+                header = ReportFormat.Pct(MaintenanceManager.Instance != null ? MaintenanceManager.Instance.TechnicianUtilization : -1f);
+                explanation = "Each technician's crew utilization (busy hours ÷ on-shift hours).";
+                entries.AddRange(BuildEmployeeEntries(e =>
+                {
+                    if (e.IsInTraining)
+                        return new KpiDetailEntry { label = $"{e.FullName} — in training", value = 0f, kind = 0 };
+                    if (string.IsNullOrEmpty(e.AssignedDepotID))
+                        return new KpiDetailEntry { label = $"{e.FullName} — unassigned", value = 0f, kind = 2 };
+
+                    float u = MaintenanceManager.Instance != null
+                        ? MaintenanceManager.Instance.GetTechnicianUtilization(e.AssignedDepotID, e.AssignedTeamID) : 0f;
+                    return new KpiDetailEntry
+                    {
+                        label = $"{e.FullName} ({e.AssignedTeamID}) — {u:F0}% utilized",
+                        value = u,
+                        kind = u >= 50f ? 1 : u > 0f ? 0 : 2
+                    };
+                }));
+                break;
+        }
+
+        // Group by colour (green → grey → red) for a cleaner look. OrderBy is stable, so the
+        // existing order within each colour (e.g. newest-first on timelines) is preserved.
+        entries = entries.OrderBy(e => KindOrder(e.kind)).ToList();
+
+        return new KpiDetailData
+        {
+            metric = (int)metric,
+            headerValue = header,
+            explanation = explanation,
+            entries = entries
+        };
+    }
+
+    // Sort weight: positive (green) first, neutral (grey) middle, negative (red) last.
+    private static int KindOrder(int kind) => kind == 1 ? 0 : kind == 0 ? 1 : 2;
+
+    // Live per-bus reliability: each bus's average part structural integrity (MaxLife).
+    private List<KpiDetailEntry> BuildFleetReliabilityEntries()
+    {
+        var list = new List<KpiDetailEntry>();
+        var buses = FleetManager.Instance != null ? FleetManager.Instance.allBuses : null;
+        if (buses == null) return list;
+
+        foreach (var b in buses)
+        {
+            if (b.Parts == null || b.Parts.Count == 0) continue;
+            float sum = 0f;
+            foreach (var p in b.Parts) sum += p.MaxLife;
+            float rel = sum / b.Parts.Count;
+            list.Add(new KpiDetailEntry
+            {
+                label = $"Bus {b.BusID}",
+                value = rel,
+                kind = rel >= 70f ? 1 : rel < 40f ? 2 : 0
+            });
+        }
+        return list;
+    }
+
+    // Live per-bus utilization: whether each bus is currently active on a route.
+    private List<KpiDetailEntry> BuildFleetUtilizationEntries()
+    {
+        var list = new List<KpiDetailEntry>();
+        var fm = FleetManager.Instance;
+        if (fm == null || fm.allBuses == null) return list;
+
+        foreach (var b in fm.allBuses)
+        {
+            bool active = fm.IsBusActive(b.BusID);
+            list.Add(new KpiDetailEntry
+            {
+                label = $"Bus {b.BusID} — {(active ? "On route" : "Idle")}",
+                value = 0f,
+                kind = active ? 1 : 0
+            });
+        }
+        return list;
+    }
+
+    // Newest-first ledger lines matching a filter (income green / expense red).
+    private List<KpiDetailEntry> BuildLedgerEntries(Func<Transaction, bool> filter)
+    {
+        var list = new List<KpiDetailEntry>();
+        var company = CompanyManager.Instance != null ? CompanyManager.Instance.GetCompanyData() : null;
+        if (company?.History == null) return list;
+
+        var history = company.History;
+        for (int i = history.Count - 1; i >= 0 && list.Count < DetailLogCap; i--)
+        {
+            var tx = history[i];
+            if (!filter(tx)) continue;
+            list.Add(new KpiDetailEntry
+            {
+                label = tx.Count > 1 ? $"{tx.Description} (x{tx.Count})" : tx.Description,
+                value = tx.Amount,
+                day = tx.Timestamp,          // sim day
+                timeOfDay = 0f,
+                kind = tx.Amount >= 0f ? 1 : 2
+            });
+        }
+        return list;
+    }
+
+    // Live per-bus availability: ready for service vs. needs repair / broken down.
+    private List<KpiDetailEntry> BuildAvailableBusesEntries()
+    {
+        var list = new List<KpiDetailEntry>();
+        var fm = FleetManager.Instance;
+        if (fm == null || fm.allBuses == null) return list;
+
+        float threshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 30f;
+        var mm = MaintenanceManager.Instance;
+
+        foreach (var b in fm.allBuses)
+        {
+            bool down = mm != null && mm.IsOnRouteBreakdown(b.BusID);
+            float health = b.GetAverageHealth();
+            bool available = health >= threshold && !down;
+            list.Add(new KpiDetailEntry
+            {
+                label = $"Bus {b.BusID} — {(available ? "Available" : down ? "Broken down" : "Needs repair")} ({health:F0}%)",
+                value = 0f,
+                kind = available ? 1 : 2
+            });
+        }
+        return list;
+    }
+
+    // Live per-stop coverage. onlyUncovered = list just the stops served by no route.
+    private List<KpiDetailEntry> BuildStopCoverageEntries(bool onlyUncovered)
+    {
+        var list = new List<KpiDetailEntry>();
+        var tm = TransportManager.Instance;
+        if (tm == null) return list;
+
+        var served = tm.GetServedStopIDs();
+        foreach (var stop in tm.RegisteredStops)
+        {
+            if (stop == null) continue;
+            bool covered = served.Contains(stop.stopID);
+            if (onlyUncovered && covered) continue;
+            list.Add(new KpiDetailEntry
+            {
+                label = onlyUncovered ? $"Stop {stop.stopID}" : $"Stop {stop.stopID} — {(covered ? "Covered" : "Not covered")}",
+                value = 0f,
+                kind = covered ? 1 : 2
+            });
+        }
+        return list;
+    }
+
+    // Every active route with its stop sequence, longest first.
+    private List<KpiDetailEntry> BuildLongestRouteEntries()
+    {
+        var list = new List<KpiDetailEntry>();
+        var tm = TransportManager.Instance;
+        if (tm == null || tm.ActiveRoutes == null) return list;
+
+        foreach (var route in tm.ActiveRoutes.OrderByDescending(r => r?.StopIDs?.Count ?? 0))
+        {
+            if (route == null) continue;
+            int n = route.StopIDs != null ? route.StopIDs.Count : 0;
+            string seq = n > 0 ? string.Join(" → ", route.StopIDs) : "(no stops)";
+            list.Add(new KpiDetailEntry
+            {
+                label = $"{route.RouteName} ({n} stops): {seq}",
+                value = 0f,
+                kind = 0
+            });
+        }
+        return list;
+    }
+
+    // One entry per employee, mapped by the caller (used by the HR drill-downs).
+    private List<KpiDetailEntry> BuildEmployeeEntries(Func<EmployeeData, KpiDetailEntry> map)
+    {
+        var list = new List<KpiDetailEntry>();
+        var em = EmployeeManager.Instance;
+        if (em == null || em.allEmployees == null) return list;
+        foreach (var e in em.allEmployees) list.Add(map(e));
+        return list;
+    }
+
+    // One entry per maintenance team: member count and pooled skill.
+    private List<KpiDetailEntry> BuildTeamEntries()
+    {
+        var list = new List<KpiDetailEntry>();
+        var em = EmployeeManager.Instance;
+        if (em == null || em.allEmployees == null) return list;
+
+        var groups = em.allEmployees
+            .Where(e => !string.IsNullOrEmpty(e.AssignedTeamID))
+            .GroupBy(e => e.AssignedTeamID);
+
+        foreach (var g in groups)
+        {
+            int members = g.Count();
+            float skill = g.Sum(m => m.SkillLevel);
+            list.Add(new KpiDetailEntry
+            {
+                label = $"{g.Key} — {members} member{(members == 1 ? "" : "s")}, pooled skill {skill:F0}",
+                value = members,
+                kind = 0
+            });
+        }
+        return list;
     }
 
     // ============================================================

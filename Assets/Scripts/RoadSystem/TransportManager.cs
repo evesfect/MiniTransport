@@ -330,8 +330,11 @@ public class TransportManager : NetworkBehaviour
         return max;
     }
 
-    // Count of registered stops that appear on at least one active route.
-    private int ServedRegisteredStops()
+    // All registered stops (for the Stop Coverage / Stops Not Covered drill-downs).
+    public IReadOnlyCollection<BusStop> RegisteredStops => _stopRegistry.Values;
+
+    // Registered stop IDs that appear on at least one active route.
+    public HashSet<string> GetServedStopIDs()
     {
         var served = new HashSet<string>();
         foreach (var route in ActiveRoutes)
@@ -340,8 +343,11 @@ public class TransportManager : NetworkBehaviour
             foreach (var stopID in route.StopIDs)
                 if (_stopRegistry.ContainsKey(stopID)) served.Add(stopID);
         }
-        return served.Count;
+        return served;
     }
+
+    // Count of registered stops that appear on at least one active route.
+    private int ServedRegisteredStops() => GetServedStopIDs().Count;
 
     private string SerializeRoutes()
     {
