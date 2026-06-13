@@ -76,7 +76,3 @@ The server writes JSON save files (one per subsystem) next to the project in the
    appears. Pick a management role; that gates which UI buttons and panels you can use.
 5. For local multiplayer testing, use **ParrelSync** (`Tools` menu) to clone the project, or Unity's
    **Multiplayer Play Mode** virtual players.
-
-> **Note:** The repository's top-level `CLAUDE.md` describes an earlier state of the project where
-> `Scripts/` was "empty" and only the RTS camera existed. That file is **out of date** — the game
-> logic documented here lives under `Assets/Scripts/`. Treat these docs as the current source of truth.
