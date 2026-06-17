@@ -1,7 +1,7 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 36248.7734375,
-    "TransferTripCount": 4683,
+    "CurrentBalance": 346905.25,
+    "TransferTripCount": 5124,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -234,6 +234,190 @@
             "Description": "Passenger Fares",
             "Timestamp": 5,
             "Count": 12
+        },
+        {
+            "Amount": -60000.0,
+            "Type": 0,
+            "Category": 3,
+            "Description": "Purchased requested buses",
+            "Timestamp": 1,
+            "Count": 1
+        },
+        {
+            "Amount": -7018.3310546875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 528",
+            "Timestamp": 2,
+            "Count": 2
+        },
+        {
+            "Amount": -2697.99462890625,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock45-56",
+            "Timestamp": 2,
+            "Count": 2
+        },
+        {
+            "Amount": -8147.732421875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Training Course for Employee 45 (1 day)",
+            "Timestamp": 3,
+            "Count": 1
+        },
+        {
+            "Amount": 40000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus 01",
+            "Timestamp": 4,
+            "Count": 5
+        },
+        {
+            "Amount": 242.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 5,
+            "Count": 5
+        },
+        {
+            "Amount": 144.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 6,
+            "Count": 3
+        },
+        {
+            "Amount": -4762.458984375,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (14 staff)",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -700.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -450.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (3 buses)",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": 124.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 7,
+            "Count": 2
+        },
+        {
+            "Amount": 30.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 8,
+            "Count": 1
+        },
+        {
+            "Amount": 50.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 10,
+            "Count": 1
+        },
+        {
+            "Amount": 150.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 11,
+            "Count": 2
+        },
+        {
+            "Amount": -45000.0,
+            "Type": 0,
+            "Category": 3,
+            "Description": "Purchased requested buses",
+            "Timestamp": 2,
+            "Count": 1
+        },
+        {
+            "Amount": 16000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus B-3542",
+            "Timestamp": 2,
+            "Count": 2
+        },
+        {
+            "Amount": 24000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus 04",
+            "Timestamp": 1,
+            "Count": 3
+        },
+        {
+            "Amount": 200.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 10
+        },
+        {
+            "Amount": 50.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 1
+        },
+        {
+            "Amount": 8000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus 02 (Delayed)",
+            "Timestamp": 2,
+            "Count": 1
+        },
+        {
+            "Amount": 24000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus B-6195",
+            "Timestamp": 1,
+            "Count": 3
+        },
+        {
+            "Amount": 141.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 9
+        },
+        {
+            "Amount": 70.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 2
         }
     ]
 }
