@@ -64,16 +64,29 @@ public class GameOverScreen : MonoBehaviour
         if (overlayRoot != null) overlayRoot.SetActive(true);
         if (reasonText != null) reasonText.text = ReasonLabel(reason);
 
-        // Activate every report dashboard; each one's own role gating shows it only to the
+        // Reveal every report dashboard; each one's own role gating shows it only to the
         // matching role (the global report is ungated, so it shows for everyone).
         if (reportPanels != null)
         {
             foreach (var panel in reportPanels)
             {
                 if (panel == null) { Debug.LogWarning("[GameOverScreen] A Report Panels slot is empty."); continue; }
-                panel.SetActive(true);
+                RevealPanel(panel);
             }
         }
+    }
+
+    // A panel can be revealed one of two ways depending on how it manages its own visibility:
+    //   * BasePanel-managed panels (e.g. the General report, which the bottom-bar button also
+    //     toggles) hide via a CanvasGroup while staying active, so SetActive(true) would be a
+    //     no-op and leave them invisible — they must be opened through the BasePanel/UIManager.
+    //   * Plain panels simply toggle their GameObject.
+    private static void RevealPanel(GameObject panel)
+    {
+        if (panel.TryGetComponent<BasePanel>(out var basePanel))
+            basePanel.SetPanelState(true);
+        else
+            panel.SetActive(true);
     }
 
     private static string ReasonLabel(GameEndReason reason) => reason switch

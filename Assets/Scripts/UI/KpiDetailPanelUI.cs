@@ -103,10 +103,6 @@ public class KpiDetailPanelUI : MonoBehaviour
 
     public void Hide()
     {
-        // TEMP DIAGNOSTIC: confirms the close button's click actually reaches this handler.
-        // Remove once the close-button issue is resolved.
-        Debug.Log("[KpiDetailPanelUI] Hide() called — close button click registered.");
-
         SetSubscription(false);
         ClearRows();
         root.SetActive(false);
