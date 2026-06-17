@@ -20,9 +20,9 @@ public class MaintenanceManager : NetworkBehaviour
     public static MaintenanceManager Instance { get; private set; }
 
     [Header("Settings")]
-    public float operationalThreshold = 30f; // Min durability to leave depot (X)
+    public float operationalThreshold = 25f; // Min durability to leave depot (X)
     public float breakdownThreshold = 5f;    // Durability where bus stops (Y)
-    public float replacePartThreshold = 20f;
+    public float replacePartThreshold = 35f;
 
     [Tooltip("Durability lost per in-game minute while driving")]
     public float decayRatePerMinute = 0.5f;
