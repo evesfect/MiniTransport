@@ -95,6 +95,12 @@ public class BasicNotificationCardUI : MonoBehaviour
                 
             case RequestType.SellBus: 
                 return $"Sell {r.TargetAmount} Buses ({r.Payload})";
+
+            case RequestType.TakeLoan: // [NEW] Added Loan formatting
+                string[] loanData = r.Payload?.Split(',');
+                if (loanData != null && loanData.Length >= 4)
+                    return $"Request a {r.TargetAmount}$ loan (Interest: {loanData[0]}%, Duration: {loanData[1]} weeks)";
+                return $"Request a {r.TargetAmount}$ loan";
                 
             default: 
                 return "Unknown Request";
@@ -103,6 +109,18 @@ public class BasicNotificationCardUI : MonoBehaviour
 
     private string GetTrackingStatus(GameRequest r)
     {
+        // [NEW] Special progress formatting for loans
+        // Since TargetAmount is the loan size (e.g., 25000), we don't want it to say "Progress: 0/25000"
+        if (r.Type == RequestType.TakeLoan)
+        {
+            if (r.State == RequestState.Rejected)
+                return $"<color=red>Status: Rejected</color>";
+            if (r.State == RequestState.Completed)
+                return $"<color=green>Status: Approved</color>";
+
+            return $"Status: Awaiting {r.CurrentTarget}";
+        }
+        
         if (r.State == RequestState.Rejected)
             return $"<color=red>Progress: {r.CurrentAmount}/{r.TargetAmount} (Rejected)</color>";
         
