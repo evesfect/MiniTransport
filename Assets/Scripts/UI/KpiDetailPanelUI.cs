@@ -29,6 +29,11 @@ public class KpiDetailPanelUI : MonoBehaviour
     [Header("Controls")]
     [SerializeField] private Button closeButton;
 
+    [Header("Sorting")]
+    [Tooltip("Sorting order applied to the panel's own Canvas so it draws above the report " +
+             "dashboards and the always-on chrome (TopBar, ExitButton, etc.) that share the main Canvas.")]
+    [SerializeField] private int sortingOrder = 1000;
+
     private readonly List<GameObject> _spawnedRows = new List<GameObject>();
     private bool _subscribed;
 
@@ -36,7 +41,23 @@ public class KpiDetailPanelUI : MonoBehaviour
     {
         if (root == null) root = gameObject;
         if (closeButton != null) closeButton.onClick.AddListener(Hide);
+        EnsureOnTop();
         root.SetActive(false);
+    }
+
+    // The detail panel is nested inside a report dashboard that sits low in the main Canvas'
+    // sibling order, so other UI (TopBar, ExitButton, other panels) renders on top of it and
+    // intercepts clicks to its close button. Giving the panel its own sorted Canvas + raycaster
+    // lifts both its rendering AND its raycasts above that chrome, regardless of sibling order.
+    private void EnsureOnTop()
+    {
+        if (!root.TryGetComponent<Canvas>(out var canvas))
+            canvas = root.AddComponent<Canvas>();
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = sortingOrder;
+
+        if (!root.TryGetComponent<GraphicRaycaster>(out _))
+            root.AddComponent<GraphicRaycaster>();
     }
 
     private void OnDestroy()
@@ -49,6 +70,18 @@ public class KpiDetailPanelUI : MonoBehaviour
     public void Show(KpiMetric metric)
     {
         root.SetActive(true);
+
+        // Re-assert front-most sorting every open (cheap, and survives any runtime changes).
+        EnsureOnTop();
+
+        // Guarantee the panel can receive input even if a CanvasGroup on this object (or a
+        // leftover BasePanel) left it non-interactable.
+        if (root.TryGetComponent<CanvasGroup>(out var cg))
+        {
+            cg.alpha = 1f;
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+        }
 
         if (titleText != null) titleText.text = PrettyName(metric);
         if (valueText != null) valueText.text = "";
@@ -70,6 +103,10 @@ public class KpiDetailPanelUI : MonoBehaviour
 
     public void Hide()
     {
+        // TEMP DIAGNOSTIC: confirms the close button's click actually reaches this handler.
+        // Remove once the close-button issue is resolved.
+        Debug.Log("[KpiDetailPanelUI] Hide() called — close button click registered.");
+
         SetSubscription(false);
         ClearRows();
         root.SetActive(false);
