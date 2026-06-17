@@ -7,6 +7,7 @@ public class NotificationPanelUI : MonoBehaviour
     public GameObject basicCardPrefab;
     public GameObject buyBusApprovalCardPrefab;
     public GameObject sellBusApprovalCardPrefab;
+    public GameObject loanApprovalCardPrefab; // [NEW]
 
     private void OnEnable()
     {
@@ -19,7 +20,6 @@ public class NotificationPanelUI : MonoBehaviour
 
     private void Start()
     {
-        // Force a draw on startup to catch data that loaded before the UI opened
         RefreshNotifications();
     }
 
@@ -35,29 +35,30 @@ public class NotificationPanelUI : MonoBehaviour
 
         PlayerRole myRole = RoleManager.Instance.GetMyRole();
 
-        // Only show requests that aren't archived/read
         var activeNotifications = RequestManager.Instance.ActiveRequests
             .Where(r => r.State != RequestState.Read && (r.Requester == myRole || r.CurrentTarget == myRole))
             .ToList();
 
         foreach (var req in activeNotifications)
         {
-            GameObject prefabToSpawn = basicCardPrefab; // Default
+            GameObject prefabToSpawn = basicCardPrefab; 
 
-            // If I am the responder, and it requires a special approval UI:
+            // Assign special cards
             if (req.CurrentTarget == myRole && (req.State == RequestState.Active || req.State == RequestState.AwaitingGeneralManager))
             {
                 if (req.Type == RequestType.BuyBus) prefabToSpawn = buyBusApprovalCardPrefab;
                 else if (req.Type == RequestType.SellBus) prefabToSpawn = sellBusApprovalCardPrefab;
+                else if (req.Type == RequestType.TakeLoan) prefabToSpawn = loanApprovalCardPrefab; // [NEW]
             }
 
             var cardObj = Instantiate(prefabToSpawn, transform);
             cardObj.transform.localScale = Vector3.one;
 
-            // Initialize the specific script
+            // Setup specific scripts
             if (prefabToSpawn == basicCardPrefab) cardObj.GetComponent<BasicNotificationCardUI>().Setup(req, myRole);
             else if (prefabToSpawn == buyBusApprovalCardPrefab) cardObj.GetComponent<BuyBusApprovalCardUI>().Setup(req);
             else if (prefabToSpawn == sellBusApprovalCardPrefab) cardObj.GetComponent<SellBusApprovalCardUI>().Setup(req);
+            else if (prefabToSpawn == loanApprovalCardPrefab) cardObj.GetComponent<LoanApprovalCardUI>().Setup(req); // [NEW]
         }
     }
 }

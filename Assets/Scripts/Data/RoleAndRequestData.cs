@@ -17,7 +17,8 @@ public enum RequestType
     TrainMechanic,
     BuyParts,
     BuyBus,
-    SellBus
+    SellBus,
+    TakeLoan
 }
 
 public enum RequestState
@@ -68,6 +69,12 @@ public class GameRequest
                 if (State == RequestState.AwaitingGeneralManager)
                     return $"Finance approved selling {TargetAmount} buses. Awaiting General Manager final approval.";
                 return $"{Requester} requests selling {TargetAmount} specific buses.";
+            case RequestType.TakeLoan:
+                // Try to extract the formatted payload data
+                string[] loanData = Payload?.Split(',');
+                if (loanData != null && loanData.Length >= 4)
+                    return $"{Requester} requests a {TargetAmount}$ loan (Interest: {loanData[0]}%, Duration: {loanData[1]} weeks).";
+                return $"{Requester} requests a {TargetAmount}$ loan.";    
             default:
                 return "Unknown Request.";
         }

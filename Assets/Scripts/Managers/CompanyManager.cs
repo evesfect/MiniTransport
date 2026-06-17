@@ -83,6 +83,7 @@ public class CompanyManager : NetworkBehaviour
     public float TransferDiscount => _netTransferDiscount.Value;
     /// <summary>Networked mirror of GlobalSatisfaction so the GM panel reads it on clients too.</summary>
     public float Satisfaction => _netSatisfaction.Value;
+    public bool HasActiveLoan => _companyData.ActiveLoans != null && _companyData.ActiveLoans.Count > 0;
 
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
@@ -179,8 +180,44 @@ public class CompanyManager : NetworkBehaviour
         int day = SimulationTimeManager.Instance.CurrentDay;
         if (day > 0 && day % 7 == 0)
         {
+            ProcessLoanPayments();
             OnWeeklyExpensesRequested?.Invoke();
         }
+    }
+
+    // [NEW] Process Active Debt
+    private void ProcessLoanPayments()
+    {
+        if (_companyData.ActiveLoans == null) return;
+        
+        bool changed = false;
+        // Loop backwards to safely remove fulfilled loans
+        for (int i = _companyData.ActiveLoans.Count - 1; i >= 0; i--)
+        {
+            var loan = _companyData.ActiveLoans[i];
+            if (loan.WeeksLeft > 0)
+            {
+                // This utilizes the standard mechanic which triggers GameEndManager bankruptcy!
+                ProcessPassiveExpense(loan.WeeklyPayment, TransactionCategory.LoanPayment, "Weekly Loan Installment");
+                loan.WeeksLeft--;
+                
+                if (loan.WeeksLeft <= 0) _companyData.ActiveLoans.RemoveAt(i);
+                changed = true;
+            }
+        }
+        if (changed) _needsSave = true;
+    }
+
+    // [NEW] API for RequestManager to finalize the loan
+    public void AddLoan(float amount, float weeklyPayment, int weeks)
+    {
+        if (_companyData.ActiveLoans == null) _companyData.ActiveLoans = new List<ActiveLoan>();
+        
+        _companyData.ActiveLoans.Add(new ActiveLoan { WeeklyPayment = weeklyPayment, WeeksLeft = weeks });
+        
+        // Add the principal to the balance
+        AddIncome(amount, TransactionCategory.Loan, "Bank Loan Granted");
+        _needsSave = true;
     }
 
     public void ProcessPassiveExpense(float amount, TransactionCategory category, string description)
@@ -593,9 +630,17 @@ public class CompanyManager : NetworkBehaviour
         {
             CompanyName = defaultCompanyName,
             CurrentBalance = startingBalance,
-            History = new List<Transaction>()
+            History = new List<Transaction>(),
+            ActiveLoans = new List<ActiveLoan>() // [NEW] Initialize the list
         };
     }
+}
+
+[Serializable]
+public class ActiveLoan
+{
+    public float WeeklyPayment;
+    public int WeeksLeft;
 }
 
 [Serializable]
@@ -605,6 +650,8 @@ public class CompanyData
     public float CurrentBalance;
     public int TransferTripCount; // Global KPI: cumulative number of passenger transfers
     public List<Transaction> History = new List<Transaction>();
+    // [NEW] Track active debts
+    public List<ActiveLoan> ActiveLoans = new List<ActiveLoan>();
 }
 
 [Serializable]
@@ -622,7 +669,7 @@ public enum TransactionType { Actionable, Passive }
 
 public enum TransactionCategory
 {
-    General, Grant, TicketRevenue, VehiclePurchase, PartPurchase, Maintenance, Fuel, StaffSalary, StaffUpkeep, Tax
+    General, Grant, TicketRevenue, VehiclePurchase, PartPurchase, Maintenance, Fuel, StaffSalary, StaffUpkeep, Tax, Loan, LoanPayment
 }
 
 
