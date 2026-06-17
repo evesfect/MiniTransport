@@ -28,10 +28,15 @@ public class BusCardDisplay : MonoBehaviour
     private BusData currentBus;
     private Action<BusData> onInfoClickedCallback;
 
+    // Local optimistic flag: true between pressing Recall and the bus actually parking. Used only
+    // for this card's status text; the authoritative state lives on the server.
+    private bool _recallRequested;
+
     public void Setup(BusData bus, Action<BusData> onInfoClicked)
     {
         currentBus = bus;
         onInfoClickedCallback = onInfoClicked;
+        _recallRequested = false;
 
         // Setup Button Listeners once
         if (recallButton != null)
@@ -82,13 +87,28 @@ public class BusCardDisplay : MonoBehaviour
             }
         }
 
-        // 3. Set TRUE Current Assignment Status
+        // 3. Set TRUE Current Assignment Status. These now read the server-mirrored status list, so
+        // they're correct on clients too (not just the host).
+        bool isDriving = FleetManager.Instance != null && FleetManager.Instance.IsBusActive(currentBus.BusID);
+        bool isBroken = isDriving && FleetManager.Instance.IsBusBroken(currentBus.BusID);
+        bool isReturning = isDriving && FleetManager.Instance.IsBusReturning(currentBus.BusID);
+
+        // Clear the local optimistic flag once the server confirms the recall, or the bus parks.
+        if (!isDriving || isReturning) _recallRequested = false;
+
+        bool showReturning = isReturning || (_recallRequested && isDriving);
+
         if (statusText != null)
         {
-            // Check the FleetManager to see if the bus is ACTUALLY spawned and driving
-            bool isDriving = FleetManager.Instance != null && FleetManager.Instance.IsBusActive(currentBus.BusID);
-
-            if (isDriving)
+            if (showReturning)
+            {
+                statusText.text = isBroken ? "Status: Towing to depot…" : "Status: Returning to depot…";
+            }
+            else if (isBroken)
+            {
+                statusText.text = "Status: Broken down (Recall to tow)";
+            }
+            else if (isDriving)
             {
                 statusText.text = $"Status: Active (Route {currentBus.Schedule.RouteID})";
             }
@@ -101,12 +121,19 @@ public class BusCardDisplay : MonoBehaviour
                 statusText.text = "Status: Unassigned";
             }
         }
+
+        // Recall only makes sense while the bus is out on the road and not already on its way back.
+        if (recallButton != null)
+            recallButton.interactable = isDriving && !showReturning;
     }
 
     private void OnRecallPressed()
     {
-        Debug.Log($"Recalling Bus: {currentBus.BusID}");
+        if (currentBus == null || FleetManager.Instance == null) return;
 
+        _recallRequested = true;
+        FleetManager.Instance.RecallBusClient(currentBus.BusID);
+        Debug.Log($"[BusCardDisplay] Recall requested for bus {currentBus.BusID}.");
     }
 
     private void OnInfoPressed()

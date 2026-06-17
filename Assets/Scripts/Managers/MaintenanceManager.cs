@@ -541,6 +541,21 @@ public class MaintenanceManager : NetworkBehaviour
             OnWorkQueueChanged?.Invoke();
     }
 
+    /// <summary>
+    /// The player towed a stuck bus off the road before the field crew could finish. Drop its
+    /// on-route breakdown bookkeeping WITHOUT recording a completed repair (it was not returned to
+    /// service in the field — it'll be repaired / part-replaced at the depot by the hourly cycle).
+    /// </summary>
+    public void CancelOnRouteBreakdown(string busID)
+    {
+        int removed = _workItems.RemoveAll(w => w.BusID == busID);
+        _breakdownSet.Remove(busID);
+        _breakdownStartMinute.Remove(busID); // discard the open MTTR clock instead of finalizing it
+        _partsDelayedBuses.Remove(busID);
+
+        if (removed > 0) OnWorkQueueChanged?.Invoke();
+    }
+
     public void ReorderWorkQueue(List<string> workItemIDs)
     {
         var reordered = new List<WorkItem>(workItemIDs.Count);

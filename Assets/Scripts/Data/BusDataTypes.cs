@@ -70,6 +70,26 @@ public class BusData
     }
 }
 
+// Per-bus live runtime status mirrored from the server to every client (FleetManager keeps the
+// authoritative list). Lets client UI show whether a bus is actually out driving, returning, or
+// broken down — the server-only spawned-instance map can't be read on clients.
+public struct BusRuntimeStatus : INetworkSerializable, IEquatable<BusRuntimeStatus>
+{
+    public FixedString32Bytes BusID;
+    public bool IsRecalled;   // player asked it to return / be towed
+    public bool IsBroken;     // broken down on the road
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref BusID);
+        serializer.SerializeValue(ref IsRecalled);
+        serializer.SerializeValue(ref IsBroken);
+    }
+
+    public bool Equals(BusRuntimeStatus other) =>
+        BusID.Equals(other.BusID) && IsRecalled == other.IsRecalled && IsBroken == other.IsBroken;
+}
+
 public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState>
 {
     public FixedString32Bytes CurrentRouteID;

@@ -71,6 +71,11 @@ public class BusDriver : VehicleDriver
     private bool _serverIsWaiting;
     private float _serverWaitTimer;
 
+    // Set by a manual player recall. A recalled bus behaves like its shift has ended: it stops
+    // taking on new passengers and parks at the depot the next time it would leave a stop empty.
+    private bool _serverRecalled;
+    public bool IsRecalled => _serverRecalled;
+
     // Client Side Simulation
     // PathLeg struct and Lists moved to Base Class (m_ServerPathSegments, m_LocalPathSegments, etc)
 
@@ -188,6 +193,38 @@ public class BusDriver : VehicleDriver
         }
     }
 
+    /// <summary>
+    /// Server-side: pull this bus out of service and send it back to its depot.
+    /// <para>A healthy bus stops taking on new passengers, drops whoever is aboard off at their
+    /// stops, and despawns (parks at the depot) the next time it would leave a stop empty —
+    /// mirroring end-of-shift behaviour so no passengers are stranded.</para>
+    /// <para>A broken-down bus is physically stuck and would never reach a stop on its own, so it
+    /// is <b>towed</b>: returned to its depot immediately, where the maintenance crew can replace
+    /// parts the field recovery vehicle cannot. Safe to call repeatedly.</para>
+    /// </summary>
+    public void RecallToDepot()
+    {
+        if (!IsServer) return;
+        _serverRecalled = true;
+
+        if (_serverEntry != null && FleetManager.Instance != null)
+            FleetManager.Instance.SetBusRecalled(_serverEntry.BusID, true);
+
+        // Stuck broken-down bus → tow it straight home rather than waiting for a stop it can't reach.
+        if (IsBroken)
+        {
+            string busID = _serverEntry != null ? _serverEntry.BusID : null;
+
+            // Drop the on-route breakdown bookkeeping without counting it as a field repair; it
+            // will be picked up by the depot's hourly maintenance once parked.
+            if (!string.IsNullOrEmpty(busID) && MaintenanceManager.Instance != null)
+                MaintenanceManager.Instance.CancelOnRouteBreakdown(busID);
+
+            if (_serverDepot != null && busID != null)
+                _serverDepot.ReturnBusToDepot(busID);
+        }
+    }
+
     // Maintenance Logic
     public void SetBrokenDown(bool isBroken, BusPartType reason = BusPartType.None)
     {
@@ -214,21 +251,25 @@ public class BusDriver : VehicleDriver
             _hasNotifiedStop = false;
         }
         _netState.Value = state;
+
+        // Mirror the broken flag to clients for fleet UI.
+        if (_serverEntry != null && FleetManager.Instance != null)
+            FleetManager.Instance.SetBusBroken(_serverEntry.BusID, _netState.Value.IsBrokenDown);
     }
 
     private void ServerStartNextLeg()
     {
         
 
-        // Schedule Check
-        if (!IsShiftActive)
+        // Schedule Check — a manual recall ends service the same way the shift window does.
+        if (_serverRecalled || !IsShiftActive)
         {
             if (_passengersOnBoard.Count == 0)
             {
                 DespawnBus();
                 return;
             }
-            
+
         }
 
         var state = _netState.Value;
@@ -433,7 +474,7 @@ public class BusDriver : VehicleDriver
 
         // 3. PICK UP (Boarding) - transfer-aware planning
 
-        if (IsShiftActive && waitingSnapshot != null)
+        if (IsShiftActive && !_serverRecalled && waitingSnapshot != null)
         {
             int myCapacity = _serverEntry.Capacity; // Unique capacity from BusData
             int currentLoad = GetTotalPassengerCount();
