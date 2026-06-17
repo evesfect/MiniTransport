@@ -1,7 +1,7 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 346905.25,
-    "TransferTripCount": 5124,
+    "CurrentBalance": 325602.75,
+    "TransferTripCount": 5846,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -418,6 +418,215 @@
             "Description": "Passenger Fares",
             "Timestamp": 2,
             "Count": 2
+        },
+        {
+            "Amount": 279.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 14
+        },
+        {
+            "Amount": 25000.0,
+            "Type": 1,
+            "Category": 10,
+            "Description": "Bank Loan Granted",
+            "Timestamp": 1,
+            "Count": 1
+        },
+        {
+            "Amount": 350.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 16
+        },
+        {
+            "Amount": 331.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 18
+        },
+        {
+            "Amount": 433.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 4,
+            "Count": 14
+        },
+        {
+            "Amount": 409.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 5,
+            "Count": 15
+        },
+        {
+            "Amount": 447.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 6,
+            "Count": 12
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": 357.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 7,
+            "Count": 10
+        },
+        {
+            "Amount": 196.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 8,
+            "Count": 4
+        },
+        {
+            "Amount": 52.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 9,
+            "Count": 2
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 28,
+            "Count": 1
         }
-    ]
+    ],
+    "ActiveLoans": []
 }

@@ -1,6 +1,50 @@
 {
     "Buses": [
         {
+            "BusID": "01",
+            "AssignedDepotID": "Depot_Main",
+            "Schedule": {
+                "RouteID": "02576857",
+                "StartTime": 6.150000095367432,
+                "EndTime": 20.0,
+                "TurnaroundWait": 15.0
+            },
+            "PendingSale": false,
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 1,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 2,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 3,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 4,
+                    "Health": 36.87726593017578,
+                    "MaxLife": 36.87726593017578,
+                    "PendingReplacementItemID": ""
+                }
+            ],
+            "Capacity": 50
+        },
+        {
             "BusID": "02",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
@@ -15,7 +59,7 @@
                     "PartType": 0,
                     "Health": 100.0,
                     "MaxLife": 100.0,
-                    "PendingReplacementItemID": "Alternator"
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
@@ -39,7 +83,7 @@
                     "PartType": 4,
                     "Health": 100.0,
                     "MaxLife": 100.0,
-                    "PendingReplacementItemID": "SensorArray"
+                    "PendingReplacementItemID": ""
                 }
             ],
             "Capacity": 50
@@ -65,13 +109,13 @@
                     "PartType": 1,
                     "Health": 100.0,
                     "MaxLife": 100.0,
-                    "PendingReplacementItemID": "Axle"
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
                     "Health": 100.0,
                     "MaxLife": 100.0,
-                    "PendingReplacementItemID": "HeavyDutyTire"
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
@@ -109,13 +153,13 @@
                     "PartType": 1,
                     "Health": 100.0,
                     "MaxLife": 100.0,
-                    "PendingReplacementItemID": "Axle"
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
                     "Health": 100.0,
                     "MaxLife": 100.0,
-                    "PendingReplacementItemID": "HeavyDutyTire"
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
