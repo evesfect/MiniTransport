@@ -139,6 +139,8 @@ public void NotifyActionTaken(RequestType type, int amountAdded, string specific
         }
         else if (req.CurrentTarget == PlayerRole.GeneralManager)
         {
+            // [NEW FIX] Update the target amount to reflect the GM's final slider decision!
+            req.TargetAmount = approvedAmount;
             req.State = RequestState.Completed;
             req.CurrentAmount = req.TargetAmount;
             ExecuteGMApproval(req);
