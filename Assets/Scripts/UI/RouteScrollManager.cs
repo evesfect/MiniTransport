@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Manages the route list panel. Populates route cards, handles selection
@@ -11,6 +12,7 @@ public class RouteScrollManager : MonoBehaviour
     public Transform contentContainer;
     public GameObject routeCardPrefab;
     public RouteEditPanel editPanel;
+    public Button addRouteButton;
 
     private readonly List<GameObject> _pool = new List<GameObject>();
     private string _selectedRouteID;
@@ -19,6 +21,17 @@ public class RouteScrollManager : MonoBehaviour
     private void Awake()
     {
         _basePanel = GetComponent<BasePanel>();
+
+        if (addRouteButton != null)
+            addRouteButton.onClick.AddListener(AddNewRoute);
+    }
+
+    private void AddNewRoute()
+    {
+        if (TransportManager.Instance == null) return;
+
+        var newRoute = new Route("New Route", new System.Collections.Generic.List<string>(), UnityEngine.Random.ColorHSV(0f, 1f, 0.6f, 1f, 0.8f, 1f));
+        TransportManager.Instance.AddRouteClient(newRoute);
     }
 
     private void OnEnable()
