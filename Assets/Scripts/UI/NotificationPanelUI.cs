@@ -35,6 +35,9 @@ public class NotificationPanelUI : MonoBehaviour
 
         PlayerRole myRole = RoleManager.Instance.GetMyRole();
 
+        // [NEW FIX] If the player hasn't selected a role yet, stop here. Show nothing!
+        if (myRole == PlayerRole.None) return;
+
         var activeNotifications = RequestManager.Instance.ActiveRequests
             .Where(r => r.State != RequestState.Read && (r.Requester == myRole || r.CurrentTarget == myRole))
             .ToList();
