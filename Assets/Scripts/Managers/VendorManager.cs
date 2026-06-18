@@ -38,6 +38,30 @@ public class VendorManager : NetworkBehaviour
     [HideInInspector] public int lifetimeOnTimeDeliveries;
     [HideInInspector] public float lifetimeQualitySum; // sum of delivered part durability rolls
 
+    // --- KPI drill-down logs (server-side, in-memory, capped, newest-first) ---
+    private const int VendorLogCap = 150;
+    private readonly List<KpiDetailEntry> _orderLog = new List<KpiDetailEntry>();
+    private readonly List<KpiDetailEntry> _deliveryLog = new List<KpiDetailEntry>();
+
+    /// <summary>Newest-first log of orders placed (feeds the Total Orders Placed drill-down).</summary>
+    public IReadOnlyList<KpiDetailEntry> OrderLog => _orderLog;
+    /// <summary>Newest-first log of deliveries (feeds On-Time Deliveries and Average Part Quality drill-downs).</summary>
+    public IReadOnlyList<KpiDetailEntry> DeliveryLog => _deliveryLog;
+
+    private void PushVendorLog(List<KpiDetailEntry> log, string label, float value, int kind)
+    {
+        var time = SimulationTimeManager.Instance;
+        log.Insert(0, new KpiDetailEntry
+        {
+            label = label,
+            value = value,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = kind
+        });
+        if (log.Count > VendorLogCap) log.RemoveAt(log.Count - 1);
+    }
+
     public static readonly Dictionary<BusPartCategory, string[]> CategoryParts = new Dictionary<BusPartCategory, string[]>
     {
         { BusPartCategory.Engine, new string[] { "EngineBlock", "Piston", "Alternator" } },
@@ -137,6 +161,10 @@ public class VendorManager : NetworkBehaviour
                 lifetimeOrdersDelivered++;
                 if (!order.IsDelayed) lifetimeOnTimeDeliveries++;
                 lifetimeQualitySum += order.DurabilityRoll;
+                PushVendorLog(_deliveryLog,
+                    $"{actualAmount}× {order.ItemID} from {order.VendorID} — {(order.IsDelayed ? "LATE" : "On time")} (Q{order.DurabilityRoll:F0})",
+                    order.DurabilityRoll,
+                    order.IsDelayed ? 2 : 1);
                 
                 var vendor = availableVendors.FirstOrDefault(v => v.VendorID == order.VendorID);
                 if (vendor != null)
@@ -317,6 +345,7 @@ public class VendorManager : NetworkBehaviour
         CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier * amount, TransactionCategory.PartPurchase, $"Ordered {generatedDisplayID}");
 
         lifetimeOrdersPlaced++; // KPI: total orders placed
+        PushVendorLog(_orderLog, $"Ordered {amount}× {baseItemName} from {vendorID}", amount, 0);
 
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());

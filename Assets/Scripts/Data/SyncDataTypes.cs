@@ -99,11 +99,12 @@ public struct MaintenanceReportData
     public float avgFleetHealth;
     public int busesNeedingRepair;
     public int availableBuses;         // doc: usable buses ready for service
-    public float mttrHours;            // Mean Time To Repair = Bus Return-to-Service performance (hours; -1 = no data)
+    public float mttrHours;            // Mean Time To Repair = average repair duration (hours; -1 = no data)
     public float technicianUtilization;// crew workload vs capacity (0-100; -1 = no crews)
     public float breakdownFrequency;   // breakdowns per day
-    public float repairCompletionRate; // % of breakdowns fully resolved (-1 = no breakdowns yet)
+    public float repairCompletionRate; // On-time repair rate: % of repairs finished within target time (-1 = no repairs yet)
     public int sparePartDelays;        // spare-part delay frequency: count of "waiting for parts" stall episodes
+    public float totalDowntimeHours;   // Bus Return to Service: sum of all repair durations across the session (hours)
 }
 
 [Serializable]
@@ -140,4 +141,78 @@ public struct VendorReportData
     public float onTimeDeliveryRate;   // 0-100
     public float avgPartQuality;       // 0-100 (avg durability of delivered parts)
     public int activeDeals;
+}
+
+// ============================================================================
+// KPI DRILL-DOWN DETAIL
+// One reusable, data-driven payload behind every General Report card. Built on
+// the server by KPIManager and fetched on demand (request/response RPC) when a
+// detail panel is opened. JsonUtility-serializable like the report structs above.
+// ============================================================================
+
+// Identifies which General Report KPI a detail payload belongs to.
+// Order matches the General Report cards; values are sent over the wire as ints.
+public enum KpiMetric
+{
+    // General report
+    CustomerSatisfaction,
+    OnTimePerformance,
+    AvgWaitingTime,
+    Transfers,
+    TotalBreakdowns,
+    FleetReliability,
+    FleetUtilization,
+    CashBalance,
+
+    // Finance report (Cash Balance reuses the existing finance dashboard, no metric needed)
+    FinanceTotalRevenue,
+    FinanceTotalExpenses,
+    FinancePayrollSpend,
+    FinancePartsSpend,
+    FinanceOrdersPlaced,
+    FinanceOnTimeDeliveries,
+    FinanceAvgPartQuality,
+
+    // Transportation (Operations) report
+    OpsPassengersServed,
+    OpsPassengersMissed,
+    OpsAvailableBuses,
+    OpsStopCoverage,
+    OpsLongestRoute,
+    OpsStopsNotCovered,
+
+    // HR report
+    HrTotalEmployees,
+    HrTotalHires,
+    HrAvgSkill,
+    HrWeeklyPayroll,
+    HrTeamCount,
+    HrAvgFatigue,
+
+    // Maintenance report
+    MaintMttr,
+    MaintBreakdownFrequency,
+    MaintRepairCompletionRate,
+    MaintSparePartDelays,
+    MaintBusReturnToService,
+    MaintTechnicianUtilization
+}
+
+[Serializable]
+public struct KpiDetailEntry
+{
+    public string label;      // "Bus 03 — Engine failure" / "Passengers gave up at Stop 12"
+    public float value;       // signed magnitude (e.g. -0.6, +2.5); 0 if not applicable
+    public int day;           // sim day
+    public float timeOfDay;   // sim hour 0–24
+    public int kind;          // 0 = neutral, 1 = positive, 2 = negative (drives colour/sign)
+}
+
+[Serializable]
+public struct KpiDetailData
+{
+    public int metric;                    // (int)KpiMetric
+    public string headerValue;            // formatted current value e.g. "%80"
+    public string explanation;            // one-line "how it's calculated"
+    public List<KpiDetailEntry> entries;  // newest-first, capped
 }

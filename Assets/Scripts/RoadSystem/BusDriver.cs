@@ -409,7 +409,7 @@ public class BusDriver : VehicleDriver
             float conditionMultiplier = 0.7f + (interiorHealthPct * 0.5f);
             float finalReward = baseReward * conditionMultiplier;
 
-            CompanyManager.Instance.ModifySatisfaction(finalReward);
+            CompanyManager.Instance.ModifySatisfaction(finalReward, "Passengers delivered");
 
             // Full fare for passengers completing their journey on this leg.
             fareCollected += arrivedCount * ticketPrice;

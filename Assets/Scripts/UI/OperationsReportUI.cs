@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 using Unity.Netcode;
 
@@ -30,6 +31,22 @@ public class OperationsReportUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI longestRouteText;       // highest stop count on a route
     [SerializeField] private TextMeshProUGUI stopsNotCoveredText;    // stops served by no route
 
+    [Header("Drill-Down")]
+    [Tooltip("Shared list panel (same one the General/Finance reports use).")]
+    [SerializeField] private KpiDetailPanelUI detailPanel;
+    [Tooltip("One Button per card in grid order: Served, Missed, Available Buses, Stop Coverage, Longest Route, Stops Not Covered.")]
+    [SerializeField] private Button[] cardButtons = new Button[6];
+
+    private static readonly KpiMetric[] CardMetrics =
+    {
+        KpiMetric.OpsPassengersServed,   // 0
+        KpiMetric.OpsPassengersMissed,   // 1
+        KpiMetric.OpsAvailableBuses,     // 2
+        KpiMetric.OpsStopCoverage,       // 3
+        KpiMetric.OpsLongestRoute,       // 4
+        KpiMetric.OpsStopsNotCovered     // 5
+    };
+
     private bool _subscribed;
 
     private void OnEnable()
@@ -39,6 +56,7 @@ public class OperationsReportUI : MonoBehaviour
         if (RoleManager.Instance != null)
             RoleManager.Instance.OnRolesUpdated += ApplyGate;
 
+        WireCardButtons();
         ApplyGate();
     }
 
@@ -49,6 +67,7 @@ public class OperationsReportUI : MonoBehaviour
         if (RoleManager.Instance != null)
             RoleManager.Instance.OnRolesUpdated -= ApplyGate;
 
+        UnwireCardButtons();
         SetReportSubscription(false);
     }
 
@@ -94,5 +113,32 @@ public class OperationsReportUI : MonoBehaviour
         if (stopCoverageText != null) stopCoverageText.text = ReportFormat.Pct(d.stopCoverage);
         if (longestRouteText != null) longestRouteText.text = $"{d.longestRouteStops} stops";
         if (stopsNotCoveredText != null) stopsNotCoveredText.text = $"{d.stopsNotCovered}";
+    }
+
+    // --- Drill-down ---
+
+    private void WireCardButtons()
+    {
+        if (cardButtons == null) return;
+        for (int i = 0; i < cardButtons.Length; i++)
+        {
+            if (cardButtons[i] == null) continue;
+            int index = i; // capture for closure
+            cardButtons[i].onClick.AddListener(() => OpenCard(index));
+        }
+    }
+
+    private void UnwireCardButtons()
+    {
+        if (cardButtons == null) return;
+        foreach (var btn in cardButtons)
+            if (btn != null) btn.onClick.RemoveAllListeners();
+    }
+
+    /// <summary>Opens the shared detail panel for a Transportation card (index matches CardMetrics).</summary>
+    public void OpenCard(int index)
+    {
+        if (detailPanel != null && index >= 0 && index < CardMetrics.Length)
+            detailPanel.Show(CardMetrics[index]);
     }
 }

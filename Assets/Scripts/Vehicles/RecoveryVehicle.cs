@@ -309,6 +309,14 @@ public class RecoveryVehicle : VehicleDriver
                 // Re-enable the bus driver
                 busObj.GetComponent<BusDriver>()?.SetBrokenDown(false);
             }
+
+            // Tell Maintenance the bus is back in service. This clears it from the breakdown set
+            // and closes the MTTR clock that TriggerBreakdown opened — which drives the MTTR /
+            // Bus Return to Service / Repair Completion Rate KPIs. Without this the on-route
+            // breakdown is never marked resolved, so those metrics stay at N/A / 0.
+            if (MaintenanceManager.Instance != null)
+                MaintenanceManager.Instance.RemoveWorkItem(_targetBusData.BusID);
+
             ServerStartReturnTrip();
         }
     }

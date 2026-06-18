@@ -481,6 +481,65 @@ public class EmployeeManager : NetworkBehaviour
         Debug.Log($"[Employee] Assigned {emp.FullName} to Depot: {depotID}, Team: {emp.AssignedTeamID}");
     }
 
+    /// <summary>Distinct, sorted team names currently in use at a depot (for the team dropdown).</summary>
+    public List<string> GetTeamsForDepot(string depotID)
+    {
+        if (string.IsNullOrEmpty(depotID) || allEmployees == null) return new List<string>();
+        return allEmployees
+            .Where(e => e.Role == EmployeeRole.Mechanic && e.AssignedDepotID == depotID && !string.IsNullOrEmpty(e.AssignedTeamID))
+            .Select(e => e.AssignedTeamID)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+    }
+
+    /// <summary>Creates a brand-new team in the depot (next unused "Team X" name) and moves the mechanic onto it.</summary>
+    public void AssignMechanicToNewTeam(string employeeID, string depotID)
+    {
+        if (IsServer) AssignMechanicToNewTeamInternal(employeeID, depotID);
+        else RequestNewTeamAssignmentRpc(employeeID, depotID);
+    }
+
+    private void AssignMechanicToNewTeamInternal(string employeeID, string depotID)
+    {
+        if (string.IsNullOrEmpty(depotID)) return;
+        AssignMechanicToTeamInternal(employeeID, depotID, GetNextTeamName(depotID));
+    }
+
+    /// <summary>Clears a mechanic's depot and team (returns them to the unassigned pool).</summary>
+    public void UnassignMechanic(string employeeID)
+    {
+        if (IsServer) UnassignMechanicInternal(employeeID);
+        else RequestUnassignMechanicRpc(employeeID);
+    }
+
+    private void UnassignMechanicInternal(string employeeID)
+    {
+        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
+        if (emp == null || emp.Role != EmployeeRole.Mechanic) return;
+
+        emp.AssignedDepotID = "";
+        emp.AssignedTeamID = "";
+
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
+        Debug.Log($"[Employee] Unassigned {emp.FullName} from depot/team.");
+    }
+
+    // Next free team name in a depot ("Team A", "Team B", ... then "Team 7" if A–Z are all taken).
+    private string GetNextTeamName(string depotID)
+    {
+        var taken = new HashSet<string>(GetTeamsForDepot(depotID));
+        for (char c = 'A'; c <= 'Z'; c++)
+        {
+            string name = $"Team {c}";
+            if (!taken.Contains(name)) return name;
+        }
+        int i = taken.Count + 1;
+        while (taken.Contains($"Team {i}")) i++;
+        return $"Team {i}";
+    }
+
     // --- Internal Logic (Server) ---
 
     private void HireCandidateInternal(int index)
@@ -707,6 +766,18 @@ public class EmployeeManager : NetworkBehaviour
     private void RequestTeamAssignmentRpc(string employeeID, string depotID, string teamID)
     {
         AssignMechanicToTeamInternal(employeeID, depotID, teamID);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestNewTeamAssignmentRpc(string employeeID, string depotID)
+    {
+        AssignMechanicToNewTeamInternal(employeeID, depotID);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestUnassignMechanicRpc(string employeeID)
+    {
+        UnassignMechanicInternal(employeeID);
     }
 
     // --- Persistence ---

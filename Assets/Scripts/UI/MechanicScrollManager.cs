@@ -27,6 +27,9 @@ public class MechanicScrollManager : MonoBehaviour
             StopCoroutine(_refreshRoutine);
             _refreshRoutine = null;
         }
+
+        if (EmployeeManager.Instance != null)
+            EmployeeManager.Instance.OnEmployeeDataUpdated -= RefreshList;
     }
 
     private IEnumerator WaitForEmployeeDataAndRefresh()
@@ -41,6 +44,14 @@ public class MechanicScrollManager : MonoBehaviour
         }
 
         RefreshList();
+
+        // Rebuild the list whenever staff data changes (e.g. a team assignment from the detail panel).
+        if (EmployeeManager.Instance != null)
+        {
+            EmployeeManager.Instance.OnEmployeeDataUpdated -= RefreshList;
+            EmployeeManager.Instance.OnEmployeeDataUpdated += RefreshList;
+        }
+
         _refreshRoutine = null;
     }
 

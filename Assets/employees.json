@@ -10,7 +10,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team C",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "29e04b36",
@@ -20,9 +20,9 @@
             "WeeklySalary": 356.95465087890627,
             "AssignedBusID": "",
             "AssignedDepotID": "Depot_Main",
-            "AssignedTeamID": "Team A",
+            "AssignedTeamID": "Team C",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "29e04b36",
@@ -34,7 +34,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team B",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "29e21b36",
@@ -46,7 +46,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team C",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "12e04b36",
@@ -58,7 +58,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team A",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "56e04b36",
@@ -70,7 +70,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team B",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "29e04236",
@@ -82,7 +82,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team C",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "fb076144",
@@ -94,7 +94,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team B",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "29e04b33",
@@ -106,7 +106,7 @@
             "AssignedDepotID": "Depot_Main",
             "AssignedTeamID": "Team A",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 32.0
         },
         {
             "EmployeeID": "d51e704c",
@@ -115,10 +115,10 @@
             "SkillLevel": 66.19125366210938,
             "WeeklySalary": 332.38250732421877,
             "AssignedBusID": "",
-            "AssignedDepotID": "",
-            "AssignedTeamID": "",
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team B",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 14.0
         },
         {
             "EmployeeID": "af77cd0b",
@@ -127,10 +127,10 @@
             "SkillLevel": 89.40959930419922,
             "WeeklySalary": 378.8192138671875,
             "AssignedBusID": "",
-            "AssignedDepotID": "",
-            "AssignedTeamID": "",
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team D",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
+            "Fatigue": 4.0
         },
         {
             "EmployeeID": "3257ced5",
@@ -139,19 +139,67 @@
             "SkillLevel": 69.15321350097656,
             "WeeklySalary": 338.3064270019531,
             "AssignedBusID": "",
-            "AssignedDepotID": "",
-            "AssignedTeamID": "",
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team D",
             "TrainingDaysRemaining": 0,
-            "Fatigue": 0.0
-        }
-    ],
-    "Candidates": [
+            "Fatigue": 10.0
+        },
         {
             "EmployeeID": "9d5c2a62",
             "FullName": "Applicant 692",
             "Role": 0,
             "SkillLevel": 69.87700653076172,
             "WeeklySalary": 339.7540283203125,
+            "AssignedBusID": "",
+            "AssignedDepotID": "Depot_Main",
+            "AssignedTeamID": "Team B",
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 12.0
+        }
+    ],
+    "Candidates": [
+        {
+            "EmployeeID": "84408f3d",
+            "FullName": "Applicant 935",
+            "Role": 0,
+            "SkillLevel": 5.765368938446045,
+            "WeeklySalary": 211.53073120117188,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
+        },
+        {
+            "EmployeeID": "ed64b320",
+            "FullName": "Applicant 528",
+            "Role": 0,
+            "SkillLevel": 9.165641784667969,
+            "WeeklySalary": 218.33128356933595,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
+        },
+        {
+            "EmployeeID": "7463425c",
+            "FullName": "Applicant 265",
+            "Role": 0,
+            "SkillLevel": 21.638370513916017,
+            "WeeklySalary": 243.2767333984375,
+            "AssignedBusID": "",
+            "AssignedDepotID": "",
+            "AssignedTeamID": "",
+            "TrainingDaysRemaining": 0,
+            "Fatigue": 0.0
+        },
+        {
+            "EmployeeID": "d2b359b0",
+            "FullName": "Applicant 248",
+            "Role": 0,
+            "SkillLevel": 6.82020902633667,
+            "WeeklySalary": 213.64041137695313,
             "AssignedBusID": "",
             "AssignedDepotID": "",
             "AssignedTeamID": "",

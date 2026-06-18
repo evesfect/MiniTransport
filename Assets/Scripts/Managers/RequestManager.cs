@@ -139,6 +139,8 @@ public void NotifyActionTaken(RequestType type, int amountAdded, string specific
         }
         else if (req.CurrentTarget == PlayerRole.GeneralManager)
         {
+            // [NEW FIX] Update the target amount to reflect the GM's final slider decision!
+            req.TargetAmount = approvedAmount;
             req.State = RequestState.Completed;
             req.CurrentAmount = req.TargetAmount;
             ExecuteGMApproval(req);
@@ -203,6 +205,18 @@ public void NotifyActionTaken(RequestType type, int amountAdded, string specific
                     }
                 }
                 soldCount++;
+            }
+        }
+        else if (req.Type == RequestType.TakeLoan) // [NEW] Execution logic for loans
+        {
+            string[] parts = req.Payload.Split(',');
+            if (parts.Length >= 4)
+            {
+                // Parse Payload: "rate,weeks,totalPayback,weeklyPayment"
+                if (int.TryParse(parts[1], out int weeks) && float.TryParse(parts[3], out float weeklyPayment))
+                {
+                    CompanyManager.Instance.AddLoan(req.TargetAmount, weeklyPayment, weeks);
+                }
             }
         }
     }

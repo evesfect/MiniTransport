@@ -12,12 +12,17 @@ using UnityEngine.UI;
 /// Stats are polled in Update with null-checks (the data sources are NetworkBehaviours that spawn
 /// after this component). Wire the serialized fields in the Inspector.
 /// </summary>
+
 public class GMPanelUI : MonoBehaviour
 {
     [Header("Stat Labels (read-only display)")]
     [SerializeField] private TMP_Text balanceText;
     [SerializeField] private TMP_Text satisfactionText;
     [SerializeField] private TMP_Text demandMetText;
+    
+    [Header("Fare Labels (read-only display)")]
+    [SerializeField] private TMP_Text currentTicketPriceText; // [NEW] Link this to "CurrentPrice" Text
+    [SerializeField] private TMP_Text currentDiscountText;    // [NEW] Link this to "Transit" Text
 
     [Header("Fare Controls")]
     [SerializeField] private TMP_InputField ticketPriceInput;
@@ -27,29 +32,19 @@ public class GMPanelUI : MonoBehaviour
 
     [Header("Formatting")]
     [SerializeField] private string moneyPrefix = "$";
-    [Tooltip("{0} = formatted balance (with money prefix).")]
-    [SerializeField] private string balanceFormat = "Balance: {0}";
-    [Tooltip("{0} = satisfaction percentage.")]
-    [SerializeField] private string satisfactionFormat = "Customer Satisfaction: {0}%";
-    [Tooltip("{0} = demand-met percentage.")]
+    [SerializeField] private string balanceFormat = "Current Balance: {0}";
+    [SerializeField] private string satisfactionFormat = "Customer Satisfaction (out of 100): {0}";
     [SerializeField] private string demandFormat = "Percentage of demand met: {0}%";
-    [Tooltip("If true, the transfer-discount text box uses 0-100 (a percentage). If false, 0-1.")]
+    [SerializeField] private string ticketPriceFormat = "Current Ticket Price: {0}$"; // [NEW]
+    [SerializeField] private string discountFormat = "Transit discount rate: {0}%";   // [NEW]
     [SerializeField] private bool discountAsPercent = true;
 
-    // Balance reaches a non-host client only if this client registers interest in CompanyStats.
     private bool _companyInterestRegistered;
-    // NaN forces the next sync to push the value into the text box.
-    private float _lastShownPrice = float.NaN;
-    private float _lastShownDiscount = float.NaN;
 
     private void OnEnable()
     {
         if (setPriceButton != null) setPriceButton.onClick.AddListener(ApplyTicketPrice);
         if (setDiscountButton != null) setDiscountButton.onClick.AddListener(ApplyTransferDiscount);
-
-        // Force the input fields to repopulate from the current networked values.
-        _lastShownPrice = float.NaN;
-        _lastShownDiscount = float.NaN;
     }
 
     private void OnDisable()
@@ -66,6 +61,7 @@ public class GMPanelUI : MonoBehaviour
         var company = CompanyManager.Instance;
         if (company != null)
         {
+            // 1. General Stats
             if (balanceText != null)
             {
                 var data = company.GetCompanyData();
@@ -76,36 +72,21 @@ public class GMPanelUI : MonoBehaviour
             if (satisfactionText != null)
                 satisfactionText.text = string.Format(satisfactionFormat, Mathf.RoundToInt(company.Satisfaction));
 
-            SyncInputFields(company);
+            // 2. [NEW] Live Fare Updates
+            if (currentTicketPriceText != null)
+            {
+                currentTicketPriceText.text = string.Format(ticketPriceFormat, company.TicketPrice.ToString("0.##"));
+            }
+
+            if (currentDiscountText != null)
+            {
+                float shownDiscount = discountAsPercent ? company.TransferDiscount * 100f : company.TransferDiscount;
+                currentDiscountText.text = string.Format(discountFormat, shownDiscount.ToString("0.##"));
+            }
         }
 
         if (demandMetText != null && KPIManager.Instance != null)
             demandMetText.text = string.Format(demandFormat, Mathf.RoundToInt(KPIManager.Instance.DemandMetPercent));
-    }
-
-    // Reflect the confirmed networked values into the text boxes, but never clobber the GM while typing.
-    private void SyncInputFields(CompanyManager company)
-    {
-        if (ticketPriceInput != null && !ticketPriceInput.isFocused)
-        {
-            float price = company.TicketPrice;
-            if (!Mathf.Approximately(price, _lastShownPrice))
-            {
-                ticketPriceInput.text = price.ToString("0.##");
-                _lastShownPrice = price;
-            }
-        }
-
-        if (transferDiscountInput != null && !transferDiscountInput.isFocused)
-        {
-            float discount = company.TransferDiscount;
-            if (!Mathf.Approximately(discount, _lastShownDiscount))
-            {
-                float shown = discountAsPercent ? discount * 100f : discount;
-                transferDiscountInput.text = shown.ToString("0.##");
-                _lastShownDiscount = discount;
-            }
-        }
     }
 
     private void ApplyTicketPrice()
@@ -114,7 +95,7 @@ public class GMPanelUI : MonoBehaviour
         if (float.TryParse(ticketPriceInput.text, out float price))
         {
             CompanyManager.Instance.RequestSetTicketPriceRpc(Mathf.Max(0f, price));
-            _lastShownPrice = float.NaN; // refresh from the confirmed value once it syncs back
+            ticketPriceInput.text = ""; // Clear the input field for visual feedback
         }
     }
 
@@ -125,12 +106,11 @@ public class GMPanelUI : MonoBehaviour
         {
             float discount = discountAsPercent ? value / 100f : value;
             CompanyManager.Instance.RequestSetTransferDiscountRpc(Mathf.Clamp01(discount));
-            _lastShownDiscount = float.NaN;
+            transferDiscountInput.text = ""; // Clear the input field for visual feedback
         }
     }
 
-    // --- CompanyStats subscription (for the balance on clients) ---
-
+    // --- CompanyStats subscription ---
     private void EnsureCompanyInterest()
     {
         if (_companyInterestRegistered || LocalDataBroker.Instance == null) return;

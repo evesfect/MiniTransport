@@ -164,7 +164,7 @@ public class PassengerManager : NetworkBehaviour
                     // Net effect with the default penalty field ≈ -0.05 satisfaction per passenger who leaves.
                     float penalty = -(leavingCount * 0.025f * CompanyManager.Instance.satisfactionPenaltyPertimeout);
 
-                    CompanyManager.Instance.ModifySatisfaction(penalty);
+                    CompanyManager.Instance.ModifySatisfaction(penalty, $"Passengers gave up at Stop {stopID}");
 
                     OnPassengersTimedOut?.Invoke(leavingCount); // KPI: missed passengers
 
