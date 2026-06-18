@@ -18,7 +18,8 @@ public enum RequestType
     BuyParts,
     BuyBus,
     SellBus,
-    TakeLoan
+    TakeLoan,
+    SystemEvent // [NEW] Used for weather and match days
 }
 
 public enum RequestState
@@ -74,7 +75,10 @@ public class GameRequest
                 string[] loanData = Payload?.Split(',');
                 if (loanData != null && loanData.Length >= 4)
                     return $"{Requester} requests a {TargetAmount}$ loan (Interest: {loanData[0]}%, Duration: {loanData[1]} weeks).";
-                return $"{Requester} requests a {TargetAmount}$ loan.";    
+                return $"{Requester} requests a {TargetAmount}$ loan.";
+            case RequestType.SystemEvent: // [NEW] 
+                string[] parts = Payload?.Split('|');
+                return parts != null && parts.Length >= 2 ? $"SYSTEM ALERT: {parts[1]}" : "System Alert";    
             default:
                 return "Unknown Request.";
         }

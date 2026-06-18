@@ -254,6 +254,42 @@ public void NotifyActionTaken(RequestType type, int amountAdded, string specific
         }
     }
 
+    // --- SYSTEM EVENTS API ---
+
+    public void BroadcastSystemEvent(string batchId, string eventText)
+    {
+        if (!IsServer) return;
+        
+        // Combine the ID and the text into the payload
+        string payload = $"{batchId}|{eventText}";
+        
+        // Broadcast to all 5 active playable roles
+        PlayerRole[] roles = { PlayerRole.GeneralManager, PlayerRole.MaintenanceManager, PlayerRole.TransportManager, PlayerRole.FinanceManager, PlayerRole.HRManager };
+        
+        foreach (var role in roles)
+        {
+            CreateRequestInternal(PlayerRole.None, RequestType.SystemEvent, role, 0, payload);
+        }
+    }
+
+    public void EndSystemEvent(string batchId)
+    {
+        if (!IsServer) return;
+        
+        bool changed = false;
+        // Find all active system events that share this batch ID
+        foreach (var req in ActiveRequests.Where(r => r.Type == RequestType.SystemEvent && r.State == RequestState.Active))
+        {
+            if (req.Payload != null && req.Payload.StartsWith(batchId + "|"))
+            {
+                req.State = RequestState.Completed; // Marks it as "Ended"
+                changed = true;
+            }
+        }
+        
+        if (changed) SyncRequestsRpc(SerializeRequests());
+    }
+
     // --- RPCS & SERIALIZATION ---
 
     [Rpc(SendTo.Server)] private void RequestCreateRpc(PlayerRole r, RequestType t, PlayerRole target, int a, string p) => CreateRequestInternal(r, t, target, a, p);

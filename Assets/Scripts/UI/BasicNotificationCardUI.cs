@@ -20,7 +20,14 @@ public class BasicNotificationCardUI : MonoBehaviour
         _request = request;
 
         // 1. Setup Summary Text
-        summaryText.text = $"{request.Requester} Request:\n{GetSummary(request)}";
+        if (request.Type == RequestType.SystemEvent)
+        {
+            summaryText.text = $"<color=#00FFFF>SYSTEM ALERT:</color>\n{GetSummary(request)}";
+        }
+        else
+        {
+            summaryText.text = $"{request.Requester} Request:\n{GetSummary(request)}";
+        }
 
         // 2. Setup Tracking Text
         trackingText.text = GetTrackingStatus(request);
@@ -29,7 +36,13 @@ public class BasicNotificationCardUI : MonoBehaviour
         rejectButton.gameObject.SetActive(false);
         markReadButton.gameObject.SetActive(false);
 
-        if (myRole == request.Requester)
+        if (request.Type == RequestType.SystemEvent)
+        {
+            // System Event Logic: Everyone gets a read button, but it's locked until the event ends.
+            markReadButton.gameObject.SetActive(true);
+            markReadButton.interactable = (request.State == RequestState.Completed);
+        }
+        else if (myRole == request.Requester)
         {
             // Requester View
             markReadButton.gameObject.SetActive(true);
@@ -101,6 +114,10 @@ public class BasicNotificationCardUI : MonoBehaviour
                 if (loanData != null && loanData.Length >= 4)
                     return $"Request a {r.TargetAmount}$ loan (Interest: {loanData[0]}%, Duration: {loanData[1]} weeks)";
                 return $"Request a {r.TargetAmount}$ loan";
+            
+            case RequestType.SystemEvent: // [NEW]
+                string[] parts = r.Payload?.Split('|');
+                return parts != null && parts.Length >= 2 ? parts[1] : "System Event Occurred";
                 
             default: 
                 return "Unknown Request";
@@ -119,6 +136,13 @@ public class BasicNotificationCardUI : MonoBehaviour
                 return $"<color=green>Status: Approved</color>";
 
             return $"Status: Awaiting {r.CurrentTarget}";
+        }
+
+        // [NEW] System Event formatting
+        if (r.Type == RequestType.SystemEvent)
+        {
+            if (r.State == RequestState.Completed) return $"<color=green>\nStatus: Event Ended</color>";
+            return $"<color=yellow>\nStatus: Ongoing...</color>";
         }
         
         if (r.State == RequestState.Rejected)

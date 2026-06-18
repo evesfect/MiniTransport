@@ -34,11 +34,13 @@ public class SimulationDirector : GridSimulationSystem
     
     private float _weatherTimer;
     private float _currentWeatherTrafficPenalty;
+    private string _activeWeatherBatchId = ""; // [NEW] Tracks the notification ID
 
     [Header("Feature 4: Special Events")]
     public int activeEventTileIndex = -1; 
     public float eventCooldownHours = 24f;
     private float _eventCooldownTimer;
+    private string _activeEventBatchId = ""; // [NEW] Tracks the notification ID
     
     [Tooltip("Tracks hours. -3 = Prep, 0-3 = Game, 3-5 = Aftermath")]
     public float currentEventTime = 0f;
@@ -169,6 +171,13 @@ public class SimulationDirector : GridSimulationSystem
                 currentWeather = WeatherState.Clear;
                 _weatherTimer = Random.Range(12f, 24f); 
                 Debug.Log("[Simulation Director] Weather cleared. Traffic will settle.");
+
+                // [NEW] End the active weather notification
+                if (!string.IsNullOrEmpty(_activeWeatherBatchId) && RequestManager.Instance != null)
+                {
+                    RequestManager.Instance.EndSystemEvent(_activeWeatherBatchId);
+                    _activeWeatherBatchId = "";
+                }
             }
             else
             {
@@ -179,6 +188,13 @@ public class SimulationDirector : GridSimulationSystem
                 
                 _weatherTimer = Random.Range(weatherMinDurationHours, weatherMaxDurationHours);
                 Debug.Log($"[Simulation Director] Sudden {currentWeather}! Traffic spike!");
+
+                // [NEW] Broadcast the weather event
+                if (RequestManager.Instance != null)
+                {
+                    _activeWeatherBatchId = System.Guid.NewGuid().ToString().Substring(0, 8);
+                    RequestManager.Instance.BroadcastSystemEvent(_activeWeatherBatchId, $"Sudden {currentWeather} conditions have begun! Expect heavy traffic delays across the city.");
+                }
             }
         }
 
@@ -202,6 +218,13 @@ public class SimulationDirector : GridSimulationSystem
                     activeEventTileIndex = Random.Range(0, _grid.TotalTiles);
                     currentEventTime = -3f;
                     Debug.Log($"[Simulation Director] Match Day announced at Tile {activeEventTileIndex}!");
+
+                    // [NEW] Broadcast the Match Day event
+                    if (RequestManager.Instance != null)
+                    {
+                        _activeEventBatchId = System.Guid.NewGuid().ToString().Substring(0, 8);
+                        RequestManager.Instance.BroadcastSystemEvent(_activeEventBatchId, $"A major Match Day has been announced at Tile {activeEventTileIndex}! Prepare for massive demand and traffic spikes in the surrounding area.");
+                    }
                 }
             }
         }
@@ -212,6 +235,13 @@ public class SimulationDirector : GridSimulationSystem
             {
                 activeEventTileIndex = -1; 
                 Debug.Log("[Simulation Director] Match Day aftermath cleared.");
+
+                // [NEW] End the match day notification
+                if (!string.IsNullOrEmpty(_activeEventBatchId) && RequestManager.Instance != null)
+                {
+                    RequestManager.Instance.EndSystemEvent(_activeEventBatchId);
+                    _activeEventBatchId = "";
+                }
             }
         }
     }
