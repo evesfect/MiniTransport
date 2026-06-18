@@ -278,6 +278,7 @@ public class RecoveryVehicle : VehicleDriver
         // 2. Determine Repair Goal
         // We aim to get parts back to the "Operational Threshold" (e.g., 30%) so the bus can move.
         float targetHealth = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.operationalThreshold : 30f;
+        float breakdownThreshold = MaintenanceManager.Instance != null ? MaintenanceManager.Instance.breakdownThreshold : 5f;
 
         // 3. Find the most critical part needing repair
         // Logic: Find parts below threshold, prioritize the lowest health, then by importance (Enum order: Engine=0 is highest priority)
@@ -308,6 +309,14 @@ public class RecoveryVehicle : VehicleDriver
                 // Re-enable the bus driver
                 busObj.GetComponent<BusDriver>()?.SetBrokenDown(false);
             }
+
+            // Tell Maintenance the bus is back in service. This clears it from the breakdown set
+            // and closes the MTTR clock that TriggerBreakdown opened — which drives the MTTR /
+            // Bus Return to Service / Repair Completion Rate KPIs. Without this the on-route
+            // breakdown is never marked resolved, so those metrics stay at N/A / 0.
+            if (MaintenanceManager.Instance != null)
+                MaintenanceManager.Instance.RemoveWorkItem(_targetBusData.BusID);
+
             ServerStartReturnTrip();
         }
     }

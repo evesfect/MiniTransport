@@ -37,7 +37,12 @@ public class ActiveOrder
 {
     public string OrderID;
     public string VendorID;
-    public string ItemID;        // e.g. "Tire3"
+    public string ItemID;        // Display name, e.g. "Tire3" or "Tire4-13"
+    
+    public string BaseItemName;  // Added for bulk extraction upon delivery
+    public int StartIndex;       // The starting ID number
+    public int Amount;           // Number of items ordered
+    
     public BusPartCategory Category;
     
     public float ExpectedArrivalHour; // The initial fast timer

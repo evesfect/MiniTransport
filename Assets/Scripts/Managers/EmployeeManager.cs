@@ -6,6 +6,14 @@ using Unity.Netcode;
 using Unity.VisualScripting;
 using UnityEngine;
 
+public enum AdTier
+{
+    None,
+    Flyers,         // Low cost, mostly novices
+    Classifieds,    // Medium cost, solid average mechanics
+    Headhunter      // High cost, guaranteed experts
+}
+
 
 [DefaultExecutionOrder(-50)]
 public class EmployeeManager : NetworkBehaviour
@@ -18,8 +26,14 @@ public class EmployeeManager : NetworkBehaviour
     [Header("HR - Candidates")]
     public List<EmployeeData> candidates = new List<EmployeeData>();
     public int maxCandidates = 4;
-    [Tooltip("Probability (0-100) of a candidate being 'Skilled' vs 'Novice'")]
-    public float skilledCandidateChance = 20f;
+
+    [Header("Recruitment Campaigns (Ad Tiers)")]
+    public float costFlyers = 150f;
+    public float costClassifieds = 500f;
+    public float costHeadhunter = 1200f;
+
+    private AdTier _pendingAdTier = AdTier.None;
+    private bool _adCampaignActive = false;
 
     [Header("Financial Settings")]
     [Tooltip("Fixed weekly cost per employee (Food, Insurance) regardless of skill.")]
@@ -33,10 +47,31 @@ public class EmployeeManager : NetworkBehaviour
     public float trainingCostBase = 300f;
     public float hiringFee = 100f;
 
+    [Header("Training Settings")]
+    [Tooltip("Skill points an employee gains for each day spent in training.")]
+    public float trainingSkillPerDay = 2f;
+    [Tooltip("Maximum length of a single training course, in days.")]
+    public int maxTrainingDays = 7;
+
+    [Header("Fatigue Settings")]
+    [Tooltip("Fatigue gained each sim-hour an assigned mechanic is on shift (during work hours).")]
+    public float fatiguePerWorkHour = 2f;
+    [Tooltip("Fatigue recovered each sim-hour while resting (off-hours, idle, or unassigned).")]
+    public float fatigueRecoveryPerHour = 2.5f;
+    [Tooltip("Fatigue recovered each sim-hour while away on a training course (rest from the floor).")]
+    public float fatigueRecoveryTrainingPerHour = 3f;
+    [Tooltip("Hour the work day starts (mechanics on shift accrue fatigue from here).")]
+    public float workDayStartHour = 6f;
+    [Tooltip("Hour the work day ends (after this they rest and recover).")]
+    public float workDayEndHour = 22f;
+
     // Events for UI
     public event Action<string> OnEmployeeHired;
     public event Action<string> OnEmployeeFired;
     public event Action<string, float> OnEmployeeTrained; // ID, NewSkill
+    public event Action OnCandidatesUpdated;
+    // [NEW] Event to tell UI panels (like the HR Request Panel) to refresh their lists
+    public event Action OnEmployeeDataUpdated;
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "employees.json");
@@ -70,16 +105,22 @@ public class EmployeeManager : NetworkBehaviour
             if (CompanyManager.Instance != null)
             {
                 CompanyManager.Instance.OnWeeklyExpensesRequested += SubmitPayroll;
-                CompanyManager.Instance.OnWeeklyExpensesRequested += RefreshCandidates;
+                
             }
 
-            if (FleetManager.Instance != null)
+            if (SimulationTimeManager.Instance != null)
             {
-                FleetManager.Instance.OnFleetUpdated += AutoAssignDrivers;
+                SimulationTimeManager.Instance.OnDayChanged += ProcessPendingAdCampaign;
+                SimulationTimeManager.Instance.OnDayChanged += ProcessTraining;
+                SimulationTimeManager.Instance.OnHourChanged += UpdateFatigue;
             }
+
+
 
             // Initial Population if empty
-            if (candidates.Count == 0) RefreshCandidates();
+            if (candidates.Count == 0) DeliverCandidates(AdTier.Flyers);
+
+            AutoAssignMechanicsToTeams();
         }
         else
         {
@@ -98,60 +139,139 @@ public class EmployeeManager : NetworkBehaviour
             if (CompanyManager.Instance != null)
             {
                 CompanyManager.Instance.OnWeeklyExpensesRequested -= SubmitPayroll;
-                CompanyManager.Instance.OnWeeklyExpensesRequested -= RefreshCandidates;
+                
+            }
+            if (SimulationTimeManager.Instance != null)
+            {
+                SimulationTimeManager.Instance.OnDayChanged -= ProcessPendingAdCampaign;
+                SimulationTimeManager.Instance.OnDayChanged -= ProcessTraining;
+                SimulationTimeManager.Instance.OnHourChanged -= UpdateFatigue;
             }
         }
+    }
+    // --- ADVERTISEMENT CAMPAIGNS (Player API) ---
+    public bool IsCampaignActive => _adCampaignActive;
+    public AdTier CurrentCampaignTier => _pendingAdTier;
+
+    public void LaunchAdCampaign(AdTier tier)
+    {
+        if (IsServer) LaunchAdCampaignInternal(tier);
+        else RequestLaunchAdCampaignRpc(tier);
+    }
+
+    private void LaunchAdCampaignInternal(AdTier tier)
+    {
+        if (_adCampaignActive)
+        {
+            Debug.LogWarning("[HR] An ad campaign is already active and waiting for tomorrow morning.");
+            return;
+        }
+
+        float cost = tier switch
+        {
+            AdTier.Flyers => costFlyers,
+            AdTier.Classifieds => costClassifieds,
+            AdTier.Headhunter => costHeadhunter,
+            _ => 0f
+        };
+
+        bool success = CompanyManager.Instance.TryExecuteActionableTransaction(
+            cost,
+            TransactionCategory.General,
+            $"Recruitment Campaign: {tier}"
+        );
+
+        if (success)
+        {
+            _pendingAdTier = tier;
+            _adCampaignActive = true;
+            Debug.Log($"[HR] Successfully launched {tier} ad campaign. Applicants arriving tomorrow.");
+            // Push the new campaign state to clients so their HR banner updates immediately.
+            SyncEmployeesRpc(SerializeEmployees());
+            OnCandidatesUpdated?.Invoke();
+        }
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestLaunchAdCampaignRpc(AdTier tier)
+    {
+        LaunchAdCampaignInternal(tier);
+    }
+
+    private void ProcessPendingAdCampaign()
+    {
+        if (!_adCampaignActive || _pendingAdTier == AdTier.None) return;
+
+        // Clear the campaign state BEFORE delivering, so the snapshot DeliverCandidates
+        // syncs to clients already reflects the campaign as resolved (banner clears).
+        AdTier resolvedTier = _pendingAdTier;
+        _adCampaignActive = false;
+        _pendingAdTier = AdTier.None;
+
+        DeliverCandidates(resolvedTier);
+
+        Debug.Log("[HR] Morning arrival: Ad campaign applicants have entered the lobby!");
+        OnCandidatesUpdated?.Invoke();
+    }
+
+    private void DeliverCandidates(AdTier tier)
+    {
+        candidates.Clear();
+
+        int applicantsCount = UnityEngine.Random.Range(0, maxCandidates + 1);
+
+        if (applicantsCount == 0)
+        {
+            Debug.Log("[HR] Bad luck! No applicants showed up for the interview today.");
+        }
+
+        for (int i = 0; i < applicantsCount; i++)
+        {
+            float skill = 0f;
+
+            switch (tier)
+            {
+                case AdTier.Flyers:
+                    // 90% novice (5-25), 10% lucky break (30-50)
+                    skill = UnityEngine.Random.Range(0f, 100f) < 10f
+                        ? UnityEngine.Random.Range(30f, 50f)
+                        : UnityEngine.Random.Range(5f, 25f);
+                    break;
+
+                case AdTier.Classifieds:
+                    // Solid mid-tier pool (35-65) with some junior mechanics
+                    skill = UnityEngine.Random.Range(0f, 100f) < 65f
+                        ? UnityEngine.Random.Range(35f, 65f)
+                        : UnityEngine.Random.Range(15f, 35f);
+                    break;
+
+                case AdTier.Headhunter:
+                    // Premium expert pool guaranteed (65-90)
+                    skill = UnityEngine.Random.Range(65f, 90f);
+                    break;
+            }
+
+            float wage = CalculateWageForSkill(skill);
+
+            EmployeeData applicant = new EmployeeData
+            {
+                EmployeeID = System.Guid.NewGuid().ToString().Substring(0, 8),
+                FullName = $"Applicant {UnityEngine.Random.Range(100, 999)}",
+                Role = EmployeeRole.Mechanic,
+                SkillLevel = skill,
+                WeeklySalary = wage,
+                AssignedBusID = ""
+            };
+
+            candidates.Add(applicant);
+        }
+
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
     }
 
     // --- Passive Logic: Payroll & Candidates (Triggered by Company Signal) ---
 
-    private void AutoAssignDrivers()
-    {
-        if (!IsServer || FleetManager.Instance == null) return;
-
-        var buses = FleetManager.Instance.allBuses;
-        var drivers = allEmployees.Where(e => e.Role == EmployeeRole.Driver).ToList();
-        bool changed = false;
-
-        // 1. Cleanup: Unassign drivers if their bus no longer exists
-        foreach (var driver in drivers)
-        {
-            if (!string.IsNullOrEmpty(driver.AssignedBusID))
-            {
-                if (!buses.Any(b => b.BusID == driver.AssignedBusID))
-                {
-                    driver.AssignedBusID = ""; // Bus was deleted, driver is now free
-                    changed = true;
-                }
-            }
-        }
-
-        // 2. Assignment: Find buses without drivers and assign free drivers
-        foreach (var bus in buses)
-        {
-            // Is this bus already covered by someone?
-            bool hasDriver = drivers.Any(d => d.AssignedBusID == bus.BusID);
-
-            if (!hasDriver)
-            {
-                // Find a driver who is NOT assigned
-                var freeDriver = drivers.FirstOrDefault(d => string.IsNullOrEmpty(d.AssignedBusID));
-
-                if (freeDriver != null)
-                {
-                    freeDriver.AssignedBusID = bus.BusID;
-                    changed = true;
-                    Debug.Log($"[Auto-Assign] Driver {freeDriver.FullName} assigned to {bus.BusID}");
-                }
-            }
-        }
-
-        if (changed)
-        {
-            SaveEmployees();
-            SyncEmployeesRpc(SerializeEmployees());
-        }
-    }
 
     private void SubmitPayroll()
     {
@@ -183,36 +303,7 @@ public class EmployeeManager : NetworkBehaviour
         }
     }
 
-    private void RefreshCandidates()
-    {
-        candidates.Clear();
-        for (int i = 0; i < maxCandidates; i++)
-        {
-            // Randomly generate a "Role" (could be weighted)
-            EmployeeRole role = (UnityEngine.Random.value > 0.5f) ? EmployeeRole.Driver : EmployeeRole.Mechanic;
-
-            // Randomly generate Skill
-            float skill = (UnityEngine.Random.Range(0f, 100f) < skilledCandidateChance)
-                ? UnityEngine.Random.Range(40f, 70f) // Experienced
-                : UnityEngine.Random.Range(0f, 20f);  // Novice
-
-            float wage = CalculateWageForSkill(skill);
-
-            EmployeeData applicant = new EmployeeData
-            {
-                EmployeeID = System.Guid.NewGuid().ToString().Substring(0, 8),
-                FullName = $"Applicant {UnityEngine.Random.Range(100, 999)}", 
-                Role = role,
-                SkillLevel = skill,
-                WeeklySalary = wage,
-                AssignedBusID = ""
-            };
-            candidates.Add(applicant);
-        }
-
-        SyncEmployeesRpc(SerializeEmployees());
-        Debug.Log("[EmployeeManager] Candidates Refreshed.");
-    }
+    
 
     // --- HR PLAYER ACTIONS (Public API) ---
 
@@ -235,12 +326,14 @@ public class EmployeeManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Trains an employee to increase skill. Costs money.
+    /// Enrolls an employee in a training course lasting <paramref name="days"/> days (1..maxTrainingDays).
+    /// The company pays the full cost upfront; the employee is away (not working) until the course ends,
+    /// gaining skill on each day that passes.
     /// </summary>
-    public void TrainEmployee(string employeeID)
+    public void TrainEmployee(string employeeID, int days)
     {
-        if (IsServer) TrainInternal(employeeID);
-        else RequestTrainRpc(employeeID);
+        if (IsServer) TrainInternal(employeeID, days);
+        else RequestTrainRpc(employeeID, days);
     }
 
     /// <summary>
@@ -248,43 +341,203 @@ public class EmployeeManager : NetworkBehaviour
     /// </summary>
     public void AssignMechanicToDepot(string employeeID, string depotID)
     {
-        if (IsServer)
-        {
-            AssignMechanicInternal(employeeID, depotID);
-        }
-        else
-        {
-            // If client, request server to do it
-            RequestDepotAssignmentRpc(employeeID, depotID);
-        }
+        if (IsServer) AssignMechanicInternal(employeeID, depotID);
+        else RequestDepotAssignmentRpc(employeeID, depotID);
     }
 
-    //Assigns a Driver to a Bus
-    public void AssignDriverToBus(string employeeID, string busID)
-    {
-        if (IsServer) AssignDriverInternal(employeeID, busID);
-        else RequestDriverAssignmentRpc(employeeID, busID);
-    }
-
-    // [NEW] Checks if a bus has a driver
-    public bool HasAssignedDriver(string busID)
-    {
-        // Look for any employee who is a Driver AND is assigned to this busID
-        return allEmployees.Any(e => e.Role == EmployeeRole.Driver && e.AssignedBusID == busID);
-    }
-
+    
     // --- Helpers ---
 
+    /// <summary>
+    /// Cost of a single day of training for this employee (scales with their current skill).
+    /// </summary>
     public float GetTrainingCost(string employeeID)
     {
         var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
         if (emp == null) return 0f;
-        return trainingCostBase + (emp.SkillLevel * 10f);
+        return trainingCostBase + (emp.SkillLevel * 100f);
+    }
+
+    /// <summary>
+    /// Total cost of a <paramref name="days"/>-day training course (linear: per-day cost x days).
+    /// </summary>
+    public float GetTrainingCost(string employeeID, int days)
+    {
+        days = Mathf.Clamp(days, 1, maxTrainingDays);
+        return GetTrainingCost(employeeID) * days;
     }
 
     public float CalculateWageForSkill(float skill)
     {
         return baseWeeklyWage + (skill * wagePerSkillPoint);
+    }
+
+    public void AutoAssignMechanicsToTeams()
+    {
+        if (!IsServer) return;
+
+        bool changed = false;
+        float targetCapacity = 50f;
+
+        string[] teamNames = new[] { "Team A", "Team B", "Team C", "Team D", "Team E", "Team F" };
+        int maxTeamsPerDepot = 3;
+
+        // Group active mechanics by depot
+        var depotGroups = allEmployees
+            .Where(e => e.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(e.AssignedDepotID))
+            .GroupBy(e => e.AssignedDepotID);
+
+        foreach (var group in depotGroups)
+        {
+            var mechanicsInDepot = group.ToList();
+
+            // Check if this depot already has custom teams assigned from a saved game
+            bool hasCustomTeams = mechanicsInDepot.Any(m =>
+                !string.IsNullOrEmpty(m.AssignedTeamID) &&
+                m.AssignedTeamID != "General Crew"
+            );
+
+            // If custom teams already exist, leave this depot intact so we don't destroy manual edits
+            if (hasCustomTeams) continue;
+
+            // Sort descending by skill level to pack larger skill pools first
+            var sortedMechanics = mechanicsInDepot.OrderByDescending(e => e.SkillLevel).ToList();
+            List<List<EmployeeData>> teams = new List<List<EmployeeData>>();
+
+            foreach (var mechanic in sortedMechanics)
+            {
+                var targetTeam = teams.FirstOrDefault(t => t.Sum(m => m.SkillLevel) < targetCapacity);
+
+                if (targetTeam != null)
+                {
+                    targetTeam.Add(mechanic);
+                }
+                else
+                {
+                    if (teams.Count < maxTeamsPerDepot)
+                    {
+                        teams.Add(new List<EmployeeData> { mechanic });
+                    }
+                    else
+                    {
+                        // 3. We reached the maximum team limit. Distribute remaining mechanics 
+                        // to the existing team with the lowest total pooled skill to keep workloads balanced.
+                        var lowestTeam = teams.OrderBy(t => t.Sum(m => m.SkillLevel)).First();
+                        lowestTeam.Add(mechanic);
+                    }
+                }
+            }
+
+            // Safety merge: if the final formed team failed to reach 50 capacity, merge it backward
+            if (teams.Count > 1)
+            {
+                var lastTeam = teams.Last();
+                if (lastTeam.Sum(m => m.SkillLevel) < targetCapacity)
+                {
+                    teams.RemoveAt(teams.Count - 1);
+                    teams.Last().AddRange(lastTeam);
+                }
+            }
+
+            // Apply assigned team names back to the serialized data
+            for (int i = 0; i < teams.Count; i++)
+            {
+                string teamName = i < teamNames.Length ? teamNames[i] : $"Team {i + 1}";
+                foreach (var mechanic in teams[i])
+                {
+                    if (mechanic.AssignedTeamID != teamName)
+                    {
+                        mechanic.AssignedTeamID = teamName;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if (changed)
+        {
+            SaveEmployees();
+            SyncEmployeesRpc(SerializeEmployees());
+            Debug.Log("[Auto-Assign] Initialized mechanic teams ensuring minimum engine repair capacity.");
+        }
+    }
+
+    public void AssignMechanicToTeam(string employeeID, string depotID, string teamID)
+    {
+        if (IsServer) AssignMechanicToTeamInternal(employeeID, depotID, teamID);
+        else RequestTeamAssignmentRpc(employeeID, depotID, teamID);
+    }
+
+    private void AssignMechanicToTeamInternal(string employeeID, string depotID, string teamID)
+    {
+        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
+        if (emp == null || emp.Role != EmployeeRole.Mechanic) return;
+
+        emp.AssignedDepotID = depotID;
+        emp.AssignedTeamID = string.IsNullOrEmpty(teamID) ? "General Crew" : teamID;
+
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
+        Debug.Log($"[Employee] Assigned {emp.FullName} to Depot: {depotID}, Team: {emp.AssignedTeamID}");
+    }
+
+    /// <summary>Distinct, sorted team names currently in use at a depot (for the team dropdown).</summary>
+    public List<string> GetTeamsForDepot(string depotID)
+    {
+        if (string.IsNullOrEmpty(depotID) || allEmployees == null) return new List<string>();
+        return allEmployees
+            .Where(e => e.Role == EmployeeRole.Mechanic && e.AssignedDepotID == depotID && !string.IsNullOrEmpty(e.AssignedTeamID))
+            .Select(e => e.AssignedTeamID)
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+    }
+
+    /// <summary>Creates a brand-new team in the depot (next unused "Team X" name) and moves the mechanic onto it.</summary>
+    public void AssignMechanicToNewTeam(string employeeID, string depotID)
+    {
+        if (IsServer) AssignMechanicToNewTeamInternal(employeeID, depotID);
+        else RequestNewTeamAssignmentRpc(employeeID, depotID);
+    }
+
+    private void AssignMechanicToNewTeamInternal(string employeeID, string depotID)
+    {
+        if (string.IsNullOrEmpty(depotID)) return;
+        AssignMechanicToTeamInternal(employeeID, depotID, GetNextTeamName(depotID));
+    }
+
+    /// <summary>Clears a mechanic's depot and team (returns them to the unassigned pool).</summary>
+    public void UnassignMechanic(string employeeID)
+    {
+        if (IsServer) UnassignMechanicInternal(employeeID);
+        else RequestUnassignMechanicRpc(employeeID);
+    }
+
+    private void UnassignMechanicInternal(string employeeID)
+    {
+        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
+        if (emp == null || emp.Role != EmployeeRole.Mechanic) return;
+
+        emp.AssignedDepotID = "";
+        emp.AssignedTeamID = "";
+
+        SaveEmployees();
+        SyncEmployeesRpc(SerializeEmployees());
+        Debug.Log($"[Employee] Unassigned {emp.FullName} from depot/team.");
+    }
+
+    // Next free team name in a depot ("Team A", "Team B", ... then "Team 7" if A–Z are all taken).
+    private string GetNextTeamName(string depotID)
+    {
+        var taken = new HashSet<string>(GetTeamsForDepot(depotID));
+        for (char c = 'A'; c <= 'Z'; c++)
+        {
+            string name = $"Team {c}";
+            if (!taken.Contains(name)) return name;
+        }
+        int i = taken.Count + 1;
+        while (taken.Contains($"Team {i}")) i++;
+        return $"Team {i}";
     }
 
     // --- Internal Logic (Server) ---
@@ -295,7 +548,9 @@ public class EmployeeManager : NetworkBehaviour
 
         EmployeeData candidate = candidates[index];
 
-       float cost = hiringFee + CalculateWageForSkill((int)candidate.SkillLevel);
+        // Charge the candidate's actual demanded wage (what the HR card displays),
+        // not a recomputed/truncated value, so the quote and the charge always match.
+        float cost = hiringFee + candidate.WeeklySalary;
 
         // 1. Pay Hiring Fee
         bool success = CompanyManager.Instance.TryExecuteActionableTransaction(
@@ -315,7 +570,13 @@ public class EmployeeManager : NetworkBehaviour
             OnEmployeeHired?.Invoke(candidate.EmployeeID);
             Debug.Log($"[HR] Hired {candidate.FullName}");
 
-            AutoAssignDrivers();
+            
+
+            // NEW: Tell Request Manager a mechanic was hired, pass their skill level
+            if (candidate.Role == EmployeeRole.Mechanic && RequestManager.Instance != null)
+            {
+                RequestManager.Instance.NotifyActionTaken(RequestType.HireMechanic, 1, candidate.SkillLevel.ToString());
+            }
         }
     }
 
@@ -338,18 +599,7 @@ public class EmployeeManager : NetworkBehaviour
         Debug.Log($"[Employee] Assigned {emp.FullName} to Depot: {depotID}");
     }
 
-    private void AssignDriverInternal(string employeeID, string busID)
-    {
-        var emp = allEmployees.FirstOrDefault(e => e.EmployeeID == employeeID);
-        if (emp == null || emp.Role != EmployeeRole.Driver) return;
-
-       
-        emp.AssignedBusID = busID;
-
-        SaveEmployees();
-        SyncEmployeesRpc(SerializeEmployees());
-        Debug.Log($"[Employee] Driver {emp.FullName} assigned to Bus {busID}");
-    }
+   
 
     private void FireInternal(string id)
     {
@@ -362,36 +612,109 @@ public class EmployeeManager : NetworkBehaviour
             OnEmployeeFired?.Invoke(id);
             Debug.Log($"[HR] Fired {toRemove.FullName}");
 
-            AutoAssignDrivers();
+            
         }
     }
 
-    private void TrainInternal(string id)
+    private void TrainInternal(string id, int days)
     {
         EmployeeData emp = allEmployees.FirstOrDefault(e => e.EmployeeID == id);
         if (emp == null) return;
-        if (emp.SkillLevel >= 100f) return; // Maxed out
+        if (emp.SkillLevel >= 100f) return;     // Maxed out
+        if (emp.IsInTraining) return;           // Already away on a course
 
-        float cost = trainingCostBase + (emp.SkillLevel * 10f);
+        days = Mathf.Clamp(days, 1, maxTrainingDays);
+
+        // Charge the full course upfront. Per-day cost x days (matches the UI quote).
+        float cost = GetTrainingCost(id, days);
 
         bool paid = CompanyManager.Instance.TryExecuteActionableTransaction(
             cost,
             TransactionCategory.General,
-            $"Training Course for {emp.FullName}"
+            $"Training Course for {emp.FullName} ({days} day{(days == 1 ? "" : "s")})"
         );
 
         if (paid)
         {
-            emp.SkillLevel += 5f;
-            if (emp.SkillLevel > 100f) emp.SkillLevel = 100f;
-
-            // Raise Salary
-            emp.WeeklySalary = CalculateWageForSkill(emp.SkillLevel);
+            // Enroll: skill is gained gradually as the days tick down (see ProcessTraining).
+            emp.TrainingDaysRemaining = days;
 
             SaveEmployees();
-            SyncEmployeesRpc(SerializeEmployees());
-            OnEmployeeTrained?.Invoke(id, emp.SkillLevel);
-            Debug.Log($"[HR] Trained {emp.FullName}. New Skill: {emp.SkillLevel}");
+            SyncEmployeesRpc(SerializeEmployees()); // fires OnEmployeeDataUpdated on host + clients
+            Debug.Log($"[HR] Enrolled {emp.FullName} in a {days}-day training course. Away until it completes.");
+        }
+    }
+
+    /// <summary>
+    /// Server-side day tick: advances every active training course. Each enrolled employee gains
+    /// <see cref="trainingSkillPerDay"/> skill per day and returns to work when their course ends.
+    /// </summary>
+    private void ProcessTraining()
+    {
+        if (!IsServer) return;
+
+        bool changed = false;
+
+        foreach (var emp in allEmployees)
+        {
+            if (!emp.IsInTraining) continue;
+
+            emp.SkillLevel = Mathf.Min(100f, emp.SkillLevel + trainingSkillPerDay);
+            emp.WeeklySalary = CalculateWageForSkill(emp.SkillLevel);
+            emp.TrainingDaysRemaining--;
+            changed = true;
+
+            if (!emp.IsInTraining)
+            {
+                Debug.Log($"[HR] {emp.FullName} finished training. New Skill: {emp.SkillLevel}");
+                OnEmployeeTrained?.Invoke(emp.EmployeeID, emp.SkillLevel);
+
+                if (emp.Role == EmployeeRole.Mechanic && RequestManager.Instance != null)
+                {
+                    RequestManager.Instance.NotifyActionTaken(RequestType.TrainMechanic, 1, emp.EmployeeID);
+                }
+            }
+        }
+
+        if (changed)
+        {
+            SaveEmployees();
+            SyncEmployeesRpc(SerializeEmployees()); // fires OnEmployeeDataUpdated on host + clients
+        }
+    }
+
+    /// <summary>
+    /// Server-side hourly tick: advances every employee's fatigue. Assigned mechanics tire while
+    /// on shift (work hours); everyone else (off-hours, idle/unassigned, or in training) recovers.
+    /// Fatigue is read live by the HR report (avgFatigue KPI); it is not synced/saved every hour
+    /// to avoid UI churn — the next discrete action persists it.
+    /// </summary>
+    private void UpdateFatigue()
+    {
+        if (!IsServer || allEmployees == null || allEmployees.Count == 0) return;
+
+        float hour = SimulationTimeManager.Instance != null
+            ? SimulationTimeManager.Instance.CurrentTimeOfDay : 12f;
+        bool isWorkHours = hour >= workDayStartHour && hour < workDayEndHour;
+
+        foreach (var emp in allEmployees)
+        {
+            float delta;
+
+            if (emp.IsInTraining)
+            {
+                delta = -fatigueRecoveryTrainingPerHour;            // resting away on a course
+            }
+            else if (isWorkHours && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            {
+                delta = fatiguePerWorkHour;                          // on shift
+            }
+            else
+            {
+                delta = -fatigueRecoveryPerHour;                     // off-hours / idle / unassigned
+            }
+
+            emp.Fatigue = Mathf.Clamp(emp.Fatigue + delta, 0f, 100f);
         }
     }
 
@@ -409,7 +732,7 @@ public class EmployeeManager : NetworkBehaviour
     private void RequestFireRpc(string id) { FireInternal(id); }
 
     [Rpc(SendTo.Server)]
-    private void RequestTrainRpc(string id) { TrainInternal(id); }
+    private void RequestTrainRpc(string id, int days) { TrainInternal(id, days); }
 
     [Rpc(SendTo.Server)]
     private void RequestDepotAssignmentRpc(string employeeID, string depotID)
@@ -417,22 +740,44 @@ public class EmployeeManager : NetworkBehaviour
         AssignMechanicInternal(employeeID, depotID);
     }
 
-    [Rpc(SendTo.Server)] 
-    private void RequestDriverAssignmentRpc(string eId, string bId) 
-    { 
-        AssignDriverInternal(eId, bId); 
-    }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncEmployeesRpc(string json, RpcParams rpcParams = default)
     {
-        if (IsServer) return;
-        var container = JsonUtility.FromJson<EmployeeContainer>(json);
-        if (container != null)
+        // Host already holds the authoritative lists; clients apply the synced snapshot.
+        if (!IsServer)
         {
-            allEmployees = container.Employees;
-            candidates = container.Candidates;
+            var container = JsonUtility.FromJson<EmployeeContainer>(json);
+            if (container != null)
+            {
+                allEmployees = container.Employees;
+                candidates = container.Candidates;
+                _adCampaignActive = container.AdCampaignActive;
+                _pendingAdTier = container.PendingAdTier;
+            }
         }
+
+        // Notify UI on BOTH host and clients that employee data changed, so panels
+        // refresh after a server-side hire/fire/train (clients only learn via this sync).
+        OnEmployeeDataUpdated?.Invoke();
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestTeamAssignmentRpc(string employeeID, string depotID, string teamID)
+    {
+        AssignMechanicToTeamInternal(employeeID, depotID, teamID);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestNewTeamAssignmentRpc(string employeeID, string depotID)
+    {
+        AssignMechanicToNewTeamInternal(employeeID, depotID);
+    }
+
+    [Rpc(SendTo.Server)]
+    private void RequestUnassignMechanicRpc(string employeeID)
+    {
+        UnassignMechanicInternal(employeeID);
     }
 
     // --- Persistence ---
@@ -442,7 +787,9 @@ public class EmployeeManager : NetworkBehaviour
         return JsonUtility.ToJson(new EmployeeContainer
         {
             Employees = allEmployees,
-            Candidates = candidates
+            Candidates = candidates,
+            AdCampaignActive = _adCampaignActive,
+            PendingAdTier = _pendingAdTier
         }, true);
     }
 
@@ -472,11 +819,8 @@ public class EmployeeManager : NetworkBehaviour
         }
 
         Debug.Log($"[EmployeeManager] Loaded {allEmployees.Count} employees from: {SavePath}");
+        // [NEW] Fire UI update event after initial file load
+        OnEmployeeDataUpdated?.Invoke();
     }
 
-    public EmployeeData GetDriverForBus(string busID)
-    {
-        // Search all employees for one assigned to this bus
-        return allEmployees.FirstOrDefault(e => e.AssignedBusID == busID);
-    }
 }

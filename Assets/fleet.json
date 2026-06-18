@@ -5,35 +5,41 @@
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
                 "RouteID": "02576857",
-                "StartTime": 6.150000095367432,
+                "StartTime": 6.0,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
                     "Health": 100.0,
-                    "MaxLife": 100.0
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 80.0,
-                    "MaxLife": 55.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 }
             ],
             "Capacity": 50
@@ -42,36 +48,42 @@
             "BusID": "02",
             "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
+                "RouteID": "66456769",
                 "StartTime": 7.0,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 85.0,
-                    "MaxLife": 85.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 90.0,
-                    "MaxLife": 90.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": "xle"
                 },
                 {
                     "PartType": 2,
-                    "Health": 12.0,
-                    "MaxLife": 12.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 80.0,
-                    "MaxLife": 80.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 75.0,
-                    "MaxLife": 75.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 }
             ],
             "Capacity": 50
@@ -85,72 +97,128 @@
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 65.42496490478516,
-                    "MaxLife": 21.04876708984375
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 62.42466354370117,
-                    "MaxLife": 18.048995971679689
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 52.50276184082031,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 84.08724975585938,
-                    "MaxLife": 75.20684051513672
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 55.4233283996582,
-                    "MaxLife": 11.049434661865235
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 }
             ],
             "Capacity": 50
         },
         {
             "BusID": "04",
-            "AssignedDepotID": "Depot_Empty",
+            "AssignedDepotID": "Depot_Main",
             "Schedule": {
-                "RouteID": "02576857",
+                "RouteID": "66456769",
                 "StartTime": 12.149999618530274,
                 "EndTime": 20.0,
                 "TurnaroundWait": 15.0
             },
+            "PendingSale": false,
             "Parts": [
                 {
                     "PartType": 0,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 1,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 2,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 3,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 },
                 {
                     "PartType": 4,
-                    "Health": 10.0,
-                    "MaxLife": 10.0
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
                 }
             ],
             "Capacity": 50
+        },
+        {
+            "BusID": "B-6195",
+            "AssignedDepotID": "",
+            "Schedule": {
+                "RouteID": "",
+                "StartTime": 8.0,
+                "EndTime": 17.0,
+                "TurnaroundWait": 10.0
+            },
+            "PendingSale": false,
+            "Parts": [
+                {
+                    "PartType": 0,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 1,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 2,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 3,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                },
+                {
+                    "PartType": 4,
+                    "Health": 100.0,
+                    "MaxLife": 100.0,
+                    "PendingReplacementItemID": ""
+                }
+            ],
+            "Capacity": 40
         }
     ]
 }

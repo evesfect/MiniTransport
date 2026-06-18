@@ -10,7 +10,7 @@ public struct VendorItemStats
     public float Reliability;
     public float SpeedMultiplier;
     public float PriceMultiplier;
-    public float Durability; // Added specific durability
+    public float Durability; 
 }
 
 [DefaultExecutionOrder(-49)] 
@@ -31,6 +31,36 @@ public class VendorManager : NetworkBehaviour
     public float baseDeliveryHours = 12f; 
 
     public event Action OnVendorDataUpdated;
+
+    // --- KPI lifetime counters (server-side runtime; consumed by KPIManager). Not persisted. ---
+    [HideInInspector] public int lifetimeOrdersPlaced;
+    [HideInInspector] public int lifetimeOrdersDelivered;
+    [HideInInspector] public int lifetimeOnTimeDeliveries;
+    [HideInInspector] public float lifetimeQualitySum; // sum of delivered part durability rolls
+
+    // --- KPI drill-down logs (server-side, in-memory, capped, newest-first) ---
+    private const int VendorLogCap = 150;
+    private readonly List<KpiDetailEntry> _orderLog = new List<KpiDetailEntry>();
+    private readonly List<KpiDetailEntry> _deliveryLog = new List<KpiDetailEntry>();
+
+    /// <summary>Newest-first log of orders placed (feeds the Total Orders Placed drill-down).</summary>
+    public IReadOnlyList<KpiDetailEntry> OrderLog => _orderLog;
+    /// <summary>Newest-first log of deliveries (feeds On-Time Deliveries and Average Part Quality drill-downs).</summary>
+    public IReadOnlyList<KpiDetailEntry> DeliveryLog => _deliveryLog;
+
+    private void PushVendorLog(List<KpiDetailEntry> log, string label, float value, int kind)
+    {
+        var time = SimulationTimeManager.Instance;
+        log.Insert(0, new KpiDetailEntry
+        {
+            label = label,
+            value = value,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = kind
+        });
+        if (log.Count > VendorLogCap) log.RemoveAt(log.Count - 1);
+    }
 
     public static readonly Dictionary<BusPartCategory, string[]> CategoryParts = new Dictionary<BusPartCategory, string[]>
     {
@@ -116,10 +146,25 @@ public class VendorManager : NetworkBehaviour
         {
             if (CurrentAbsoluteHour >= order.ActualArrivalHour)
             {
-                InventoryManager.Instance.AddPartWithDurability(order.ItemID, order.DurabilityRoll);
+                // Fallback for old save files where Amount might be 0
+                int actualAmount = Mathf.Max(1, order.Amount);
+
+                for (int i = 0; i < actualAmount; i++)
+                {
+                   InventoryManager.Instance.AddPartWithDurability(order.ItemID, order.DurabilityRoll);
+                }
                 
-                if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} arrived LATE from {order.VendorID}.");
-                else Debug.Log($"[Vendor] {order.ItemID} arrived ON TIME from {order.VendorID}.");
+                if (order.IsDelayed) Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived LATE from {order.VendorID}.");
+                else Debug.Log($"[Vendor] {order.ItemID} ({actualAmount}x) arrived ON TIME from {order.VendorID}.");
+
+                // KPI: track delivery performance & part quality.
+                lifetimeOrdersDelivered++;
+                if (!order.IsDelayed) lifetimeOnTimeDeliveries++;
+                lifetimeQualitySum += order.DurabilityRoll;
+                PushVendorLog(_deliveryLog,
+                    $"{actualAmount}× {order.ItemID} from {order.VendorID} — {(order.IsDelayed ? "LATE" : "On time")} (Q{order.DurabilityRoll:F0})",
+                    order.DurabilityRoll,
+                    order.IsDelayed ? 2 : 1);
                 
                 var vendor = availableVendors.FirstOrDefault(v => v.VendorID == order.VendorID);
                 if (vendor != null)
@@ -215,10 +260,10 @@ public class VendorManager : NetworkBehaviour
         else RequestCancelDealRpc(vendorID);
     }
 
-    public void PlaceOrder(string vendorID, string baseItemName)
+    public void PlaceOrder(string vendorID, string baseItemName, int amount = 1)
     {
-        if (IsServer) PlaceOrderInternal(vendorID, baseItemName);
-        else RequestPlaceOrderRpc(vendorID, baseItemName);
+        if (IsServer) PlaceOrderInternal(vendorID, baseItemName, amount);
+        else RequestPlaceOrderRpc(vendorID, baseItemName, amount);
     }
 
     private void SignDealInternal(string vendorID, BusPartCategory category)
@@ -233,7 +278,6 @@ public class VendorManager : NetworkBehaviour
 
     private void CancelDealInternal(string vendorID)
     {
-        // POINT 2: Block cancellation if there are active orders
         if (activeOrders.Any(o => o.VendorID == vendorID))
         {
             Debug.LogWarning($"[Vendor] Cannot cancel deal with {vendorID}. There are active orders.");
@@ -254,8 +298,10 @@ public class VendorManager : NetworkBehaviour
         }
     }
 
-    private void PlaceOrderInternal(string vendorID, string baseItemName)
+    private void PlaceOrderInternal(string vendorID, string baseItemName, int amount)
     {
+        amount = Mathf.Clamp(amount, 1, 50); // Sanity check
+
         var vendor = availableVendors.FirstOrDefault(v => v.VendorID == vendorID);
         if (vendor == null) return;
         if (activeOrders.Count(o => o.Category == vendor.Category) >= 2) return; 
@@ -275,44 +321,67 @@ public class VendorManager : NetworkBehaviour
             counter = new ItemCounter { BaseName = baseItemName, Count = 0 };
             lifetimeItemCounts.Add(counter);
         }
-        counter.Count++;
-        string generatedID = $"{baseItemName}{counter.Count}";
+
+        int startIdx = counter.Count + 1;
+        counter.Count += amount;
+        int endIdx = counter.Count;
+
+        string generatedDisplayID = amount == 1 ? $"{baseItemName}{startIdx}" : $"{baseItemName}{startIdx}-{endIdx}";
 
         activeOrders.Add(new ActiveOrder {
             OrderID = Guid.NewGuid().ToString().Substring(0, 6),
             VendorID = vendorID,
-            ItemID = generatedID,
+            ItemID = baseItemName,
             Category = vendor.Category,
             ExpectedArrivalHour = expectedTime,
             ActualArrivalHour = actualTime,
             IsDelayed = isDelayed,
-            DurabilityRoll = itemStats.Durability // Use specific exact durability rolled in GetItemStats
+            DurabilityRoll = itemStats.Durability,
+            Amount = amount,
+            BaseItemName = baseItemName,
+            StartIndex = startIdx
         });
         
-        CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier, TransactionCategory.PartPurchase, $"Ordered {generatedID}");
+        CompanyManager.Instance.TryExecuteActionableTransaction(100f * itemStats.PriceMultiplier * amount, TransactionCategory.PartPurchase, $"Ordered {generatedDisplayID}");
+
+        lifetimeOrdersPlaced++; // KPI: total orders placed
+        PushVendorLog(_orderLog, $"Ordered {amount}× {baseItemName} from {vendorID}", amount, 0);
 
         SaveVendors();
         SyncVendorsRpc(SerializeVendors());
+
+        // NEW: Tell Request Manager parts were ordered, passing the base item name.
+        if (RequestManager.Instance != null)
+        {
+            RequestManager.Instance.NotifyActionTaken(RequestType.BuyParts, amount, baseItemName);
+        }
     }
 
     [Rpc(SendTo.Server)] private void RequestSignDealRpc(string vID, BusPartCategory c) { SignDealInternal(vID, c); }
     [Rpc(SendTo.Server)] private void RequestCancelDealRpc(string vID) { CancelDealInternal(vID); }
-    [Rpc(SendTo.Server)] private void RequestPlaceOrderRpc(string vID, string iID) { PlaceOrderInternal(vID, iID); }
+    [Rpc(SendTo.Server)] private void RequestPlaceOrderRpc(string vID, string iID, int amount) { PlaceOrderInternal(vID, iID, amount); }
 
     [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
-    private void SyncVendorsRpc(string json, RpcParams rpcParams = default)
+private void SyncVendorsRpc(string json, RpcParams rpcParams = default)
+{
+    if (IsServer)
     {
-        if (IsServer) return;
-        var container = JsonUtility.FromJson<VendorContainer>(json);
-        if (container != null)
-        {
-            availableVendors = container.AvailableVendors;
-            activeDeals = container.ActiveDeals;
-            activeOrders = container.ActiveOrders;
-            lifetimeItemCounts = container.LifetimeItemCounts;
-            OnVendorDataUpdated?.Invoke();
-        }
+        // The Host already updated its lists directly. It just needs the UI event to fire.
+        OnVendorDataUpdated?.Invoke();
+        return; 
     }
+    
+    // Clients need to deserialize the JSON first
+    var container = JsonUtility.FromJson<VendorContainer>(json);
+    if (container != null)
+    {
+        availableVendors = container.AvailableVendors;
+        activeDeals = container.ActiveDeals;
+        activeOrders = container.ActiveOrders;
+        lifetimeItemCounts = container.LifetimeItemCounts;
+        OnVendorDataUpdated?.Invoke();
+    }
+}
 
     private string SerializeVendors() { return JsonUtility.ToJson(new VendorContainer { AvailableVendors = availableVendors, ActiveDeals = activeDeals, ActiveOrders = activeOrders, LifetimeItemCounts = lifetimeItemCounts }, true); }
     public void SaveVendors() { File.WriteAllText(SavePath, SerializeVendors()); }

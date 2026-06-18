@@ -17,7 +17,7 @@ public enum BusPartType
 {
     Engine = 0,
     Transmission = 1,
-    Wheels = 2,
+    Tires = 2,
     Body = 3,
     Interior = 4,
     None = 255 // For when not broken
@@ -29,6 +29,7 @@ public class BusPartData
     public BusPartType PartType;
     public float Health = 100f;   // Current condition (0 = Breakdown)
     public float MaxLife = 100f;  // Maximum repairable condition (0 = Scrap)
+    public string PendingReplacementItemID = "";
 
     public BusPartData(BusPartType type)
     {
@@ -44,6 +45,7 @@ public class BusData
     public string BusID;
     public string AssignedDepotID;
     public BusSchedule Schedule;
+    public bool PendingSale = false;
     public List<BusPartData> Parts = new List<BusPartData>();
     public ushort Capacity;
 
@@ -53,7 +55,7 @@ public class BusData
         {
             Parts.Add(new BusPartData(BusPartType.Engine));
             Parts.Add(new BusPartData(BusPartType.Transmission));
-            Parts.Add(new BusPartData(BusPartType.Wheels));
+            Parts.Add(new BusPartData(BusPartType.Tires));
             Parts.Add(new BusPartData(BusPartType.Body));
             Parts.Add(new BusPartData(BusPartType.Interior));
         }
@@ -66,6 +68,26 @@ public class BusData
         foreach (var p in Parts) sum += p.Health;
         return sum / Parts.Count;
     }
+}
+
+// Per-bus live runtime status mirrored from the server to every client (FleetManager keeps the
+// authoritative list). Lets client UI show whether a bus is actually out driving, returning, or
+// broken down — the server-only spawned-instance map can't be read on clients.
+public struct BusRuntimeStatus : INetworkSerializable, IEquatable<BusRuntimeStatus>
+{
+    public FixedString32Bytes BusID;
+    public bool IsRecalled;   // player asked it to return / be towed
+    public bool IsBroken;     // broken down on the road
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref BusID);
+        serializer.SerializeValue(ref IsRecalled);
+        serializer.SerializeValue(ref IsBroken);
+    }
+
+    public bool Equals(BusRuntimeStatus other) =>
+        BusID.Equals(other.BusID) && IsRecalled == other.IsRecalled && IsBroken == other.IsBroken;
 }
 
 public struct BusNetworkState : INetworkSerializable, IEquatable<BusNetworkState>

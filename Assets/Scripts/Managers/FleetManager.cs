@@ -19,8 +19,21 @@ public class FleetManager : NetworkBehaviour
 
     public event Action OnFleetUpdated;
 
-    // Runtime Lookup: Maps BusID -> Spawned GameObject
+    // Runtime Lookup: Maps BusID -> Spawned GameObject (server-only)
     private Dictionary<string, GameObject> _activeBusInstances = new Dictionary<string, GameObject>();
+
+    // Mirrors the number of spawned/in-service buses to every client. Written by the server
+    // whenever a bus is registered/unregistered, since _activeBusInstances only exists on the server.
+    private readonly NetworkVariable<int> _netActiveBusCount = new NetworkVariable<int>(
+        0,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // Per-bus live status (active/returning/broken) mirrored to clients. The server keeps the
+    // authoritative spawned-instance map (_activeBusInstances); this list is its client-visible
+    // shadow so fleet UI on any peer can show the real driving status.
+    private readonly NetworkList<BusRuntimeStatus> _activeStatuses = new NetworkList<BusRuntimeStatus>();
 
     public enum FleetOperation { Add, Remove, Update }
 
@@ -42,6 +55,8 @@ public class FleetManager : NetworkBehaviour
         if (IsServer)
         {
             LoadFleet();
+
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
 
             if (CompanyManager.Instance != null)
             {
@@ -66,6 +81,10 @@ public class FleetManager : NetworkBehaviour
     {
         if (IsServer)
         {
+
+            if (NetworkManager.Singleton != null)
+                NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+
             if (CompanyManager.Instance != null)
                 CompanyManager.Instance.OnWeeklyExpensesRequested -= SubmitFleetExpenses;
 
@@ -75,6 +94,11 @@ public class FleetManager : NetworkBehaviour
                 NetworkSyncBroker.Instance.OnFleetSyncTriggered -= PerformFleetSync;
             }
         }
+    }
+
+    private void OnClientConnected(ulong clientId)
+    {
+        if (IsServer) SyncFleetRpc(SerializeFleet(), RpcTarget.Single(clientId, RpcTargetUse.Temp));
     }
 
     private void SubmitFleetExpenses()
@@ -99,9 +123,30 @@ public class FleetManager : NetworkBehaviour
 
     // --- Runtime Management (Server Only) ---
 
+    /// <summary>True if the bus is currently spawned/driving. Works on clients via the mirrored
+    /// status list; the server reads its authoritative instance map.</summary>
     public bool IsBusActive(string busID)
     {
-        return _activeBusInstances.ContainsKey(busID) && _activeBusInstances[busID] != null;
+        if (IsServer)
+            return _activeBusInstances.ContainsKey(busID) && _activeBusInstances[busID] != null;
+
+        return TryGetStatus(busID, out _);
+    }
+
+    /// <summary>True if the bus is out driving and has been recalled (returning to its depot).</summary>
+    public bool IsBusReturning(string busID) => TryGetStatus(busID, out var s) && s.IsRecalled;
+
+    /// <summary>True if the bus is out driving and currently broken down on the road.</summary>
+    public bool IsBusBroken(string busID) => TryGetStatus(busID, out var s) && s.IsBroken;
+
+    private bool TryGetStatus(string busID, out BusRuntimeStatus status)
+    {
+        for (int i = 0; i < _activeStatuses.Count; i++)
+        {
+            if (_activeStatuses[i].BusID.Equals(busID)) { status = _activeStatuses[i]; return true; }
+        }
+        status = default;
+        return false;
     }
 
     public void RegisterSpawnedBus(string busID, GameObject busInstance)
@@ -110,12 +155,75 @@ public class FleetManager : NetworkBehaviour
             _activeBusInstances[busID] = busInstance;
         else
             _activeBusInstances.Add(busID, busInstance);
+
+        SetStatusEntry(busID, recalled: false, broken: false);
+        PublishActiveBusCount();
     }
 
     public void UnregisterBus(string busID)
     {
         if (_activeBusInstances.ContainsKey(busID))
             _activeBusInstances.Remove(busID);
+
+        RemoveStatusEntry(busID);
+        PublishActiveBusCount();
+    }
+
+    // --- Synced runtime status (server-only writers) ---
+
+    /// <summary>Server: flag/unflag a live bus as recalled (returning to depot) for client UI.</summary>
+    public void SetBusRecalled(string busID, bool recalled) => UpdateStatusFlag(busID, recalled: recalled);
+
+    /// <summary>Server: flag/unflag a live bus as broken down for client UI.</summary>
+    public void SetBusBroken(string busID, bool broken) => UpdateStatusFlag(busID, broken: broken);
+
+    private void UpdateStatusFlag(string busID, bool? recalled = null, bool? broken = null)
+    {
+        if (!IsServer) return;
+        for (int i = 0; i < _activeStatuses.Count; i++)
+        {
+            if (!_activeStatuses[i].BusID.Equals(busID)) continue;
+            var s = _activeStatuses[i];
+            if (recalled.HasValue) s.IsRecalled = recalled.Value;
+            if (broken.HasValue) s.IsBroken = broken.Value;
+            _activeStatuses[i] = s;
+            return;
+        }
+    }
+
+    private void SetStatusEntry(string busID, bool recalled, bool broken)
+    {
+        if (!IsServer) return;
+        var entry = new BusRuntimeStatus { BusID = busID, IsRecalled = recalled, IsBroken = broken };
+        for (int i = 0; i < _activeStatuses.Count; i++)
+        {
+            if (_activeStatuses[i].BusID.Equals(busID)) { _activeStatuses[i] = entry; return; }
+        }
+        _activeStatuses.Add(entry);
+    }
+
+    private void RemoveStatusEntry(string busID)
+    {
+        if (!IsServer) return;
+        for (int i = 0; i < _activeStatuses.Count; i++)
+        {
+            if (_activeStatuses[i].BusID.Equals(busID)) { _activeStatuses.RemoveAt(i); return; }
+        }
+    }
+
+    // Server-only: recompute the live count and mirror it to clients.
+    private void PublishActiveBusCount()
+    {
+        if (!IsServer) return;
+        _netActiveBusCount.Value = CountActiveInstances();
+    }
+
+    private int CountActiveInstances()
+    {
+        int count = 0;
+        foreach (var instance in _activeBusInstances.Values)
+            if (instance != null) count++;
+        return count;
     }
 
     public GameObject GetActiveBus(string busID)
@@ -123,6 +231,12 @@ public class FleetManager : NetworkBehaviour
         if (_activeBusInstances.TryGetValue(busID, out GameObject obj)) return obj;
         return null;
     }
+
+    /// <summary>
+    /// Number of buses currently spawned/in-service. Works on clients too: the server keeps
+    /// the authoritative dictionary, while clients read the mirrored network value.
+    /// </summary>
+    public int ActiveBusCount => IsServer ? CountActiveInstances() : _netActiveBusCount.Value;
 
     // --- Networking & Data ---
 
@@ -132,7 +246,7 @@ public class FleetManager : NetworkBehaviour
         SyncFleetRpc(json, target);
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
+    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncFleetRpc(string jsonFleet, RpcParams rpcParams = default)
     {
         if (IsServer) return;
@@ -141,6 +255,13 @@ public class FleetManager : NetworkBehaviour
         if (container != null && container.Buses != null)
         {
             allBuses = container.Buses;
+            foreach (var bus in allBuses)
+            {
+                if (bus.Parts == null || bus.Parts.Count == 0)
+                {
+                    bus.InitializeParts();
+                }
+            }
             Debug.Log($"[FleetManager] Synced {allBuses.Count} buses from Server.");
             OnFleetUpdated?.Invoke();
         }
@@ -234,8 +355,9 @@ public class FleetManager : NetworkBehaviour
                             bus.InitializeParts();
                         }
                     }
-                    // Clear runtime map on load to prevent stale references
+                    // Clear runtime maps on load to prevent stale references
                     _activeBusInstances.Clear();
+                    if (IsSpawned && IsServer) _activeStatuses.Clear();
                     Debug.Log($"FleetManager: Loaded {allBuses.Count} buses.");
                 }
             }
@@ -256,6 +378,14 @@ public class FleetManager : NetworkBehaviour
             if (part != null)
             {
                 part.Health = Mathf.Clamp(newHealth, 0f, 100f);
+            }
+
+            OnFleetUpdated?.Invoke();
+
+            if (NetworkSyncBroker.Instance != null)
+            {
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.FleetStats);
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.MaintenanceStats);
             }
         }
     }
@@ -309,6 +439,29 @@ public class FleetManager : NetworkBehaviour
     public void UpdateBusClient(BusData entry)
     {
         RequestFleetOperationRpc(JsonUtility.ToJson(entry), FleetOperation.Update);
+    }
+
+    // --- Recall ---
+
+    /// <summary>
+    /// Client → server: recall an in-service bus back to its depot. Resolved on the server, which
+    /// owns the live bus instances. No-op if the bus is not currently spawned (already parked).
+    /// </summary>
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestRecallBusRpc(string busID)
+    {
+        GameObject busObj = GetActiveBus(busID);
+        if (busObj == null) return;
+
+        if (busObj.TryGetComponent<BusDriver>(out var driver))
+            driver.RecallToDepot();
+    }
+
+    /// <summary>Client-facing wrapper to recall a bus to its depot.</summary>
+    public void RecallBusClient(string busID)
+    {
+        if (string.IsNullOrEmpty(busID)) return;
+        RequestRecallBusRpc(busID);
     }
 }
 

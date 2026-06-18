@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using System;
+using Unity.Collections;
 using Unity.Netcode;
 
 [DefaultExecutionOrder(-55)] 
@@ -17,8 +18,14 @@ public class CompanyManager : NetworkBehaviour
     public float GlobalSatisfaction = 80f;
     public const float MaxSatisfaction = 100f;
 
-    public float satisfactionPenaltyPertimeout = 2.0f; 
-    public float baseRewardPerPassenger = 0.5f; 
+    public float satisfactionPenaltyPertimeout = 2.0f;
+    public float baseRewardPerPassenger = 0.5f;
+
+    [Header("Fare Settings")]
+    [Tooltip("Starting ticket price charged per passenger per route leg (flat, length-independent). The GM can change it at runtime.")]
+    public float defaultTicketPrice = 2.0f;
+    [Tooltip("Starting transfer discount (0..1) applied to fares on transfer legs. The GM can change it at runtime.")]
+    [Range(0f, 1f)] public float defaultTransferDiscount = 0.5f;
 
     [Tooltip("The maximum debt allowed")]
     public float bankruptcyThreshold;
@@ -30,12 +37,61 @@ public class CompanyManager : NetworkBehaviour
     private bool _needsSave = false;
     private float _saveTimer = 0f;
 
+    // The ledger is streamed to clients in small batches. A single RPC carrying the whole history
+    // (hundreds of entries -> tens of KB of JSON) blows past Netcode's max message size and is
+    // silently dropped, which is why clients received the stats sync but never the ledger. Keep this
+    // small enough that one chunk stays well under the transport's payload limit even with long
+    // transaction descriptions.
+    private const int LedgerChunkSize = 20;
+
+    // Client-side: accumulates chunks of an in-flight ledger stream until the final chunk arrives.
+    private List<Transaction> _ledgerAssembly;
+
+    // Mirrors only the most recent expense (negative transaction) to every client, so the HUD can
+    // show it without subscribing to the whole ledger. Written by the server.
+    private readonly NetworkVariable<FixedString128Bytes> _netLastExpenseDesc = new NetworkVariable<FixedString128Bytes>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+    private readonly NetworkVariable<float> _netLastExpenseAmount = new NetworkVariable<float>(
+        0f,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Server
+    );
+
+    // GM-tunable fare values + a networked mirror of satisfaction, so the GM panel works on clients.
+    private readonly NetworkVariable<float> _netTicketPrice = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> _netTransferDiscount = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private readonly NetworkVariable<float> _netSatisfaction = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
     public CompanyData GetCompanyData() => _companyData;
+
+    /// <summary>Description of the most recent expense (empty if none recorded yet).</summary>
+    public string LatestExpenseDescription => _netLastExpenseDesc.Value.ToString();
+    /// <summary>Signed amount of the most recent expense (negative). 0 means none recorded yet.</summary>
+    public float LatestExpenseAmount => _netLastExpenseAmount.Value;
+    /// <summary>True once at least one expense has been recorded.</summary>
+    public bool HasLatestExpense => _netLastExpenseAmount.Value < 0f;
+
+    /// <summary>Current ticket price per passenger per route leg. Read-Everyone (works on clients).</summary>
+    public float TicketPrice => _netTicketPrice.Value;
+    /// <summary>Current transfer discount (0..1) applied to transfer-leg fares. Read-Everyone.</summary>
+    public float TransferDiscount => _netTransferDiscount.Value;
+    /// <summary>Networked mirror of GlobalSatisfaction so the GM panel reads it on clients too.</summary>
+    public float Satisfaction => _netSatisfaction.Value;
+    public bool HasActiveLoan => _companyData.ActiveLoans != null && _companyData.ActiveLoans.Count > 0;
 
     public event Action<float> OnBalanceChanged;
     public event Action<Transaction> OnTransactionAdded;
     public event Action OnWeeklyExpensesRequested;
     public event Action<float> OnSatisfactionChanged;
+    public event Action OnLedgerUpdated;
+    public event Action OnTransferRecorded; // raised when TransferTripCount changes (KPI report refresh)
+
 
 #if UNITY_EDITOR
     private string SavePath => Path.Combine(Application.dataPath, "company.json");
@@ -55,6 +111,11 @@ public class CompanyManager : NetworkBehaviour
         if (IsServer)
         {
             LoadCompanyData();
+            InitializeLatestExpenseFromHistory();
+
+            _netTicketPrice.Value = Mathf.Max(0f, defaultTicketPrice);
+            _netTransferDiscount.Value = Mathf.Clamp01(defaultTransferDiscount);
+            _netSatisfaction.Value = GlobalSatisfaction;
 
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged += CheckDateForBills;
@@ -68,13 +129,17 @@ public class CompanyManager : NetworkBehaviour
         else
         {
             _companyData = new CompanyData();
+
+            // [NEW] The exact moment the client is fully spawned and ready, tap the Server on the shoulder and ask for the history!
+            Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} requesting initial sync...");
+            RequestInitialSyncRpc();
         }
     }
 
     public override void OnNetworkDespawn()
     {
         if (IsServer && NetworkManager.Singleton != null)
-        {   
+        {  
             if (SimulationTimeManager.Instance != null)
                 SimulationTimeManager.Instance.OnDayChanged -= CheckDateForBills;
 
@@ -88,19 +153,24 @@ public class CompanyManager : NetworkBehaviour
 
     private void Update()
     {
-        if (IsServer && _needsSave)
+        if (!IsServer || !_needsSave) return;
+
+        _saveTimer += Time.deltaTime;
+        if (_saveTimer < 5f) return;
+
+        // Reset the timer up front, regardless of outcome. If the write fails (e.g. the file is
+        // briefly locked by OneDrive sync), we retry on the NEXT 5s interval instead of hammering
+        // the locked file every frame — which is what turned a single transient lock into an
+        // endless IOException storm.
+        _saveTimer = 0f;
+
+        if (TrySaveCompanyData())
         {
-            _saveTimer += Time.deltaTime;
-            if (_saveTimer >= 5f) 
+            _needsSave = false;
+
+            if (NetworkSyncBroker.Instance != null)
             {
-                SaveCompanyData();
-                _needsSave = false;
-                _saveTimer = 0f;
-                
-                if (NetworkSyncBroker.Instance != null)
-                {
-                    NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
-                }
+                NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyLedger);
             }
         }
     }
@@ -110,8 +180,44 @@ public class CompanyManager : NetworkBehaviour
         int day = SimulationTimeManager.Instance.CurrentDay;
         if (day > 0 && day % 7 == 0)
         {
+            ProcessLoanPayments();
             OnWeeklyExpensesRequested?.Invoke();
         }
+    }
+
+    // [NEW] Process Active Debt
+    private void ProcessLoanPayments()
+    {
+        if (_companyData.ActiveLoans == null) return;
+        
+        bool changed = false;
+        // Loop backwards to safely remove fulfilled loans
+        for (int i = _companyData.ActiveLoans.Count - 1; i >= 0; i--)
+        {
+            var loan = _companyData.ActiveLoans[i];
+            if (loan.WeeksLeft > 0)
+            {
+                // This utilizes the standard mechanic which triggers GameEndManager bankruptcy!
+                ProcessPassiveExpense(loan.WeeklyPayment, TransactionCategory.LoanPayment, "Weekly Loan Installment");
+                loan.WeeksLeft--;
+                
+                if (loan.WeeksLeft <= 0) _companyData.ActiveLoans.RemoveAt(i);
+                changed = true;
+            }
+        }
+        if (changed) _needsSave = true;
+    }
+
+    // [NEW] API for RequestManager to finalize the loan
+    public void AddLoan(float amount, float weeklyPayment, int weeks)
+    {
+        if (_companyData.ActiveLoans == null) _companyData.ActiveLoans = new List<ActiveLoan>();
+        
+        _companyData.ActiveLoans.Add(new ActiveLoan { WeeklyPayment = weeklyPayment, WeeksLeft = weeks });
+        
+        // Add the principal to the balance
+        AddIncome(amount, TransactionCategory.Loan, "Bank Loan Granted");
+        _needsSave = true;
     }
 
     public void ProcessPassiveExpense(float amount, TransactionCategory category, string description)
@@ -193,6 +299,8 @@ public class CompanyManager : NetworkBehaviour
             OnTransactionAdded?.Invoke(newTrans);
         }
 
+        if (amount < 0f) SetLatestExpense(description, amount);
+
         OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
 
         if (NetworkSyncBroker.Instance != null)
@@ -208,25 +316,216 @@ public class CompanyManager : NetworkBehaviour
         }
 
         _needsSave = true;
+        OnLedgerUpdated?.Invoke();
     }
 
-    public void ModifySatisfaction(float amount)
+    // Server-only. Pushes the latest expense to the networked mirror read by the HUD.
+    private void SetLatestExpense(string description, float amount)
     {
+        if (!IsServer || !IsSpawned) return;
+
+        FixedString128Bytes desc = default;
+        if (!string.IsNullOrEmpty(description)) desc.CopyFromTruncated(description);
+
+        _netLastExpenseDesc.Value = desc;
+        _netLastExpenseAmount.Value = amount;
+    }
+
+    // Server-only. Seeds the latest-expense mirror from the most recent negative entry in the
+    // loaded ledger, so a freshly loaded save shows the last expense from company.json immediately.
+    private void InitializeLatestExpenseFromHistory()
+    {
+        if (!IsServer || _companyData?.History == null) return;
+
+        for (int i = _companyData.History.Count - 1; i >= 0; i--)
+        {
+            if (_companyData.History[i].Amount < 0f)
+            {
+                SetLatestExpense(_companyData.History[i].Description, _companyData.History[i].Amount);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Server-only. Records that <paramref name="count"/> passengers made a transfer,
+    /// feeding the global "Number of Transfer Trips" KPI.
+    /// </summary>
+    public void RecordTransfer(int count)
+    {
+        if (!IsServer || count <= 0) return;
+
+        _companyData.TransferTripCount += count;
+        LogTransfer(count);
+
+        // Company stats are surfaced to the local dashboard via OnBalanceChanged
+        // (the dashboard rebuilds the full stats snapshot); the balance value is unchanged.
+        OnBalanceChanged?.Invoke(_companyData.CurrentBalance);
+
+        if (NetworkSyncBroker.Instance != null)
+            NetworkSyncBroker.Instance.MarkDirty(SyncDataType.CompanyStats);
+
+
+        OnTransferRecorded?.Invoke(); // let KPIManager refresh the transfer-trip report value
+        _needsSave = true;
+    }
+
+    // Back-compat overload: callers that don't supply a reason are logged as "Other".
+    public void ModifySatisfaction(float amount) => ModifySatisfaction(amount, "Other");
+
+    public void ModifySatisfaction(float amount, string reason)
+    {
+        LogSatisfactionChange(amount, reason);
+
         GlobalSatisfaction = Mathf.Clamp(GlobalSatisfaction + amount, 0f, MaxSatisfaction);
-        Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        //Debug.Log($"[Company] Satisfaction updated: {GlobalSatisfaction:F1}% ({amount:F1})");
+        if (IsServer && IsSpawned) _netSatisfaction.Value = GlobalSatisfaction;
         OnSatisfactionChanged?.Invoke(GlobalSatisfaction);
+    }
+
+    // --- Satisfaction event log (server-side, in-memory, feeds the KPI drill-down) ---
+
+    private const int SatisfactionLogCap = 150;
+    private readonly List<KpiDetailEntry> _satisfactionLog = new List<KpiDetailEntry>();
+
+    /// <summary>Newest-first log of satisfaction changes with reasons (server-authoritative, session-only).</summary>
+    public IReadOnlyList<KpiDetailEntry> SatisfactionLog => _satisfactionLog;
+
+    private void LogSatisfactionChange(float amount, string reason)
+    {
+        if (!IsServer || Mathf.Approximately(amount, 0f)) return;
+
+        var time = SimulationTimeManager.Instance;
+        _satisfactionLog.Insert(0, new KpiDetailEntry
+        {
+            label = string.IsNullOrEmpty(reason) ? "Other" : reason,
+            value = amount,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = amount >= 0f ? 1 : 2
+        });
+
+        if (_satisfactionLog.Count > SatisfactionLogCap)
+            _satisfactionLog.RemoveAt(_satisfactionLog.Count - 1);
+    }
+
+    // --- Transfer event log (server-side, in-memory, feeds the Number of Transfers drill-down) ---
+
+    private readonly List<KpiDetailEntry> _transferLog = new List<KpiDetailEntry>();
+
+    /// <summary>Newest-first log of passenger transfer events (server-authoritative, session-only).</summary>
+    public IReadOnlyList<KpiDetailEntry> TransferLog => _transferLog;
+
+    private void LogTransfer(int count)
+    {
+        if (!IsServer || count <= 0) return;
+
+        var time = SimulationTimeManager.Instance;
+        _transferLog.Insert(0, new KpiDetailEntry
+        {
+            label = $"{count} passenger{(count == 1 ? "" : "s")} transferred",
+            value = count,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = 0
+        });
+
+        if (_transferLog.Count > SatisfactionLogCap)
+            _transferLog.RemoveAt(_transferLog.Count - 1);
+    }
+
+    // --- GM fare controls (callable from any client, e.g. the GM panel) ---
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetTicketPriceRpc(float price)
+    {
+        _netTicketPrice.Value = Mathf.Max(0f, price);
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    public void RequestSetTransferDiscountRpc(float discount)
+    {
+        _netTransferDiscount.Value = Mathf.Clamp01(discount);
     }
 
     private void PerformStatsSync(BaseRpcTarget target)
     {
-        var stats = new CompanyStatsData { currentBalance = _companyData.CurrentBalance };
-        SyncStatsRpc(JsonUtility.ToJson(stats), target);
+        var stats = new CompanyStatsData
+        {
+            currentBalance = _companyData.CurrentBalance,
+            transferTripCount = _companyData.TransferTripCount
+        };
+        BroadcastStatsSyncRpc(JsonUtility.ToJson(stats));
     }
 
     private void PerformLedgerSync(BaseRpcTarget target)
     {
-        var ledger = new CompanyLedgerData { transactions = _companyData.History };
-        SyncLedgerRpc(JsonUtility.ToJson(ledger), target);
+        // The history is broadcast to everyone in chunks; the per-subscriber target is unused here
+        // because the chunk RPC fans out to all clients (non-subscribers simply re-apply data they
+        // already hold). The subscriber set still gates whether the server sends at all.
+        BroadcastLedgerChunked();
+    }
+
+    // Server-only. Streams the full ledger to all clients as a sequence of small RPCs. Each call
+    // runs synchronously to completion, so chunk RPCs from one stream are queued contiguously and,
+    // being reliable-ordered, are reassembled in order on the client without interleaving with a
+    // later stream.
+    private void BroadcastLedgerChunked()
+    {
+        if (!IsServer) return;
+
+        var history = _companyData.History;
+        int total = history != null ? history.Count : 0;
+        int totalChunks = Mathf.Max(1, Mathf.CeilToInt(total / (float)LedgerChunkSize));
+
+        for (int i = 0; i < totalChunks; i++)
+        {
+            int start = i * LedgerChunkSize;
+            int count = Mathf.Min(LedgerChunkSize, total - start);
+            var batch = new CompanyLedgerData
+            {
+                transactions = count > 0 ? history.GetRange(start, count) : new List<Transaction>()
+            };
+            SyncLedgerChunkRpc(i, totalChunks, JsonUtility.ToJson(batch));
+        }
+    }
+
+    [Rpc(SendTo.ClientsAndHost)]
+    private void BroadcastStatsSyncRpc(string json, RpcParams rpcParams = default)
+    {
+        if (IsServer) return;
+
+        var stats = JsonUtility.FromJson<CompanyStatsData>(json);
+        _companyData.CurrentBalance = stats.currentBalance;
+        _companyData.TransferTripCount = stats.transferTripCount;
+
+        OnBalanceChanged?.Invoke(stats.currentBalance);
+    }
+
+    // Receives one chunk of a ledger stream. Chunk 0 starts a fresh assembly; the final chunk
+    // commits the reassembled history and notifies listeners. Reliable-ordered delivery guarantees
+    // chunks arrive in send order.
+    [Rpc(SendTo.ClientsAndHost)]
+    private void SyncLedgerChunkRpc(int chunkIndex, int totalChunks, string json)
+    {
+        if (IsServer) return;
+
+        var batch = JsonUtility.FromJson<CompanyLedgerData>(json);
+
+        // Chunk 0 (or a missed start) begins a new assembly buffer.
+        if (chunkIndex == 0 || _ledgerAssembly == null)
+            _ledgerAssembly = new List<Transaction>();
+
+        if (batch.transactions != null)
+            _ledgerAssembly.AddRange(batch.transactions);
+
+        if (chunkIndex == totalChunks - 1)
+        {
+            _companyData.History = _ledgerAssembly;
+            _ledgerAssembly = null;
+            Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} assembled ledger: {_companyData.History.Count} transactions.");
+            OnLedgerUpdated?.Invoke();
+        }
     }
 
     [Rpc(SendTo.Server)]
@@ -239,30 +538,64 @@ public class CompanyManager : NetworkBehaviour
         ProcessTransaction(amount, type, category, desc);
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
+    // [NEW] Client asks the server for the data
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void RequestInitialSyncRpc(RpcParams rpcParams = default)
+    {
+        // Find out exactly which client just asked
+        ulong clientId = rpcParams.Receive.SenderClientId;
+        Debug.Log($"[CompanyManager] Server received sync request from client {clientId}.");
+        Debug.Log($"[CompanyManager] Server state: balance={_companyData.CurrentBalance}, ledger items={_companyData.History.Count}");
+        
+        if (_companyData.History.Count == 0)
+        {
+            Debug.LogWarning("[CompanyManager] WARNING: Server history is EMPTY!");
+        }
+
+        // 1. Send them the Balance
+        var stats = new CompanyStatsData
+        {
+            currentBalance = _companyData.CurrentBalance,
+            transferTripCount = _companyData.TransferTripCount
+        };
+        SyncStatsRpc(JsonUtility.ToJson(stats), RpcTarget.Single(clientId, RpcTargetUse.Temp));
+
+        // Ledger goes out chunked to everyone. Targeting a single client isn't worth the added
+        // complexity: other clients just re-apply the history they already have.
+        BroadcastLedgerChunked();
+    }
+
+    [Rpc(SendTo.ClientsAndHost, AllowTargetOverride = true)]
     private void SyncStatsRpc(string json, RpcParams rpcParams = default)
     {
         if (IsServer) return;
-        
+
         var stats = JsonUtility.FromJson<CompanyStatsData>(json);
         _companyData.CurrentBalance = stats.currentBalance;
-        
+        _companyData.TransferTripCount = stats.transferTripCount;
+        Debug.Log($"[CompanyManager] Client {NetworkManager.Singleton.LocalClientId} received stats sync: balance={stats.currentBalance}, transfers={stats.transferTripCount}");
+
         OnBalanceChanged?.Invoke(stats.currentBalance);
     }
 
-    [Rpc(SendTo.SpecifiedInParams)]
-    private void SyncLedgerRpc(string json, RpcParams rpcParams = default)
-    {
-        if (IsServer) return;
-        var ledger = JsonUtility.FromJson<CompanyLedgerData>(json);
-        _companyData.History = ledger.transactions;
-    }
-
     [ContextMenu("Save Company")]
-    public void SaveCompanyData()
+    public void SaveCompanyData() => TrySaveCompanyData();
+
+    // Returns true on success. Failures are swallowed and logged once so a transient file lock
+    // (OneDrive sync touching the Assets copy) doesn't throw an unhandled exception every frame.
+    private bool TrySaveCompanyData()
     {
-        string json = JsonUtility.ToJson(_companyData, true);
-        File.WriteAllText(SavePath, json);
+        try
+        {
+            string json = JsonUtility.ToJson(_companyData, true);
+            File.WriteAllText(SavePath, json);
+            return true;
+        }
+        catch (IOException e)
+        {
+            Debug.LogWarning($"[CompanyManager] Save deferred (file busy), will retry next interval: {e.Message}");
+            return false;
+        }
     }
 
     [ContextMenu("Load Company")]
@@ -273,7 +606,9 @@ public class CompanyManager : NetworkBehaviour
             try
             {
                 string json = File.ReadAllText(SavePath);
+                Debug.Log($"[CompanyManager] Loaded company.json: {json.Length} bytes");
                 _companyData = JsonUtility.FromJson<CompanyData>(json);
+                Debug.Log($"[CompanyManager] Parsed company data: balance={_companyData.CurrentBalance}, ledger items={_companyData.History.Count}");
             }
             catch (Exception e)
             {
@@ -281,7 +616,12 @@ public class CompanyManager : NetworkBehaviour
                 ResetData();
             }
         }
-        else ResetData();
+        else 
+        {
+            Debug.LogWarning($"[CompanyManager] No save file found at {SavePath}. Creating new company.");
+            ResetData();
+        }
+        OnLedgerUpdated?.Invoke();
     }
 
     private void ResetData()
@@ -290,9 +630,17 @@ public class CompanyManager : NetworkBehaviour
         {
             CompanyName = defaultCompanyName,
             CurrentBalance = startingBalance,
-            History = new List<Transaction>()
+            History = new List<Transaction>(),
+            ActiveLoans = new List<ActiveLoan>() // [NEW] Initialize the list
         };
     }
+}
+
+[Serializable]
+public class ActiveLoan
+{
+    public float WeeklyPayment;
+    public int WeeksLeft;
 }
 
 [Serializable]
@@ -300,7 +648,10 @@ public class CompanyData
 {
     public string CompanyName;
     public float CurrentBalance;
+    public int TransferTripCount; // Global KPI: cumulative number of passenger transfers
     public List<Transaction> History = new List<Transaction>();
+    // [NEW] Track active debts
+    public List<ActiveLoan> ActiveLoans = new List<ActiveLoan>();
 }
 
 [Serializable]
@@ -318,5 +669,7 @@ public enum TransactionType { Actionable, Passive }
 
 public enum TransactionCategory
 {
-    General, Grant, TicketRevenue, VehiclePurchase, PartPurchase, Maintenance, Fuel, StaffSalary, StaffUpkeep, Tax
+    General, Grant, TicketRevenue, VehiclePurchase, PartPurchase, Maintenance, Fuel, StaffSalary, StaffUpkeep, Tax, Loan, LoanPayment
 }
+
+

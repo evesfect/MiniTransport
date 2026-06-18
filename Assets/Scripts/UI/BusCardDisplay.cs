@@ -28,16 +28,49 @@ public class BusCardDisplay : MonoBehaviour
     private BusData currentBus;
     private Action<BusData> onInfoClickedCallback;
 
+    // Local optimistic flag: true between pressing Recall and the bus actually parking. Used only
+    // for this card's status text; the authoritative state lives on the server.
+    private bool _recallRequested;
+
     public void Setup(BusData bus, Action<BusData> onInfoClicked)
     {
         currentBus = bus;
         onInfoClickedCallback = onInfoClicked;
+        _recallRequested = false;
 
-        // 1. Calculate and Set Health
-        float avgHealth = bus.GetAverageHealth();
+        // Setup Button Listeners once
+        if (recallButton != null)
+        {
+            recallButton.onClick.RemoveAllListeners();
+            recallButton.onClick.AddListener(OnRecallPressed);
+        }
+
+        if (infoButton != null)
+        {
+            infoButton.onClick.RemoveAllListeners();
+            infoButton.onClick.AddListener(OnInfoPressed);
+        }
+
+        // Force an immediate visual update
+        UpdateVisuals();
+    }
+
+    // This ensures the card updates in real-time as health decays or status changes!
+    private void Update()
+    {
+        if (currentBus != null)
+        {
+            UpdateVisuals();
+        }
+    }
+
+    private void UpdateVisuals()
+    {
+        // 1. Calculate and Set Live Health
+        float avgHealth = currentBus.GetAverageHealth();
         if (healthText != null) healthText.text = $"Health: {avgHealth:F1}%";
 
-        // 2. Change the background color based on health
+        // 2. Change the background color dynamically
         if (cardBackgroundImage != null)
         {
             if (avgHealth < criticalThreshold)
@@ -54,16 +87,34 @@ public class BusCardDisplay : MonoBehaviour
             }
         }
 
-        // 3. Set Current Assignment Status
+        // 3. Set TRUE Current Assignment Status. These now read the server-mirrored status list, so
+        // they're correct on clients too (not just the host).
+        bool isDriving = FleetManager.Instance != null && FleetManager.Instance.IsBusActive(currentBus.BusID);
+        bool isBroken = isDriving && FleetManager.Instance.IsBusBroken(currentBus.BusID);
+        bool isReturning = isDriving && FleetManager.Instance.IsBusReturning(currentBus.BusID);
+
+        // Clear the local optimistic flag once the server confirms the recall, or the bus parks.
+        if (!isDriving || isReturning) _recallRequested = false;
+
+        bool showReturning = isReturning || (_recallRequested && isDriving);
+
         if (statusText != null)
         {
-            if (bus.Schedule != null && !string.IsNullOrEmpty(bus.Schedule.RouteID))
+            if (showReturning)
             {
-                statusText.text = $"Status: On Route {bus.Schedule.RouteID}";
+                statusText.text = isBroken ? "Status: Towing to depot…" : "Status: Returning to depot…";
             }
-            else if (!string.IsNullOrEmpty(bus.AssignedDepotID))
+            else if (isBroken)
             {
-                statusText.text = $"Status: In Depot {bus.AssignedDepotID}";
+                statusText.text = "Status: Broken down (Recall to tow)";
+            }
+            else if (isDriving)
+            {
+                statusText.text = $"Status: Active (Route {currentBus.Schedule.RouteID})";
+            }
+            else if (!string.IsNullOrEmpty(currentBus.AssignedDepotID))
+            {
+                statusText.text = $"Status: Parked ({currentBus.AssignedDepotID})";
             }
             else
             {
@@ -71,23 +122,18 @@ public class BusCardDisplay : MonoBehaviour
             }
         }
 
-        // 4. Setup Button Listeners
+        // Recall only makes sense while the bus is out on the road and not already on its way back.
         if (recallButton != null)
-        {
-            recallButton.onClick.RemoveAllListeners();
-            recallButton.onClick.AddListener(OnRecallPressed);
-        }
-
-        if (infoButton != null)
-        {
-            infoButton.onClick.RemoveAllListeners();
-            infoButton.onClick.AddListener(OnInfoPressed);
-        }
+            recallButton.interactable = isDriving && !showReturning;
     }
 
     private void OnRecallPressed()
     {
-        Debug.Log($"Recalling Bus: {currentBus.BusID}");
+        if (currentBus == null || FleetManager.Instance == null) return;
+
+        _recallRequested = true;
+        FleetManager.Instance.RecallBusClient(currentBus.BusID);
+        Debug.Log($"[BusCardDisplay] Recall requested for bus {currentBus.BusID}.");
     }
 
     private void OnInfoPressed()

@@ -91,7 +91,7 @@ public class DepotController : NetworkBehaviour
             {
                 if (IsBusConditionGoodEnough(busData, threshold))
                 {
-                    if (EmployeeManager.Instance != null && EmployeeManager.Instance.HasAssignedDriver(busData.BusID))
+                    if (EmployeeManager.Instance != null)
                     {
                         SpawnBus(busData);
                     }
@@ -198,10 +198,19 @@ public class DepotController : NetworkBehaviour
 
         FleetManager.Instance.RegisterSpawnedBus(data.BusID, newBusObj);
         Debug.Log($"[Depot] Spawned Bus {data.BusID} on Route {route.RouteName}");
+
+        if (MaintenanceManager.Instance != null)
+        {
+            MaintenanceManager.Instance.ClearDepotWorkItemForActiveBus(data.BusID);
+        }
     }
 
     public void ReturnBusToDepot(string busID)
     {
+        BusData busData = FleetManager.Instance != null
+            ? FleetManager.Instance.allBuses.FirstOrDefault(b => b.BusID == busID)
+            : null;
+
         GameObject activeBus = FleetManager.Instance.GetActiveBus(busID);
         if (activeBus != null)
         {
@@ -216,7 +225,23 @@ public class DepotController : NetworkBehaviour
             }
             
             FleetManager.Instance.UnregisterBus(busID);
-            Debug.Log($"[Depot] Bus {busID} returned to depot.");
+
+            if (busData != null && busData.PendingSale)
+            {
+                Debug.Log($"[Depot] Bus {busID} returned to depot and is now being sold.");
+
+                busData.PendingSale = false;
+                FleetManager.Instance.RequestFleetOperationRpc(JsonUtility.ToJson(new BusData { BusID = busID }), FleetManager.FleetOperation.Remove);
+
+                if (CompanyManager.Instance != null)
+                {
+                    CompanyManager.Instance.AddIncome(8000f, TransactionCategory.VehiclePurchase, $"Sold bus {busID} (Delayed)");
+                }
+            }
+            else
+            {
+                Debug.Log($"[Depot] Bus {busID} returned to depot.");
+            }
         }
     }
 }

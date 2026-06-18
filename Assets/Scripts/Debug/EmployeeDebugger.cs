@@ -12,7 +12,7 @@ public class EmployeeDebugger : MonoBehaviour
     // Selection state
     private string _selectedId = "";
     private string _targetDepotId = "Depot_Main";
-    private string _targetBusId = "Bus_001"; // NEW: Default Bus ID text
+   
 
     private Vector2 _scrollEmployees;
     private Vector2 _scrollCandidates;
@@ -84,8 +84,7 @@ public class EmployeeDebugger : MonoBehaviour
             {
                 _selectedId = emp.EmployeeID;
                 // Auto-fill the input box with current assignment if exists
-                if (emp.Role == EmployeeRole.Driver && !string.IsNullOrEmpty(emp.AssignedBusID))
-                    _targetBusId = emp.AssignedBusID;
+                
                 if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
                     _targetDepotId = emp.AssignedDepotID;
             }
@@ -93,7 +92,7 @@ public class EmployeeDebugger : MonoBehaviour
 
             GUILayout.Label(emp.Role.ToString().Substring(0, 4), GUILayout.Width(40));
 
-            string assignment = emp.Role == EmployeeRole.Driver ? emp.AssignedBusID : emp.AssignedDepotID;
+            string assignment = emp.AssignedDepotID;
             if (string.IsNullOrEmpty(assignment)) assignment = "-";
             GUILayout.Label(assignment, GUILayout.Width(70));
 
@@ -159,28 +158,22 @@ public class EmployeeDebugger : MonoBehaviour
             }
             GUILayout.EndHorizontal();
         }
-        else if (emp.Role == EmployeeRole.Driver)
-        {
-            // NEW: Driver Assignment UI
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Bus ID:", GUILayout.Width(50));
-            _targetBusId = GUILayout.TextField(_targetBusId);
-            if (GUILayout.Button("Assign", GUILayout.Width(60)))
-            {
-                EmployeeManager.Instance.AssignDriverToBus(emp.EmployeeID, _targetBusId);
-            }
-            GUILayout.EndHorizontal();
-        }
+        
         // ---------------------
 
         GUILayout.Space(5);
         GUILayout.BeginHorizontal();
 
         // Train
-        if (emp.SkillLevel < 100)
+        if (emp.IsInTraining)
         {
-            float cost = EmployeeManager.Instance.GetTrainingCost(emp.EmployeeID);
-            if (GUILayout.Button($"Train (${cost:F0})")) EmployeeManager.Instance.TrainEmployee(emp.EmployeeID);
+            GUILayout.Label($"Training: {emp.TrainingDaysRemaining}d left");
+        }
+        else if (emp.SkillLevel < 100)
+        {
+            // Debug shortcut: enroll in a single day of training.
+            float cost = EmployeeManager.Instance.GetTrainingCost(emp.EmployeeID, 1);
+            if (GUILayout.Button($"Train 1d (${cost:F0})")) EmployeeManager.Instance.TrainEmployee(emp.EmployeeID, 1);
         }
 
         // Fire

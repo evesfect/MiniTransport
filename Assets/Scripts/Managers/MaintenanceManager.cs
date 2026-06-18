@@ -7,12 +7,22 @@ using UnityEngine;
 [DefaultExecutionOrder(-45)] // Run after TimeManager/FleetManager, before Depot
 public class MaintenanceManager : NetworkBehaviour
 {
+
+    private class TeamCapacity
+    {
+        public string TeamID;
+        public string DepotID;
+        public float AvailableCapacity;
+        public string LeadMechanicName;
+        public bool IsCurrentlyWorkingOnABus;
+    }
+
     public static MaintenanceManager Instance { get; private set; }
 
     [Header("Settings")]
-    public float operationalThreshold = 30f; // Min durability to leave depot (X)
+    public float operationalThreshold = 25f; // Min durability to leave depot (X)
     public float breakdownThreshold = 5f;    // Durability where bus stops (Y)
-    public float replacePartThreshold = 20f;
+    public float replacePartThreshold = 35f;
 
     [Tooltip("Durability lost per in-game minute while driving")]
     public float decayRatePerMinute = 0.5f;
@@ -27,7 +37,127 @@ public class MaintenanceManager : NetworkBehaviour
     public IReadOnlyList<WorkItem> WorkQueue => _workItems;
     public event Action OnWorkQueueChanged;
 
-   
+    // --- KPI collection hooks (server-side; consumed by KPIManager) ---
+    public event Action<string, BusPartType> OnBreakdownOccurred; // busID, failed part
+    public event Action OnRepairCompleted;                        // a part fully repaired
+    public event Action OnPartReplaced;                           // a part swapped from inventory
+    public bool IsOnRouteBreakdown(string busID)
+    {
+        return _breakdownSet.Contains(busID);
+    }
+
+    // --- KPI: Mean Time To Repair (breakdown -> return to service) ---
+    private int _simMinute;                                            // monotonic in-game minute counter
+    private readonly Dictionary<string, int> _breakdownStartMinute = new Dictionary<string, int>();
+    private float _repairMinuteSum;
+    private int _repairsTimed;
+    private int _onTimeRepairs;                                        // repairs finished within targetRepairHours
+    [Tooltip("Target return-to-service time (hours). Repairs finishing within this count as 'on time'.")]
+    public float targetRepairHours = 2f;
+    public float AverageRepairHours => _repairsTimed > 0 ? (_repairMinuteSum / _repairsTimed) / 60f : -1f;
+    // On-time repair rate: % of repairs that returned to service within targetRepairHours (drives Repair Completion Rate).
+    public float OnTimeRepairRate => _repairsTimed > 0 ? (_onTimeRepairs / (float)_repairsTimed) * 100f : -1f;
+    // Total downtime: sum of every repair's duration across the session, in hours (drives Bus Return to Service).
+    public float TotalDowntimeHours => _repairMinuteSum / 60f;
+
+    // --- KPI: technician utilization (busy crews / total crews, sampled each hour tick) ---
+    private int _lastTeamsTotal, _lastTeamsBusy;
+    public float TechnicianUtilization => _lastTeamsTotal > 0 ? (_lastTeamsBusy / (float)_lastTeamsTotal) * 100f : -1f;
+
+    // Per-team busy/total hour tallies (keyed by "{depot}_{team}") for the per-technician drill-down.
+    private readonly Dictionary<string, (int busy, int total)> _teamHours = new Dictionary<string, (int busy, int total)>();
+
+    /// <summary>Session utilization % for the crew a technician belongs to (busy hours / on-shift hours).
+    /// Returns -1 for an unassigned technician, 0 for an assigned crew with no logged hours yet.</summary>
+    public float GetTechnicianUtilization(string depotID, string teamID)
+    {
+        if (string.IsNullOrEmpty(depotID)) return -1f;
+        string teamName = string.IsNullOrEmpty(teamID) ? "General Crew" : teamID;
+        if (_teamHours.TryGetValue($"{depotID}_{teamName}", out var h) && h.total > 0)
+            return (h.busy / (float)h.total) * 100f;
+        return 0f;
+    }
+
+    // --- KPI: spare-part delays + repair completion ---
+    private int _sparePartDelays;                                     // distinct "waiting for parts" stall episodes
+    private readonly HashSet<string> _partsDelayedBuses = new HashSet<string>(); // buses currently stalled on parts
+    public int SparePartDelays => _sparePartDelays;                   // spare-part delay frequency (episode count)
+    public int BreakdownsResolved => _repairsTimed;                   // buses returned to service (drives repair completion rate)
+
+    // --- KPI drill-down logs (in-memory, capped, newest-first) ---
+    private const int MaintLogCap = 150;
+    private readonly List<KpiDetailEntry> _repairLog = new List<KpiDetailEntry>();   // completed repairs (with duration)
+    private readonly List<KpiDetailEntry> _delayLog = new List<KpiDetailEntry>();    // spare-part stall episodes
+    public IReadOnlyList<KpiDetailEntry> RepairLog => _repairLog;
+    public IReadOnlyList<KpiDetailEntry> DelayLog => _delayLog;
+
+    private void PushMaintLog(List<KpiDetailEntry> log, string label, float value, int kind)
+    {
+        var time = SimulationTimeManager.Instance;
+        log.Insert(0, new KpiDetailEntry
+        {
+            label = label,
+            value = value,
+            day = time != null ? time.CurrentDay : 0,
+            timeOfDay = time != null ? time.CurrentTimeOfDay : 0f,
+            kind = kind
+        });
+        if (log.Count > MaintLogCap) log.RemoveAt(log.Count - 1);
+    }
+
+    // Counts a spare-part stall once per episode: only when a bus newly enters the parts-delayed state.
+    private void RecordPartsDelay(string busID)
+    {
+        if (_partsDelayedBuses.Add(busID))
+        {
+            _sparePartDelays++;
+            PushMaintLog(_delayLog, $"Bus {busID} — stalled waiting for parts", 0f, 2);
+        }
+    }
+
+    // Closes the MTTR clock for a bus that has returned to service (if one was open).
+    private void FinalizeRepairTiming(string busID)
+    {
+        if (_breakdownStartMinute.TryGetValue(busID, out int startMinute))
+        {
+            int duration = Mathf.Max(0, _simMinute - startMinute);
+            _repairMinuteSum += duration;
+            _repairsTimed++;
+            _breakdownStartMinute.Remove(busID);
+
+            bool onTime = duration <= targetRepairHours * 60f;
+            if (onTime) _onTimeRepairs++;
+            // Green when within the target return-to-service time, red when over.
+            PushMaintLog(_repairLog, $"Bus {busID} — repaired in {duration} min", duration, onTime ? 1 : 2);
+        }
+    }
+
+
+    [Header("Capacity & Prioritization")]
+    [Tooltip("The order in which mechanics will attempt to fix parts.")]
+    public List<BusPartType> repairPriority = new List<BusPartType>
+    {
+        BusPartType.Engine,
+        BusPartType.Transmission,
+        BusPartType.Tires,
+        BusPartType.Body,
+        BusPartType.Interior
+    };
+
+    public float GetMaxCapacityAllowance(BusPartType type)
+    {
+        return type switch
+        {
+            BusPartType.Engine => 50f,
+            BusPartType.Transmission => 40f,
+            BusPartType.Tires => 20f,
+            BusPartType.Body => 20f,
+            BusPartType.Interior => 10f,
+            _ => 10f,
+        };
+    }
+
+
     private void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
@@ -52,8 +182,27 @@ public class MaintenanceManager : NetworkBehaviour
         }
     }
 
+    // --- NETWORKED SETTINGS SYNC ---
+
+    [Rpc(SendTo.Server)]
+    public void UpdateThresholdsRpc(float operational, float replace)
+    {
+        operationalThreshold = operational;
+        replacePartThreshold = replace;
+    }
+
+    [Rpc(SendTo.Server)]
+    public void UpdateRepairPriorityRpc(BusPartType[] newPriority)
+    {
+        // Convert the array back to a List and save it
+        repairPriority = new List<BusPartType>(newPriority);
+        Debug.Log("[Maintenance] Priority list reordered by player!");
+    }
+
     private void OnMinuteTick()
     {
+        _simMinute++; // advance the monotonic clock used for MTTR timing
+
         if (FleetManager.Instance == null) return;
 
         foreach (var busData in FleetManager.Instance.allBuses)
@@ -75,10 +224,15 @@ public class MaintenanceManager : NetworkBehaviour
                     // Decay Health
                     
                     float decayMult = GetDecayMultiplier(part.PartType);
-                    part.Health -= decayRatePerMinute * decayMult;
+
                     part.MaxLife -= maxLifeDecayRate * decayMult;
+                    part.Health -= decayRatePerMinute * decayMult;
+
 
                     if (part.MaxLife < 10f) part.MaxLife = 10f; // Minimum structural integrity                 
+                    if (part.Health > part.MaxLife) part.Health = part.MaxLife;
+                    if (part.Health < 0f) part.Health = 0f;
+
                     if (part.Health <= breakdownThreshold)
                     {
                         
@@ -98,19 +252,36 @@ public class MaintenanceManager : NetworkBehaviour
     {
         if (FleetManager.Instance == null || EmployeeManager.Instance == null) return;
 
-        // 1. Calculate repair power per depot
-        Dictionary<string, float> depotRepairPower = new Dictionary<string, float>();
+        // 1. Group active mechanics by their composite key: (DepotID + TeamID)
+        Dictionary<string, TeamCapacity> activeTeams = new Dictionary<string, TeamCapacity>();
+
         foreach (var emp in EmployeeManager.Instance.allEmployees)
         {
-            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID))
+            // Mechanics away on a training course do not contribute to repair work.
+            if (emp.Role == EmployeeRole.Mechanic && !string.IsNullOrEmpty(emp.AssignedDepotID) && !emp.IsInTraining)
             {
-                if (!depotRepairPower.ContainsKey(emp.AssignedDepotID))
-                    depotRepairPower[emp.AssignedDepotID] = 0f;
-                depotRepairPower[emp.AssignedDepotID] += emp.SkillLevel;
+                string teamName = string.IsNullOrEmpty(emp.AssignedTeamID) ? "General Crew" : emp.AssignedTeamID;
+                string teamKey = $"{emp.AssignedDepotID}_{teamName}";
+
+                if (!activeTeams.ContainsKey(teamKey))
+                {
+                    activeTeams[teamKey] = new TeamCapacity
+                    {
+                        TeamID = teamName,
+                        DepotID = emp.AssignedDepotID,
+                        AvailableCapacity = 0f,
+                        LeadMechanicName = emp.FullName, // First mechanic acts as the team's lead/display name
+                        IsCurrentlyWorkingOnABus = false
+                    };
+                }
+                // Pool team skill levels together
+                activeTeams[teamKey].AvailableCapacity += emp.SkillLevel;
             }
         }
 
-        // 2. Repair inactive buses and update work items for depot-parked buses
+        Debug.Log($"[Maintenance] Hour Tick. Found {activeTeams.Count} distinct active teams across all depots.");
+
+        // 2. Process parked buses needing repairs concurrently
         foreach (var busData in FleetManager.Instance.allBuses)
         {
             if (FleetManager.Instance.IsBusActive(busData.BusID)) continue;
@@ -119,73 +290,159 @@ public class MaintenanceManager : NetworkBehaviour
             string assignedDepot = busData.AssignedDepotID;
             if (string.IsNullOrEmpty(assignedDepot)) continue;
 
-            bool hasMechanic = depotRepairPower.ContainsKey(assignedDepot) && depotRepairPower[assignedDepot] > 0f;
-
-            if (!hasMechanic)
+            // Ensure health values remain clamped securely
+            foreach (var part in busData.Parts)
             {
-                bool needsRepair = busData.Parts.Any(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold);
-                if (needsRepair)
-                {
-                    var worstPart = busData.Parts.OrderBy(p => p.Health).First();
-                    UpsertDepotWorkItem(busData.BusID, worstPart.PartType, WorkItemStatus.AwaitingTechnician, "Unassigned");
-                }
+                if (part.Health > part.MaxLife) part.Health = part.MaxLife;
+            }
+
+            // Check if any parts require intervention
+            bool needsWork = busData.Parts.Any(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold);
+            if (!needsWork)
+            {
+                RemoveDepotWorkItem(busData.BusID);
                 continue;
             }
 
-            float repairBudget = depotRepairPower[assignedDepot] * repairPerSkillPoint;
-            string mechanicName = GetAssignedMechanic(assignedDepot);
+            // Find an available team within this depot that isn't already assigned to another bus this hour
+            TeamCapacity assignedTeam = activeTeams.Values.FirstOrDefault(t =>
+                t.DepotID == assignedDepot &&
+                !t.IsCurrentlyWorkingOnABus &&
+                t.AvailableCapacity > 0f);
 
-            // Track the most critical part we can't service this tick
+            if (assignedTeam == null)
+            {
+                // No unassigned teams remain available to process this bus right now
+                var worstPart = busData.Parts.OrderBy(p => p.Health).First();
+                UpsertDepotWorkItem(busData.BusID, worstPart.PartType, WorkItemStatus.AwaitingTechnician, "No Free Team");
+                continue;
+            }
+
+            // Lock this team onto this bus for the duration of the current hour tick
+            assignedTeam.IsCurrentlyWorkingOnABus = true;
+            string displayTeamLabel = $"{assignedTeam.TeamID} ({assignedTeam.LeadMechanicName})";
+
             BusPartType? blockingPart = null;
             WorkItemStatus blockingStatus = WorkItemStatus.AwaitingParts;
 
-            foreach (var part in busData.Parts)
-            {
-                if (repairBudget <= 0) break;
+            // Sort broken parts strictly by our defined repair priority sequence
+            var partsNeedingWork = busData.Parts
+                .Where(p => p.Health < p.MaxLife || p.MaxLife < replacePartThreshold)
+                .OrderBy(p => repairPriority.IndexOf(p.PartType))
+                .ToList();
 
-                // A. REPLACEMENT (If MaxLife is too low)
+            if (partsNeedingWork.Count > 0)
+            {
+                Debug.Log($"[Maintenance] Bus {busData.BusID} assigned to {assignedTeam.TeamID}. Available Capacity: {assignedTeam.AvailableCapacity:F1}");
+            }
+
+            foreach (var part in partsNeedingWork)
+            {
+                // If the assigned team exhausts its bandwidth for the hour, pause work
+                if (assignedTeam.AvailableCapacity <= 0) break;
+
+                // Apply specialization modifiers to the capacity bottleneck allowance
+                
+                float maxAllowance = GetMaxCapacityAllowance(part.PartType);
+
+                float allocatedCapacity = Mathf.Min(assignedTeam.AvailableCapacity, maxAllowance);
+
+                // A. REPLACEMENT LOGIC
                 if (part.MaxLife < replacePartThreshold)
                 {
-                    string itemID = GetItemIDForPart(part.PartType);
-                    if (InventoryManager.Instance.GetItemQuantity(itemID) > 0)
+                    if (string.IsNullOrEmpty(part.PendingReplacementItemID))
                     {
-                        InventoryManager.Instance.DecreaseItemQuantity(itemID, 1);
-                        FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, 100f);
-                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, 100f);
-                        Debug.Log($"[Maintenance] Replaced {part.PartType} on {busData.BusID}");
+                        string[] acceptableItemIDs = GetValidItemIDsForPart(part.PartType);
+                        part.PendingReplacementItemID = acceptableItemIDs[UnityEngine.Random.Range(0, acceptableItemIDs.Length)];
+                        Debug.Log($"[Maintenance] DIAGNOSIS: Bus {busData.BusID}'s {part.PartType} failed. {assignedTeam.TeamID} demands '{part.PendingReplacementItemID}'.");
+                    }
+
+                    string requiredItemID = part.PendingReplacementItemID;
+
+                    if (InventoryManager.Instance.TryConsumeItem(requiredItemID, out float consumedDurability))
+                    {
+                        FleetManager.Instance.UpdateBusPartMaxLife(busData.BusID, part.PartType, consumedDurability);
+                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, consumedDurability);
+                        part.PendingReplacementItemID = "";
+
+                        assignedTeam.AvailableCapacity -= allocatedCapacity;
+                        Debug.Log($"[Maintenance] REPLACED {part.PartType} on {busData.BusID} using '{requiredItemID}'. {assignedTeam.AvailableCapacity:F1} capacity left.");
+                        OnPartReplaced?.Invoke(); // KPI: count parts replaced
                         continue;
                     }
                     else
                     {
-                        // Record only the most critical blocking part (lowest enum value = most critical)
-                        if (blockingPart == null || (int)part.PartType < (int)blockingPart.Value)
+                        // Parts out of stock isolate the bottleneck to this specific team only
+                        if (blockingPart == null || repairPriority.IndexOf(part.PartType) < repairPriority.IndexOf(blockingPart.Value))
                         {
                             blockingPart = part.PartType;
                             blockingStatus = WorkItemStatus.AwaitingParts;
                         }
+                        Debug.Log($"[Maintenance] Blocked: {assignedTeam.TeamID} waiting for delivery of '{requiredItemID}' for Bus {busData.BusID}.");
                         continue;
                     }
                 }
 
-                // B. REPAIR
+                // B. REPAIR LOGIC
                 if (part.Health < part.MaxLife)
                 {
-                    float needed = part.MaxLife - part.Health;
-                    float applied = Mathf.Min(needed, repairBudget);
-                    FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, Mathf.Min(part.Health + applied, part.MaxLife));
-                    repairBudget -= applied;
-                    Debug.Log($"[Maintenance] Repaired {part.PartType} on {busData.BusID}");
+                    float missingHealth = part.MaxLife - part.Health;
+                    float effectiveRepairRate = repairPerSkillPoint;
+                    float potentialHeal = allocatedCapacity * effectiveRepairRate;
+
+                    if (potentialHeal >= missingHealth)
+                    {
+                        float capacityUsed = missingHealth / effectiveRepairRate;
+                        assignedTeam.AvailableCapacity -= capacityUsed;
+                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.MaxLife);
+                        Debug.Log($"[Maintenance] FULLY REPAIRED {part.PartType} on {busData.BusID} by +{potentialHeal:F1} HP using {assignedTeam.TeamID}. {assignedTeam.AvailableCapacity:F1} left.");
+                        OnRepairCompleted?.Invoke(); // KPI: count repairs completed
+                    }
+                    else
+                    {
+                        assignedTeam.AvailableCapacity -= allocatedCapacity;
+                        FleetManager.Instance.UpdateBusPartHealth(busData.BusID, part.PartType, part.Health + potentialHeal);
+                        Debug.Log($"[Maintenance] PARTIALLY REPAIRED {part.PartType} on {busData.BusID} by +{potentialHeal:F1} HP using {assignedTeam.TeamID}. 0 capacity left.");
+                    }
                 }
             }
 
-            // Upsert a single work item for the most critical blocking part
+            // Update UI Work Item attributed directly to the active team
             if (blockingPart.HasValue)
-                UpsertDepotWorkItem(busData.BusID, blockingPart.Value, blockingStatus, mechanicName);
+            {
+                // KPI: count a spare-part delay episode when a bus stalls waiting for parts.
+                if (blockingStatus == WorkItemStatus.AwaitingParts) RecordPartsDelay(busData.BusID);
+                else _partsDelayedBuses.Remove(busData.BusID);
 
-            // Remove depot work item once all parts are healthy
-            bool allHealthy = busData.Parts.All(p => p.Health >= p.MaxLife && p.MaxLife >= replacePartThreshold);
-            if (allHealthy)
-                RemoveDepotWorkItem(busData.BusID);
+                UpsertDepotWorkItem(busData.BusID, blockingPart.Value, blockingStatus, displayTeamLabel);
+            }
+            else
+            {
+                _partsDelayedBuses.Remove(busData.BusID); // no longer parts-blocked
+
+                bool allHealthy = busData.Parts.All(p => p.Health >= p.MaxLife && p.MaxLife >= replacePartThreshold);
+                if (allHealthy)
+                {
+                    RemoveDepotWorkItem(busData.BusID);
+                }
+                else
+                {
+                    UpsertDepotWorkItem(busData.BusID, partsNeedingWork.First().PartType, WorkItemStatus.InRepair, displayTeamLabel);
+                }
+            }
+        }
+
+        // KPI: sample crew utilization for this hour (busy teams vs total active teams)
+        _lastTeamsTotal = activeTeams.Count;
+        _lastTeamsBusy = activeTeams.Values.Count(t => t.IsCurrentlyWorkingOnABus);
+
+        // Accumulate per-crew busy/on-shift hours for the technician-utilization drill-down.
+        foreach (var kv in activeTeams)
+        {
+            _teamHours.TryGetValue(kv.Key, out var h);
+            h.total++;
+            if (kv.Value.IsCurrentlyWorkingOnABus) h.busy++;
+            _teamHours[kv.Key] = h;
         }
     }
     private void TriggerBreakdown(string busID, BusPartType reason)
@@ -202,10 +459,12 @@ public class MaintenanceManager : NetworkBehaviour
         if (!_breakdownSet.Contains(busID))
         {
             _breakdownSet.Add(busID);
+            _breakdownStartMinute[busID] = _simMinute; // KPI: start the MTTR clock
             var item = new WorkItem(busID, reason, WorkItemStatus.AwaitingTechnician);
             item.Priority = _workItems.Count;
             _workItems.Add(item);
             OnWorkQueueChanged?.Invoke();
+            OnBreakdownOccurred?.Invoke(busID, reason); // KPI: count lifetime breakdowns
             TryDispatchJobs();
         }
     }
@@ -277,8 +536,24 @@ public class MaintenanceManager : NetworkBehaviour
     {
         int removed = _workItems.RemoveAll(w => w.BusID == busID);
         _breakdownSet.Remove(busID);
+        FinalizeRepairTiming(busID); // KPI: close MTTR clock on return to service
         if (removed > 0)
             OnWorkQueueChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// The player towed a stuck bus off the road before the field crew could finish. Drop its
+    /// on-route breakdown bookkeeping WITHOUT recording a completed repair (it was not returned to
+    /// service in the field — it'll be repaired / part-replaced at the depot by the hourly cycle).
+    /// </summary>
+    public void CancelOnRouteBreakdown(string busID)
+    {
+        int removed = _workItems.RemoveAll(w => w.BusID == busID);
+        _breakdownSet.Remove(busID);
+        _breakdownStartMinute.Remove(busID); // discard the open MTTR clock instead of finalizing it
+        _partsDelayedBuses.Remove(busID);
+
+        if (removed > 0) OnWorkQueueChanged?.Invoke();
     }
 
     public void ReorderWorkQueue(List<string> workItemIDs)
@@ -302,35 +577,66 @@ public class MaintenanceManager : NetworkBehaviour
         OnWorkQueueChanged?.Invoke();
     }
 
+    public void ClearDepotWorkItemForActiveBus(string busID)
+    {
+        int removed = _workItems.RemoveAll(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        if (removed > 0)
+        {
+            OnWorkQueueChanged?.Invoke();
+        }
+    }
+
     // --- PRIVATE HELPERS ---
 
     private void UpsertDepotWorkItem(string busID, BusPartType partType, WorkItemStatus status, string techName)
     {
-        // One depot work item per bus (non-breakdown items)
-        var existing = _workItems.FirstOrDefault(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        string completionLabel = status switch
+        {
+            WorkItemStatus.AwaitingParts => "Pending Delivery",
+            WorkItemStatus.InRepair => "In Repair",
+            WorkItemStatus.AwaitingTechnician => "Awaiting Team",
+            _ => "No Mechanic Assigned"
+        };
+
+        // Allow updating existing breakdown items instead of ignoring them
+        var existing = _workItems.FirstOrDefault(w => w.BusID == busID);
         if (existing != null)
         {
             existing.IssuePartType = partType;
             existing.Status = status;
             existing.AssignedTechnicianName = techName;
-            existing.EstimatedCompletionLabel = status == WorkItemStatus.AwaitingParts ? "Pending Delivery" : "No Mechanic Assigned";
+            existing.EstimatedCompletionLabel = completionLabel;
         }
         else
         {
             var item = new WorkItem(busID, partType, status);
             item.Priority = _workItems.Count;
             item.AssignedTechnicianName = techName;
-            item.EstimatedCompletionLabel = status == WorkItemStatus.AwaitingParts ? "Pending Delivery" : "No Mechanic Assigned";
+            item.EstimatedCompletionLabel = completionLabel;
             _workItems.Add(item);
         }
+
         OnWorkQueueChanged?.Invoke();
     }
 
     private void RemoveDepotWorkItem(string busID)
     {
-        int removed = _workItems.RemoveAll(w => w.BusID == busID && !_breakdownSet.Contains(busID));
+        // Remove all work items for this bus since it is fully repaired
+        int removed = _workItems.RemoveAll(w => w.BusID == busID);
+        _partsDelayedBuses.Remove(busID); // no longer stalled on parts
+
+        // Clear the bus from the breakdown tracking set so it doesn't block future maintenance checks
+        if (_breakdownSet.Contains(busID))
+        {
+            _breakdownSet.Remove(busID);
+            FinalizeRepairTiming(busID); // KPI: close MTTR clock on return to service
+            removed++;
+        }
+
         if (removed > 0)
+        {
             OnWorkQueueChanged?.Invoke();
+        }
     }
 
     private string GetAssignedMechanic(string depotID)
@@ -349,22 +655,23 @@ public class MaintenanceManager : NetworkBehaviour
 
     // HELPERS
 
-    private string GetItemIDForPart(BusPartType type)
+    private string[] GetValidItemIDsForPart(BusPartType type)
     {
-        switch (type)
+        // Returns an array of acceptable item IDs that can fulfill the replacement requirement
+        return type switch
         {
-            case BusPartType.Engine: return "engine_block";
-            case BusPartType.Transmission: return "gearbox_std";
-            case BusPartType.Wheels: return "tire_standard";
-            case BusPartType.Body: return "body_panel";
-            case BusPartType.Interior: return "seat_fabric";
-            default: return "generic_part";
-        }
+            BusPartType.Engine => new[] { "EngineBlock", "Piston", "Alternator" },
+            BusPartType.Transmission => new[] { "Axle", "BusFrame" }, 
+            BusPartType.Tires => new[] { "StandardTire", "WinterTire", "HeavyDutyTire" },
+            BusPartType.Body => new[] { "BusFrame", "DoorAssembly" },
+            BusPartType.Interior => new[] { "Dashboard", "SensorArray", "WiringHarness" },
+            _ => new[] { "generic_part" }
+        };
     }
 
     private bool IsCriticalPart(BusPartType type)
     {
-        return type == BusPartType.Engine || type == BusPartType.Transmission || type == BusPartType.Wheels;
+        return type == BusPartType.Engine || type == BusPartType.Transmission || type == BusPartType.Tires;
     }
 
 
@@ -372,7 +679,7 @@ public class MaintenanceManager : NetworkBehaviour
     {
         switch (type)
         {
-            case BusPartType.Wheels: return 1.2f; // Tires wear out fast
+            case BusPartType.Tires: return 1.2f; // Tires wear out fast
             case BusPartType.Body: return 0.2f;   // Body lasts long
             default: return 1.0f;
         }

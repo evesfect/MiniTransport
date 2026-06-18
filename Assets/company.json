@@ -1,6 +1,7 @@
 {
     "CompanyName": "The comp",
-    "CurrentBalance": 23808.4921875,
+    "CurrentBalance": 330025.75,
+    "TransferTripCount": 6957,
     "History": [
         {
             "Amount": 130367.4609375,
@@ -115,31 +116,191 @@
             "Count": 568
         },
         {
-            "Amount": 137325.6875,
+            "Amount": 552.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 6,
-            "Count": 547
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 19
         },
         {
-            "Amount": -149789.171875,
+            "Amount": 286.0,
             "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 6,
-            "Count": 592
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 18
         },
         {
-            "Amount": -1305.5882568359375,
+            "Amount": 66.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 3
+        },
+        {
+            "Amount": -439.7540283203125,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 692",
+            "Timestamp": 1,
+            "Count": 1
+        },
+        {
+            "Amount": 533.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 18
+        },
+        {
+            "Amount": 245.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 13
+        },
+        {
+            "Amount": 672.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 21
+        },
+        {
+            "Amount": 603.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 4,
+            "Count": 16
+        },
+        {
+            "Amount": 409.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 14
+        },
+        {
+            "Amount": 188.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 9
+        },
+        {
+            "Amount": 64.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 3
+        },
+        {
+            "Amount": 148.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 7
+        },
+        {
+            "Amount": 603.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 17
+        },
+        {
+            "Amount": 260.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 4,
+            "Count": 11
+        },
+        {
+            "Amount": 562.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 5,
+            "Count": 12
+        },
+        {
+            "Amount": -60000.0,
+            "Type": 0,
+            "Category": 3,
+            "Description": "Purchased requested buses",
+            "Timestamp": 1,
+            "Count": 1
+        },
+        {
+            "Amount": -7018.3310546875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Hiring Fee: Applicant 528",
+            "Timestamp": 2,
+            "Count": 2
+        },
+        {
+            "Amount": -2697.99462890625,
+            "Type": 0,
+            "Category": 4,
+            "Description": "Ordered EngineBlock45-56",
+            "Timestamp": 2,
+            "Count": 2
+        },
+        {
+            "Amount": -8147.732421875,
+            "Type": 0,
+            "Category": 0,
+            "Description": "Training Course for Employee 45 (1 day)",
+            "Timestamp": 3,
+            "Count": 1
+        },
+        {
+            "Amount": 40000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus 01",
+            "Timestamp": 4,
+            "Count": 5
+        },
+        {
+            "Amount": 242.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 5,
+            "Count": 5
+        },
+        {
+            "Amount": 144.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 6,
+            "Count": 3
+        },
+        {
+            "Amount": -4762.458984375,
             "Type": 1,
             "Category": 7,
-            "Description": "Weekly Payroll (5 staff)",
+            "Description": "Weekly Payroll (14 staff)",
             "Timestamp": 7,
             "Count": 1
         },
         {
-            "Amount": -250.0,
+            "Amount": -700.0,
             "Type": 1,
             "Category": 8,
             "Description": "Staff Upkeep/Benefits",
@@ -147,540 +308,429 @@
             "Count": 1
         },
         {
-            "Amount": -150.0,
+            "Amount": -450.0,
             "Type": 1,
             "Category": 9,
-            "Description": "Weekly Fleet Tax (1 buses)",
+            "Description": "Weekly Fleet Tax (3 buses)",
             "Timestamp": 7,
             "Count": 1
         },
         {
-            "Amount": 151118.890625,
+            "Amount": 124.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
+            "Description": "Passenger Fares",
             "Timestamp": 7,
-            "Count": 586
+            "Count": 2
         },
         {
-            "Amount": -140305.703125,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 7,
-            "Count": 553
-        },
-        {
-            "Amount": 44200.51953125,
+            "Amount": 30.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
+            "Description": "Passenger Fares",
             "Timestamp": 8,
-            "Count": 171
+            "Count": 1
         },
         {
-            "Amount": -35256.31640625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 8,
-            "Count": 145
-        },
-        {
-            "Amount": -117206.5625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 456
-        },
-        {
-            "Amount": 127860.859375,
+            "Amount": 50.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 493
+            "Description": "Passenger Fares",
+            "Timestamp": 10,
+            "Count": 1
         },
         {
-            "Amount": 59239.16796875,
+            "Amount": 150.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
+            "Description": "Passenger Fares",
+            "Timestamp": 11,
+            "Count": 2
+        },
+        {
+            "Amount": -45000.0,
+            "Type": 0,
+            "Category": 3,
+            "Description": "Purchased requested buses",
             "Timestamp": 2,
-            "Count": 233
+            "Count": 1
         },
         {
-            "Amount": -51090.15234375,
+            "Amount": 16000.0,
             "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 197
-        },
-        {
-            "Amount": -109199.4765625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 414
-        },
-        {
-            "Amount": 115121.2265625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 433
-        },
-        {
-            "Amount": -136832.03125,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 544
-        },
-        {
-            "Amount": 147158.796875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 591
-        },
-        {
-            "Amount": -147402.71875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 3,
-            "Count": 591
-        },
-        {
-            "Amount": 141005.6875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 3,
-            "Count": 544
-        },
-        {
-            "Amount": -104140.4921875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 425
-        },
-        {
-            "Amount": 104394.9375,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 420
-        },
-        {
-            "Amount": 138786.828125,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 553
-        },
-        {
-            "Amount": -146739.90625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 574
-        },
-        {
-            "Amount": -6638.51171875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 3,
-            "Count": 24
-        },
-        {
-            "Amount": 6139.9423828125,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 3,
-            "Count": 23
-        },
-        {
-            "Amount": 343524.9375,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 1354
-        },
-        {
-            "Amount": -325403.875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 1306
-        },
-        {
-            "Amount": -141457.0,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 566
-        },
-        {
-            "Amount": 136401.5625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 553
-        },
-        {
-            "Amount": -142924.265625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 3,
-            "Count": 548
-        },
-        {
-            "Amount": 144431.234375,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 3,
-            "Count": 571
-        },
-        {
-            "Amount": -127333.6328125,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 4,
-            "Count": 533
-        },
-        {
-            "Amount": 126483.0546875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 4,
-            "Count": 488
-        },
-        {
-            "Amount": 142659.40625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 582
-        },
-        {
-            "Amount": -152160.875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 601
-        },
-        {
-            "Amount": 142147.859375,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 571
-        },
-        {
-            "Amount": -143396.75,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 552
-        },
-        {
-            "Amount": -143524.890625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 3,
-            "Count": 562
-        },
-        {
-            "Amount": 150573.921875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 3,
-            "Count": 565
-        },
-        {
-            "Amount": 141412.53125,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 4,
-            "Count": 556
-        },
-        {
-            "Amount": -149255.40625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 4,
-            "Count": 571
-        },
-        {
-            "Amount": 46011.16796875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 5,
-            "Count": 179
-        },
-        {
-            "Amount": -46600.68359375,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 5,
-            "Count": 179
-        },
-        {
-            "Amount": -107446.515625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 412
-        },
-        {
-            "Amount": 109983.140625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 431
-        },
-        {
-            "Amount": -42080.96875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 165
-        },
-        {
-            "Amount": 31098.48046875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 132
-        },
-        {
-            "Amount": 100082.2265625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 407
-        },
-        {
-            "Amount": -110376.1796875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 435
-        },
-        {
-            "Amount": -112777.03125,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 415
-        },
-        {
-            "Amount": 105938.15625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 420
-        },
-        {
-            "Amount": 163283.203125,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 640
-        },
-        {
-            "Amount": -154829.21875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 584
-        },
-        {
-            "Amount": 104474.6484375,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 413
-        },
-        {
-            "Amount": -98193.015625,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 375
-        },
-        {
-            "Amount": -162598.8125,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 668
-        },
-        {
-            "Amount": 186055.625,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 705
-        },
-        {
-            "Amount": 89209.546875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 2,
-            "Count": 350
-        },
-        {
-            "Amount": -85110.2421875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 2,
-            "Count": 332
-        },
-        {
-            "Amount": 324780.21875,
-            "Type": 1,
-            "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 1292
-        },
-        {
-            "Amount": -342968.71875,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 1,
-            "Count": 1362
-        },
-        {
-            "Amount": -280.2116394042969,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
+            "Category": 3,
+            "Description": "Sold bus B-3542",
             "Timestamp": 2,
             "Count": 2
         },
         {
-            "Amount": 117.42903900146485,
+            "Amount": 24000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus 04",
+            "Timestamp": 1,
+            "Count": 3
+        },
+        {
+            "Amount": 200.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 10
+        },
+        {
+            "Amount": 50.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 1
+        },
+        {
+            "Amount": 8000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus 02 (Delayed)",
+            "Timestamp": 2,
+            "Count": 1
+        },
+        {
+            "Amount": 24000.0,
+            "Type": 1,
+            "Category": 3,
+            "Description": "Sold bus B-6195",
+            "Timestamp": 1,
+            "Count": 3
+        },
+        {
+            "Amount": 141.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 9
+        },
+        {
+            "Amount": 70.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
             "Timestamp": 2,
             "Count": 2
         },
         {
-            "Amount": 744496.875,
+            "Amount": 279.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
+            "Description": "Passenger Fares",
             "Timestamp": 1,
-            "Count": 2924
+            "Count": 14
         },
         {
-            "Amount": -751136.0625,
+            "Amount": 25000.0,
             "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
+            "Category": 10,
+            "Description": "Bank Loan Granted",
             "Timestamp": 1,
-            "Count": 2926
+            "Count": 1
         },
         {
-            "Amount": 146378.859375,
+            "Amount": 350.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
+            "Description": "Passenger Fares",
             "Timestamp": 2,
-            "Count": 568
+            "Count": 16
         },
         {
-            "Amount": -144098.40625,
+            "Amount": 331.0,
             "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 18
+        },
+        {
+            "Amount": 433.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 4,
+            "Count": 14
+        },
+        {
+            "Amount": 409.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 5,
+            "Count": 15
+        },
+        {
+            "Amount": 447.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 6,
+            "Count": 12
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 7,
+            "Count": 1
+        },
+        {
+            "Amount": 357.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 7,
+            "Count": 10
+        },
+        {
+            "Amount": 196.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 8,
+            "Count": 4
+        },
+        {
+            "Amount": 52.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 9,
+            "Count": 2
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 14,
+            "Count": 1
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 21,
+            "Count": 1
+        },
+        {
+            "Amount": -6503.0,
+            "Type": 1,
+            "Category": 11,
+            "Description": "Weekly Loan Installment",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": -4536.1279296875,
+            "Type": 1,
+            "Category": 7,
+            "Description": "Weekly Payroll (13 staff)",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": -650.0,
+            "Type": 1,
+            "Category": 8,
+            "Description": "Staff Upkeep/Benefits",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": -600.0,
+            "Type": 1,
+            "Category": 9,
+            "Description": "Weekly Fleet Tax (4 buses)",
+            "Timestamp": 28,
+            "Count": 1
+        },
+        {
+            "Amount": 618.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 18
+        },
+        {
+            "Amount": 449.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
             "Timestamp": 2,
-            "Count": 575
+            "Count": 17
         },
         {
-            "Amount": 67993.0078125,
+            "Amount": 329.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 3,
-            "Count": 269
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 14
         },
         {
-            "Amount": -75953.3125,
-            "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
-            "Timestamp": 3,
-            "Count": 293
-        },
-        {
-            "Amount": 9590.3642578125,
+            "Amount": 436.0,
             "Type": 1,
             "Category": 2,
-            "Description": "Simulated Passenger Fare",
-            "Timestamp": 1,
-            "Count": 35
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 15
         },
         {
-            "Amount": -11517.2265625,
+            "Amount": 331.0,
             "Type": 1,
-            "Category": 5,
-            "Description": "Simulated Random Repair",
+            "Category": 2,
+            "Description": "Passenger Fares",
             "Timestamp": 1,
-            "Count": 45
+            "Count": 14
+        },
+        {
+            "Amount": 501.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 14
+        },
+        {
+            "Amount": 138.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 5
+        },
+        {
+            "Amount": 144.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 6
+        },
+        {
+            "Amount": 350.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 1,
+            "Count": 15
+        },
+        {
+            "Amount": 467.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 2,
+            "Count": 16
+        },
+        {
+            "Amount": 349.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 3,
+            "Count": 14
+        },
+        {
+            "Amount": 295.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 4,
+            "Count": 10
+        },
+        {
+            "Amount": 16.0,
+            "Type": 1,
+            "Category": 2,
+            "Description": "Passenger Fares",
+            "Timestamp": 5,
+            "Count": 3
         }
-    ]
+    ],
+    "ActiveLoans": []
 }

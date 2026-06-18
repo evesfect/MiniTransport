@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using System.Collections;
 
 public class BusScrollManager : BaseScrollManager<BusData>
 {
@@ -10,52 +11,71 @@ public class BusScrollManager : BaseScrollManager<BusData>
     public TMP_Text detailStatusText;
     public TMP_Text detailPartsText;
 
+    private Coroutine _refreshRoutine;
+
+    private void OnEnable()
+    {
+        if (FleetManager.Instance != null)
+        {
+            FleetManager.Instance.OnFleetUpdated += RefreshList;
+        }
+
+        if (_refreshRoutine != null)
+        {
+            StopCoroutine(_refreshRoutine);
+        }
+
+        _refreshRoutine = StartCoroutine(WaitForFleetDataAndRefresh());
+    }
+
+    private void OnDisable()
+    {
+        if (FleetManager.Instance != null)
+        {
+            FleetManager.Instance.OnFleetUpdated -= RefreshList;
+        }
+
+        if (_refreshRoutine != null)
+        {
+            StopCoroutine(_refreshRoutine);
+            _refreshRoutine = null;
+        }
+    }
+
     void Start()
     {
         if (detailContainer != null)
         {
             detailContainer.SetActive(false);
         }
-
-        GenerateMockData();
-
-        
-        PopulateList();
     }
 
-    private void GenerateMockData()
+    private void RefreshList()
     {
-        
-        activeItems.Clear();
-
-        BusData bus1 = new BusData { BusID = "B-101", AssignedDepotID = "Depot-A", Capacity = 40 };
-        bus1.InitializeParts();
-        bus1.Schedule = new BusSchedule { RouteID = "Route 42" };
-        activeItems.Add(bus1);
-
-        BusData bus2 = new BusData { BusID = "B-102", AssignedDepotID = "Depot-B", Capacity = 30 };
-        bus2.InitializeParts();
-        bus2.Parts[0].Health = 40f;
-        bus2.Parts[3].Health = 60f;
-        bus2.Parts[0].MaxLife = 85f;
-        activeItems.Add(bus2);
-
-        BusData bus3 = new BusData { BusID = "B-103", Capacity = 50 };
-        bus3.InitializeParts();
-        foreach (var part in bus3.Parts)
+        if (FleetManager.Instance != null && FleetManager.Instance.allBuses != null)
         {
-            part.Health = 15f;
-            part.MaxLife = 50f;
+            activeItems.Clear();
+            activeItems.AddRange(FleetManager.Instance.allBuses);
+            PopulateList();
+            Debug.Log($"[BusScrollManager] Listed {activeItems.Count} buses from FleetManager.");
         }
-        activeItems.Add(bus3);
-
-        BusData bus4 = new BusData { BusID = "B-104", AssignedDepotID = "Depot-A", Capacity = 60 };
-        bus4.InitializeParts();
-        bus4.Parts[2].Health = 80f;
-        bus4.Schedule = new BusSchedule { RouteID = "Route 15" };
-        activeItems.Add(bus4);
     }
 
+    private IEnumerator WaitForFleetDataAndRefresh()
+    {
+        // Give network/load flow time to populate FleetManager on first open.
+        const float timeout = 2f;
+        float elapsed = 0f;
+
+        while ((FleetManager.Instance == null || FleetManager.Instance.allBuses.Count == 0) && elapsed < timeout)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        RefreshList();
+        _refreshRoutine = null;
+    }
 
     protected override void SetupItemDisplay(GameObject instantiatedPrefab, BusData itemData)
     {
