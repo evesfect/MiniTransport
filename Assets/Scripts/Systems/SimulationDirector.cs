@@ -223,7 +223,7 @@ public class SimulationDirector : GridSimulationSystem
                     if (RequestManager.Instance != null)
                     {
                         _activeEventBatchId = System.Guid.NewGuid().ToString().Substring(0, 8);
-                        RequestManager.Instance.BroadcastSystemEvent(_activeEventBatchId, $"A major Match Day has been announced at Tile {activeEventTileIndex}! Prepare for massive demand and traffic spikes in the surrounding area.");
+                        RequestManager.Instance.BroadcastSystemEvent(_activeEventBatchId, $"Match Day announced at Tile {activeEventTileIndex}! Massive demand and traffic spikes in the area.");
                     }
                 }
             }
